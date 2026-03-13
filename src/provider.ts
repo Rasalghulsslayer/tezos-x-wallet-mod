@@ -180,7 +180,6 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
 
     // Build CRAC gateway Micheline call (async: may resolve selector via 4byte.directory)
     const { entrypoint, michelineArg, mutezAmount } = await this.gateway.fromEthTransaction(tx);
-    console.log("HEEERREEEEEE", entrypoint, michelineArg, mutezAmount)
 
     // Submit to Temple via Beacon — opens signing popup
     const l1OpHash = await this.beacon.sendContractCall(entrypoint, michelineArg, mutezAmount);
