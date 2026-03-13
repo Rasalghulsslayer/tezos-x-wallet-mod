@@ -1,0 +1,28 @@
+{
+  "name": "tezosx-relayer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@airgap/beacon-sdk": "^4.8.1",
+    "@taquito/michel-codec": "^24.2.0",
+    "@taquito/rpc": "^24.2.0",
+    "@taquito/taquito": "^24.2.0",
+    "eventemitter3": "^5.0.4",
+    "viem": "^2.47.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.15",
+    "esbuild": "^0.24.2",
+    "typescript": "^5.9.3"
+  },
+  "description": "",
+  "main": "index.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
