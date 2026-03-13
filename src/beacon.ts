@@ -104,7 +104,9 @@ export class BeaconClient {
         ],
       });
       // result.transactionHash is the Tezos L1 opHash
-      return (result as { transactionHash: string }).transactionHash;
+      const l1OpHash = (result as { transactionHash: string }).transactionHash;
+      console.info('[TezosX Relayer] L1 opHash (Tezos):', l1OpHash);
+      return l1OpHash;
     } catch (err) {
       if (isUserAbort(err)) {
         throw beaconError(EIP1193_USER_REJECTED, 'User rejected the transaction');

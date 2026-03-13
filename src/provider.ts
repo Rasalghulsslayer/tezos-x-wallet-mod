@@ -16,12 +16,10 @@ import type {
 
 // ── EIP-1193 error codes ───────────────────────────────────────────────────
 
-const EIP1193_USER_REJECTED      = 4001;
 const EIP1193_UNAUTHORIZED       = 4100;
 const EIP1193_UNSUPPORTED_METHOD = 4200;
 const JSON_RPC_METHOD_NOT_FOUND  = -32601;
 const JSON_RPC_INVALID_PARAMS    = -32602;
-const JSON_RPC_INTERNAL          = -32603;
 
 function rpcError(code: number, message: string, data?: unknown): ProviderRpcError {
   const err = new Error(message) as ProviderRpcError;
@@ -105,6 +103,10 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
       case 'eth_getTransactionReceipt':
         return this.handleGetTransactionReceipt(args);
 
+      case 'wallet_revokePermissions':
+      case 'wallet_disconnect':
+        return this.handleDisconnect();
+
       // Explicitly unsupported in V1
       case 'eth_sign':
       case 'personal_sign':
@@ -176,8 +178,9 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
       throw rpcError(JSON_RPC_INVALID_PARAMS, 'eth_sendTransaction: missing "to" field');
     }
 
-    // Build CRAC gateway Micheline call
-    const { entrypoint, michelineArg, mutezAmount } = this.gateway.fromEthTransaction(tx);
+    // Build CRAC gateway Micheline call (async: may resolve selector via 4byte.directory)
+    const { entrypoint, michelineArg, mutezAmount } = await this.gateway.fromEthTransaction(tx);
+    console.log("HEEERREEEEEE", entrypoint, michelineArg, mutezAmount)
 
     // Submit to Temple via Beacon — opens signing popup
     const l1OpHash = await this.beacon.sendContractCall(entrypoint, michelineArg, mutezAmount);
@@ -213,5 +216,14 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
     if (pending == null) return null;
 
     return buildSyntheticReceipt(syntheticHash, pending.from, pending.to);
+  }
+
+  private async handleDisconnect(): Promise<null> {
+    this.session = null;
+    this.pendingOps.clear();
+    await this.beacon.disconnect();
+    this.emit('accountsChanged', []);
+    this.emit('disconnect', rpcError(EIP1193_UNAUTHORIZED, 'Wallet disconnected'));
+    return null;
   }
 }

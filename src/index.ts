@@ -20,7 +20,22 @@ function inject(): void {
     console.warn('[TezosX Relayer] window.ethereum already set — overriding with Tezos X Relayer.');
   }
 
-  window.ethereum = new RelayerProvider();
+  const provider = new RelayerProvider();
+
+  // Try to lock window.ethereum so other extensions cannot override it.
+  // Falls back to simple assignment if the property is already non-configurable
+  // (e.g. Temple extension locked it first).
+  try {
+    Object.defineProperty(window, 'ethereum', {
+      value: provider,
+      writable: false,
+      configurable: false,
+    });
+  } catch {
+    // Property already non-configurable (another extension got there first).
+    // Simple assignment may still work if writable:true was used.
+    window.ethereum = provider;
+  }
 
   // EIP-6963-style announcement for dApps that listen for provider discovery
   window.dispatchEvent(new CustomEvent('ethereum#initialized'));
