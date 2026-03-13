@@ -101,17 +101,37 @@ await window.ethereum.request({
 
 ### 8. Contract call with calldata
 
+Example with a deployed `Counter` contract at `0x7b0e325FF8F70d21891A7494B5715C6dC3d08D7b`:
+
 ```js
+// Call increment() — selector 0xd09de08a
 const hash = await window.ethereum.request({
   method: 'eth_sendTransaction',
   params: [{
-    to: '0xTargetContract',
-    data: '0xa9059cbb000000000000000000000000341af4de1e67241d8d2536b2ea47c7e9debf7cb20000000000000000000000000000000000000000000000000de0b6b3a7640000',
+    to: '0x7b0e325FF8F70d21891A7494B5715C6dC3d08D7b',
+    data: '0xd09de08a',  // increment()
     value: '0x0',
   }]
 });
-// The relayer resolves selector 0xa9059cbb → "transfer(address,uint256)" via 4byte.directory
-// then calls the CRAC `call` entrypoint with the corresponding Micheline
+console.log('TxHash:', hash);
+// The relayer resolves 0xd09de08a → "increment()" via 4byte.directory
+// then calls CRAC entrypoint `call` with Pair(dest, Pair("increment()", bytes("")))
+```
+
+Verify the state change by calling `retrieve()` (read-only, no wallet needed):
+
+```js
+await fetch('https://demo.txpark.nomadic-labs.com/rpc', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    jsonrpc: '2.0', id: 1,
+    method: 'eth_call',
+    params: [{ to: '0x7b0e325FF8F70d21891A7494B5715C6dC3d08D7b', data: '0x2e64cec1' }, 'latest']
+    // 0x2e64cec1 = retrieve()
+  })
+}).then(r => r.json()).then(r => console.log('counter value:', parseInt(r.result, 16)));
+// → 2 after one increment (initial value is 1)
 ```
 
 ### 9. Disconnect the wallet

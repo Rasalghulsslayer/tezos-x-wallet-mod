@@ -117,5 +117,6 @@ export class BeaconClient {
 
   async disconnect(): Promise<void> {
     await this.client.clearActiveAccount();
+    await this.client.removeAllPeers();
   }
 }
