@@ -1,0 +1,19 @@
+services:
+  tezosx-relayer:
+    image: node:latest
+    working_dir: /root/tezosx-relayer
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./.:/root/tezosx-relayer
+    command: /bin/bash -c "npm i && npm run build && npm run serve"
+  frontend:
+    image: node:latest
+    working_dir: /root/tezosx-relayer/frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./.:/root/tezosx-relayer
+    command: /bin/bash -c "npm i && npm run dev"
+    depends_on:
+      - tezosx-relayer
