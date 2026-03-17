@@ -4,11 +4,18 @@ Injectable EIP-1193 provider that exposes `window.ethereum` to Etherlink dApps, 
 
 ## Build
 
+### From binaries
 ```bash
 npm install
 npm run typecheck   # TypeScript type check without compiling
 npm run build       # produces dist/relayer.iife.js
 ```
+
+### With docker
+```bash
+docker compose up -d
+```
+
 
 ## Temple Wallet Setup (prerequisite)
 
