@@ -83,6 +83,9 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
       case 'eth_accounts':
         return this.session != null ? [this.session.evmAlias] : [];
 
+      case 'tez_getAccounts':
+        return this.session != null ? [this.session.tz1Address] : [];
+
       case 'eth_chainId':
         return this.handleChainId();
 

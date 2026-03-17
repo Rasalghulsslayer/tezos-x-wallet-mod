@@ -1,0 +1,173 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Dark Futuriste ──────────────────────────────────────────────── */
+:root {
+  --color-background:  #06060f;
+  --color-surface:     #0b0b1a;
+  --color-surface-2:   #10102a;
+  --color-border:      rgba(139, 92, 246, 0.18);
+  --color-border-glow: rgba(139, 92, 246, 0.5);
+  --color-accent:      #8b5cf6;
+  --color-accent-2:    #a78bfa;
+  --color-cyan:        #22d3ee;
+  --color-green:       #00ff88;
+  --color-red:         #ff3355;
+  --color-orange:      #f97316;
+  --color-text:        #e2e2f0;
+  --color-muted:       #6b6b8a;
+
+  /* ── Shadcn tokens ── */
+  --background:             #06060f;
+  --foreground:             #e2e2f0;
+  --card:                   #0b0b1a;
+  --card-foreground:        #e2e2f0;
+  --popover:                #0b0b1a;
+  --popover-foreground:     #e2e2f0;
+  --primary:                #8b5cf6;
+  --primary-foreground:     #ffffff;
+  --secondary:              #10102a;
+  --secondary-foreground:   #e2e2f0;
+  --muted:                  #10102a;
+  --muted-foreground:       #6b6b8a;
+  --accent:                 #10102a;
+  --accent-foreground:      #e2e2f0;
+  --destructive:            #ff3355;
+  --destructive-foreground: #ffffff;
+  --border:                 rgba(139, 92, 246, 0.18);
+  --input:                  rgba(139, 92, 246, 0.12);
+  --ring:                   #8b5cf6;
+  --radius:                 0.5rem;
+
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background:           var(--background);
+  --color-foreground:           var(--foreground);
+  --color-card:                 var(--card);
+  --color-card-foreground:      var(--card-foreground);
+  --color-popover:              var(--popover);
+  --color-popover-foreground:   var(--popover-foreground);
+  --color-primary:              var(--primary);
+  --color-primary-foreground:   var(--primary-foreground);
+  --color-secondary:            var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted:                var(--muted);
+  --color-muted-foreground:     var(--muted-foreground);
+  --color-accent:               var(--accent);
+  --color-accent-foreground:    var(--accent-foreground);
+  --color-destructive:          var(--destructive);
+  --color-border:               var(--border);
+  --color-input:                var(--input);
+  --color-ring:                 var(--ring);
+
+  --font-sans: 'Space Grotesk', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --radius-lg: 0.75rem;
+  --radius-md: 0.5rem;
+  --radius-sm: 0.25rem;
+}
+
+/* ── Base ────────────────────────────────────────────────────────────────── */
+html, body {
+  background-color: var(--color-background);
+  color: var(--color-text);
+  font-family: 'Space Grotesk', sans-serif;
+  min-height: 100vh;
+}
+
+/* Dot-grid background */
+body {
+  background-image: radial-gradient(circle, rgba(139, 92, 246, 0.07) 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-attachment: fixed;
+}
+
+/* ── Glass card ──────────────────────────────────────────────────────────── */
+.glass {
+  background: rgba(11, 11, 26, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(139, 92, 246, 0.18);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.glass:hover {
+  border-color: rgba(139, 92, 246, 0.35);
+  box-shadow: 0 0 24px rgba(139, 92, 246, 0.08);
+}
+
+/* ── Neon glow ───────────────────────────────────────────────────────────── */
+.glow-violet {
+  box-shadow:
+    0 0 0 1px rgba(139, 92, 246, 0.3),
+    0 0 16px rgba(139, 92, 246, 0.25),
+    0 0 32px rgba(139, 92, 246, 0.08);
+}
+
+.glow-cyan {
+  box-shadow:
+    0 0 0 1px rgba(34, 211, 238, 0.3),
+    0 0 16px rgba(34, 211, 238, 0.2),
+    0 0 32px rgba(34, 211, 238, 0.06);
+}
+
+.glow-green {
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.5), 0 0 20px rgba(0, 255, 136, 0.15);
+}
+
+/* ── Gradient text ───────────────────────────────────────────────────────── */
+.gradient-text {
+  background: linear-gradient(135deg, #a78bfa 0%, #22d3ee 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-glow-violet {
+  text-shadow: 0 0 20px rgba(139, 92, 246, 0.9), 0 0 40px rgba(139, 92, 246, 0.4);
+}
+
+.text-glow-cyan {
+  text-shadow: 0 0 14px rgba(34, 211, 238, 0.9), 0 0 28px rgba(34, 211, 238, 0.3);
+}
+
+/* ── HUD divider ─────────────────────────────────────────────────────────── */
+.hud-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.35), transparent);
+  border: none;
+}
+
+/* ── Section label ───────────────────────────────────────────────────────── */
+.section-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+/* ── Neon input ──────────────────────────────────────────────────────────── */
+input.neon-input,
+.neon-input input {
+  background: rgba(139, 92, 246, 0.05) !important;
+  border-color: rgba(139, 92, 246, 0.2) !important;
+  color: var(--color-text) !important;
+  font-family: 'JetBrains Mono', monospace !important;
+}
+
+input.neon-input:focus,
+.neon-input input:focus {
+  border-color: rgba(139, 92, 246, 0.5) !important;
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.12) !important;
+  outline: none !important;
+}
+
+input.neon-input::placeholder {
+  color: var(--color-muted) !important;
+  opacity: 0.7;
+}
