@@ -37,8 +37,31 @@ function inject(): void {
     window.ethereum = provider;
   }
 
-  // EIP-6963-style announcement for dApps that listen for provider discovery
+  // Legacy announcement (wagmi v1, ethers.js)
   window.dispatchEvent(new CustomEvent('ethereum#initialized'));
+
+  // EIP-6963: Multiple Injected Provider Discovery
+  // dApps using wagmi v2 / RainbowKit / ConnectKit listen for this
+  const info = {
+    uuid:  '6cfb5e8b-2b9a-4d9f-b8e1-1a2b3c4d5e6f',
+    name:  'Tezos X Relayer',
+    rdns:  'com.tezosx.relayer',
+    icon:  'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iMzIiIGZpbGw9IiMxYzFlM2YiLz48dGV4dCB4PSIzMiIgeT0iNDIiIGZvbnQtc2l6ZT0iMzIiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiM4YjVjZjYiPtm4PC90ZXh0Pjwvc3ZnPg==',
+  };
+
+  const announceProvider = () => {
+    window.dispatchEvent(
+      new CustomEvent('eip6963:announceProvider', {
+        detail: Object.freeze({ info, provider }),
+      }),
+    );
+  };
+
+  // Announce immediately
+  announceProvider();
+
+  // Re-announce whenever a dApp requests providers (fires when the page initializes wallet discovery)
+  window.addEventListener('eip6963:requestProvider', announceProvider);
 
   console.info('[TezosX Relayer] window.ethereum injected ✓');
 }
