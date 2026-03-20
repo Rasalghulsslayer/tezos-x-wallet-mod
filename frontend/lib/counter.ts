@@ -1,4 +1,4 @@
-export const COUNTER_ADDRESS = '0x7b0e325FF8F70d21891A7494B5715C6dC3d08D7b';
+export const COUNTER_ADDRESS = '0x3af54710DC3bdc73922F3435876396372DDC18Fc';
 export const TEZLINK_EVM_RPC = 'https://demo.txpark.nomadic-labs.com/rpc';
 
 export const SELECTORS = {
@@ -24,5 +24,8 @@ export async function readCounter(): Promise<bigint> {
     }),
   });
   const json = await res.json() as { result: string };
-  return BigInt(json.result);
+  const raw = json.result;
+  // '0x' or '0x0' means zero (or contract not deployed)
+  if (!raw || raw === '0x') return BigInt(0);
+  return BigInt(raw);
 }

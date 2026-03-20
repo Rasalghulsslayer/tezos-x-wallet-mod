@@ -32,6 +32,11 @@ export class TezlinkClient {
     );
   }
 
+  /** Executes a read-only call against an EVM contract. */
+  async call(tx: Record<string, string>, block = 'latest'): Promise<string> {
+    return jsonRpc<string>(this.rpcUrl, 'eth_call', [tx, block]);
+  }
+
   /** Returns the transaction count (nonce) for an address. */
   async getTransactionCount(address: string, block = 'latest'): Promise<string> {
     return jsonRpc<string>(this.rpcUrl, 'eth_getTransactionCount', [address, block]);

@@ -92,6 +92,9 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
       case 'net_version':
         return this.handleNetVersion();
 
+      case 'eth_call':
+        return this.handleCall(args);
+
       case 'eth_getBalance':
         return this.handleGetBalance(args);
 
@@ -154,6 +157,16 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
   private async handleNetVersion(): Promise<string> {
     const chainId = await this.handleChainId();
     return String(parseInt(chainId, 16));
+  }
+
+  private async handleCall(args: RequestArguments): Promise<string> {
+    const params = args.params;
+    if (!Array.isArray(params) || typeof params[0] !== 'object') {
+      throw rpcError(JSON_RPC_INVALID_PARAMS, 'eth_call: expected [{to, data, ...}, block]');
+    }
+    const tx    = params[0] as Record<string, string>;
+    const block = typeof params[1] === 'string' ? params[1] : 'latest';
+    return this.tezlink.call(tx, block);
   }
 
   private async handleGetBalance(args: RequestArguments): Promise<string> {
