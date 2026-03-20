@@ -95,6 +95,9 @@ export class BeaconClient {
           {
             kind: TezosOperationType.TRANSACTION,
             amount: mutezAmount,
+            fee: "1000",         // 0.001 XTZ in mutez
+            gas_limit: "15000",   // Gas limit for transfers (increased to avoid OutOfGas)
+            storage_limit: "0",    // No storage needed for transfers
             destination: CRAC_CONTRACT,
             parameters: {
               entrypoint,
