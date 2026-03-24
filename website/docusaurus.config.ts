@@ -7,7 +7,7 @@ const config: Config = {
   title: 'Tezos X Relayer',
   tagline: `v${pkg.version} — Interact with Etherlink dApps using your Tezos wallet`,
   favicon: 'img/tezos-logo.png',
-  url: 'https://tezos-infra.gitlab.io',
+  url: 'https://tezosx-relayer-9c5cf1.gitlab.io',
   baseUrl: process.env.BASE_URL ?? '/',
   onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
