@@ -10,22 +10,7 @@ The relayer sits between Etherlink dApps and the Tezos L1, acting as a translati
 
 ## Flow diagram
 
-```mermaid
-flowchart LR
-    User["Utilisateur\n(Temple / tz1)"]
-    dApp["dApp Etherlink\n(Hanji, Superlend...)"]
-    Relayer["Relayer\n(window.ethereum)"]
-    Temple["Temple Wallet\n(Beacon)"]
-    Gateway["CRAC Gateway\nKT1..."]
-    Kernel["Kernel Tezos X\n(EVM + Michelson)"]
-
-    dApp -->|"eth_sendTransaction"| Relayer
-    Relayer -->|"requestPermissions"| Temple
-    Temple -->|"signed op"| Relayer
-    Relayer -->|"L1 operation"| Gateway
-    Gateway -->|"atomic forward"| Kernel
-    Kernel -->|"msg.sender = 0xAlias"| dApp
-```
+![Tezos X Relayer architecture diagram](/img/Tezosx_relayer.png)
 
 ## Components
 
