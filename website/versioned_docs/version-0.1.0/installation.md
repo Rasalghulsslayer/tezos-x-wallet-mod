@@ -8,14 +8,14 @@ sidebar_position: 1
 
 ## Prerequisites
 
-- Node.js 18+
-- npm 9+
-- [Temple Wallet](https://templewallet.com) (browser extension or mobile)
+- Node.js 20+
+- npm 10+
+- [Temple Wallet](https://templewallet.com) (mobile)
 
 ## Clone and install
 
 ```bash
-git clone https://github.com/Antonybyrt/Tezosx-relayer.git
+git clone https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer.git
 cd Tezosx-relayer
 npm install
 ```
@@ -27,12 +27,15 @@ node build.mjs
 # → dist/relayer.iife.js
 ```
 
-## Dev server
+## Playground
 
-Serve the bundle with CORS enabled (required for Tampermonkey injection):
+Run the Next.js playground to test the relayer locally:
 
 ```bash
-npx serve . -p 8080 --cors
+cd frontend
+npm install
+npm run dev
+# → http://localhost:3000
 ```
 
-The relayer will be available at `http://localhost:8080/dist/relayer.iife.js`.
+The playground lets you connect Temple, check your balance, send transfers, and interact with the Counter contract.
