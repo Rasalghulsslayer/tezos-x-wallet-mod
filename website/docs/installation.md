@@ -32,7 +32,7 @@ node build.mjs
 Run the Next.js playground to test the relayer locally:
 
 ```bash
-cd frontend
+cd playground
 npm install
 npm run dev
 # → http://localhost:3000
