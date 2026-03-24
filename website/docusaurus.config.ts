@@ -1,10 +1,11 @@
 import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
+import pkg from '../package.json';
 
 const config: Config = {
   title: 'Tezos X Relayer',
-  tagline: 'Interact with Etherlink dApps using your Tezos wallet',
+  tagline: `v${pkg.version} — Interact with Etherlink dApps using your Tezos wallet`,
   favicon: 'img/tezos-logo.png',
   url: 'https://tezos-infra.gitlab.io',
   baseUrl: process.env.BASE_URL ?? '/',
@@ -66,6 +67,10 @@ const config: Config = {
           to: '/docs/user-flows/connect-wallet',
           label: 'User Flows',
           position: 'left',
+        },
+        {
+          type: 'docsVersionDropdown',
+          position: 'right',
         },
         {
           href: 'https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer',

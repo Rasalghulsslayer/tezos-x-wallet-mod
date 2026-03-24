@@ -3,12 +3,13 @@ import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
 import styles from './index.module.css';
+import pkg from '../../../package.json';
 
 function Hero() {
   return (
     <header className={styles.hero}>
       <div className={styles.heroInner}>
-        <div className={styles.heroBadge}>Testnet · Shadownet</div>
+        <div className={styles.heroBadge}>v{pkg.version} · Testnet · Shadownet</div>
         <h1 className={styles.heroTitle}>Tezos X Relayer</h1>
         <p className={styles.heroSubtitle}>
           Interact with <strong>Etherlink dApps</strong> using your Tezos wallet.
