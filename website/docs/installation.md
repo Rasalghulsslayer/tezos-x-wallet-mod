@@ -8,9 +8,9 @@ sidebar_position: 1
 
 ## Prerequisites
 
-- Node.js 18+
-- npm 9+
-- [Temple Wallet](https://templewallet.com) (browser extension or mobile)
+- Node.js 20+
+- npm 10+
+- [Temple Wallet](https://templewallet.com) (mobile)
 
 ## Clone and install
 
