@@ -38,13 +38,34 @@ npm run serve
 
 ### 2. Inject the relayer on any page
 
-Open DevTools → Console, then:
+**Option A — DevTools console** (own page or quick test):
 
 ```js
 const s = document.createElement('script');
 s.src = 'http://localhost:8080/dist/relayer.iife.js';
-document.head.prepend(s);  // prepend = before other scripts
+document.head.prepend(s);
 ```
+
+**Option B — Tampermonkey (third-party dApps)**
+
+Create a new userscript and paste the full content of `dist/relayer.iife.js` **inline** inside the IIFE:
+
+```js
+// ==UserScript==
+// @name         TezosX Relayer Injector
+// @namespace    tezosx-relayer
+// @version      0.3
+// @match        *://*/*
+// @run-at       document-start
+// @grant        none
+// ==/UserScript==
+
+(function () {
+  // ── Paste the full content of dist/relayer.iife.js here ──
+})();
+```
+
+> **Why inline?** dApps using EIP-6963 dispatch `eip6963:requestProvider` at page load. Loading the bundle async (via `GM_xmlhttpRequest` or `script.src`) causes the relayer to arrive too late — the provider is never registered. Inlining guarantees synchronous registration at `document-start`.
 
 Verify the injection worked:
 

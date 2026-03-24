@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - [Tampermonkey](https://www.tampermonkey.net/) installed in Chrome
-- Relayer dev server running on port 8080: `npx serve . -p 8080 --cors`
+- Relayer built: `npm run build` → produces `dist/relayer.iife.js`
 
 ## Setup
 
@@ -11,36 +11,25 @@
 
 Go to `chrome://extensions` → Tampermonkey → **Details** → **Site access** → set to **On all sites**.
 
-### 2. Create a new userscript
+### 2. Build the inline userscript
 
-Click the Tampermonkey icon → **Create a new script**, then paste:
+Copy the full content of `dist/relayer.iife.js` and paste it directly into the userscript:
 
 ```js
 // ==UserScript==
 // @name         TezosX Relayer Injector
 // @namespace    tezosx-relayer
-// @version      0.2
+// @version      0.3
 // @description  Injects TezosX EIP-1193 relayer into Etherlink dApps
 // @match        *://*/*
 // @run-at       document-start
-// @grant        GM_xmlhttpRequest
-// @connect      localhost
+// @grant        none
 // ==/UserScript==
 
 (function () {
-  GM_xmlhttpRequest({
-    method: 'GET',
-    url: 'http://localhost:8080/dist/relayer.iife.js',
-    onload: function (response) {
-      const script = document.createElement('script');
-      script.textContent = response.responseText;
-      document.documentElement.appendChild(script);
-      console.log('[TezosX] Relayer injected ✓');
-    },
-    onerror: function () {
-      console.error('[TezosX] Failed to load relayer — is the server running on :8080?');
-    },
-  });
+  // ── Paste the full content of dist/relayer.iife.js here ──
+
+  console.log('[TezosX] Relayer injected ✓');
 })();
 ```
 
@@ -48,9 +37,19 @@ Click the Tampermonkey icon → **Create a new script**, then paste:
 
 The console should show `[TezosX] Relayer injected ✓` and `[TezosX Relayer] window.ethereum injected ✓`.
 
-## Why `GM_xmlhttpRequest` instead of `script.src`
+## Why inline instead of `GM_xmlhttpRequest`
 
-HTTPS pages block HTTP script sources (mixed content). `GM_xmlhttpRequest` runs in the extension context, bypassing this restriction, then injects the script content inline.
+The async approach (`GM_xmlhttpRequest`) loads the relayer after the page has already started — dApps using EIP-6963 dispatch `eip6963:requestProvider` early at page load, before the async script arrives.
+
+```
+Async (broken for EIP-6963):
+  page loads → dApp requests EIP-6963 providers → [network delay] → relayer arrives too late ✗
+
+Inline (correct):
+  page loads → relayer already in script → EIP-6963 announced immediately → dApp receives provider ✓
+```
+
+Inlining the bundle eliminates the network round-trip and guarantees the provider is registered before any dApp code runs.
 
 ## Restricting to specific sites
 
@@ -61,11 +60,15 @@ Replace `@match *://*/*` with the target URL:
 // @match        https://app.hanji.finance/*
 ```
 
+## Updating the script
+
+After each `npm run build`, re-copy the content of `dist/relayer.iife.js` into the userscript and save.
+
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
 | Script doesn't run, no console output | Check Tampermonkey badge shows `1` on the page |
-| `Failed to load relayer` | Start the dev server: `npx serve . -p 8080 --cors` |
+| Provider not detected by dApp | Make sure the bundle is inlined, not loaded async |
 | Page CSP blocks the script | Use a Chrome extension instead (MV3) |
 | MetaMask is picked instead of the relayer | Disable MetaMask on the site via its extension menu |

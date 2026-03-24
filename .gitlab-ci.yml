@@ -1,0 +1,13 @@
+pages:
+  image: node:20
+  stage: deploy
+  script:
+    - cd website
+    - npm ci
+    - BASE_URL=/techrel/support-xdev-qa/tezosx-relayer/ npm run build
+    - mv build ../public
+  artifacts:
+    paths:
+      - public
+  only:
+    - main

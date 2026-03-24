@@ -1,0 +1,112 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --ifm-color-primary: #6c47ff;
+  --ifm-color-primary-dark: #5a35ee;
+  --ifm-color-primary-darker: #4f2ae3;
+  --ifm-color-primary-darkest: #3d1ec7;
+  --ifm-color-primary-light: #7e5fff;
+  --ifm-color-primary-lighter: #8a6fff;
+  --ifm-color-primary-lightest: #a890ff;
+  --ifm-font-family-base: 'Outfit', system-ui, sans-serif;
+  --ifm-font-family-monospace: 'JetBrains Mono', 'Courier New', monospace;
+  --ifm-code-font-size: 90%;
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #7c5cff;
+  --ifm-color-primary-dark: #6a4aed;
+  --ifm-color-primary-light: #8e6eff;
+  --ifm-background-color: #0a0a0f;
+  --ifm-background-surface-color: #13131a;
+  --ifm-navbar-background-color: #13131a;
+  --ifm-footer-background-color: #0d0d14;
+  --ifm-toc-border-color: #2a2a3a;
+  --ifm-color-emphasis-300: #2a2a3a;
+  --ifm-hr-border-color: #2a2a3a;
+  --docusaurus-highlighted-code-line-bg: rgba(108, 71, 255, 0.15);
+}
+
+[data-theme='light'] {
+  --ifm-background-color: #f5f5ff;
+  --ifm-background-surface-color: #ffffff;
+  --docusaurus-highlighted-code-line-bg: rgba(108, 71, 255, 0.08);
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* Navbar */
+.navbar {
+  border-bottom: 1px solid rgba(108, 71, 255, 0.2);
+  box-shadow: 0 1px 20px rgba(108, 71, 255, 0.1);
+}
+
+.navbar__title {
+  font-weight: 700;
+  background: linear-gradient(90deg, #6c47ff, #00c2ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Hero gradient text */
+.hero__title {
+  background: linear-gradient(135deg, #6c47ff 0%, #00c2ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Sidebar */
+[data-theme='dark'] .menu {
+  background-color: #0d0d14;
+}
+
+[data-theme='dark'] .menu__link--active {
+  background-color: rgba(108, 71, 255, 0.15);
+  border-left: 2px solid #6c47ff;
+}
+
+/* Code blocks */
+[data-theme='dark'] .prism-code {
+  background-color: #0d0d18 !important;
+  border: 1px solid #2a2a3a;
+  border-radius: 8px;
+}
+
+/* Admonitions */
+[data-theme='dark'] .alert {
+  background-color: #13131a;
+  border-left-color: #6c47ff;
+}
+
+/* Mermaid diagrams */
+[data-theme='dark'] .docusaurus-mermaid-container svg {
+  background-color: transparent;
+}
+
+/* Tables */
+[data-theme='dark'] table tr:nth-child(2n) {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme='dark'] table thead tr {
+  background-color: rgba(108, 71, 255, 0.15);
+}
+
+/* Badges in text */
+.badge--purple {
+  background-color: rgba(108, 71, 255, 0.2);
+  color: #a890ff;
+  border: 1px solid rgba(108, 71, 255, 0.3);
+}
+
+.badge--cyan {
+  background-color: rgba(0, 194, 255, 0.15);
+  color: #00c2ff;
+  border: 1px solid rgba(0, 194, 255, 0.3);
+}
