@@ -110,11 +110,16 @@ await Promise.all([
     format: 'esm',
   }),
 
-  // popup.js — page popup de l'extension
+  // popup.js — page popup de l'extension (React)
   esbuild.build({
     ...sharedConfig,
-    entryPoints: ['src/popup.ts'],
+    entryPoints: ['src/popup.tsx'],
     format: 'iife',
+    jsx: 'automatic',
+    jsxImportSource: 'react',
+    define: {
+      'process.env.NODE_ENV': '"production"',
+    },
   }),
 
 ]);

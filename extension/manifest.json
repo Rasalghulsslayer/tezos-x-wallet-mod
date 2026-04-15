@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "TezosX Relayer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "EIP-1193 provider bridging Ethereum dApps to Tezos via Temple Wallet",
 
-  "permissions": ["storage"],
+  "permissions": ["storage", "tabs"],
 
   "host_permissions": [
     "https://demo.txpark.nomadic-labs.com/*",

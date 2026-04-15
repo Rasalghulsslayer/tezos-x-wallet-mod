@@ -126,6 +126,13 @@ function inject(): void {
     postSessionUpdate(null);
   });
 
+  window.addEventListener('message', (event: MessageEvent) => {
+    if (event.source !== window) return;
+    if ((event.data as { type?: string })?.type === 'TEZOSX_DISCONNECT') {
+      void provider.request({ method: 'wallet_revokePermissions' }).catch(() => {});
+    }
+  });
+
   console.info('[TezosX Relayer] window.ethereum injected (extension) ✓');
 }
 

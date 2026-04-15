@@ -13,16 +13,23 @@ window.addEventListener('message', (event: MessageEvent) => {
   const msg = event.data as Partial<SessionUpdateMessage>;
   if (msg?.type !== 'TEZOSX_SESSION_UPDATE') return;
 
-  const req: BackgroundRequest = msg.session !== null
+  const trustedOrigin = window.location.origin;
+
+  const req: BackgroundRequest = msg.session != null
     ? {
         type:    'SESSION_UPDATE',
-        session: { ...msg.session, origin: msg.origin, connectedAt: Date.now() },
-        origin:  msg.origin,
+        session: { ...msg.session, origin: trustedOrigin, connectedAt: Date.now() },
+        origin:  trustedOrigin,
       }
-    : { type: 'SESSION_UPDATE', session: null, origin: msg.origin };
+    : { type: 'SESSION_UPDATE', session: null, origin: trustedOrigin };
 
   chrome.runtime.sendMessage(req).catch(() => {
-    // Le background peut ne pas être encore prêt (ex: premier chargement).
-    // On ignore silencieusement.
+    // Background may not be ready yet on first load — ignore silently.
   });
+});
+
+chrome.runtime.onMessage.addListener((msg: { type: string }) => {
+  if (msg?.type === 'PAGE_DISCONNECT') {
+    window.postMessage({ type: 'TEZOSX_DISCONNECT' }, window.location.origin);
+  }
 });

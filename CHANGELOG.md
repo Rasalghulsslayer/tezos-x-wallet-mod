@@ -6,6 +6,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.2.0] — 2026-04-15
+
+### Added
+- Chrome/Brave/Firefox MV3 extension (`extension/`) — replaces Tampermonkey as the recommended injection method
+- Popup UI listing connected sites with origin, EVM alias, tz1 address, and chain badge
+- Persistent session tracking via `chrome.storage.local` (survives service worker restarts)
+- First-run onboarding guide in the popup (Temple install + network setup)
+- TESTNET badge in the popup header
+- `npm run build:ext` and `npm run dev:ext` scripts
+
+### Fixed
+- Session origin spoofing via postMessage: content script now uses `window.location.origin` (browser-trusted), never the page-controlled message payload
+- "Disconnect" button now propagates to the page and actually calls `wallet_revokePermissions` — previous behaviour only removed the session from the popup UI
+- Race condition in the service worker: message handling is now serialized behind the storage-load promise, preventing silent session loss on startup
+- `chrome.storage.local.set` is now awaited in `persist()` to avoid write loss when the SW is killed mid-operation
+
+### Changed
+- Popup UI language changed to English (was mixed FR/EN)
+- `eth_call` now routed via Tezlink proxy (was planned for 0.2.0, now shipped)
+
+---
+
 ## [0.1.0] — 2026-03-24
 
 ### Added
