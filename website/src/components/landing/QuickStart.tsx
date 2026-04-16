@@ -20,7 +20,7 @@ const CODE_STEPS = [
   {
     n: '03',
     t: 'Send a transaction',
-    s: 'Routed through CRAC gateway — signed by Temple',
+    s: 'Routed through NAC gateway — signed by Temple',
     code: `await window.ethereum.request({
   method: 'eth_sendTransaction',
   params: [{ to: '0x…', value: '0xde0b6b3a7640000' }]

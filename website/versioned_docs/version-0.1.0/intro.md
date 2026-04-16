@@ -15,7 +15,7 @@ The **Tezos X Relayer** is an injectable TypeScript script that implements [EIP-
 1. The relayer injects `window.ethereum` into any web page
 2. When a dApp calls `eth_requestAccounts`, it opens Temple via the Beacon protocol
 3. Your tz1 address is deterministically mapped to an EVM alias (`0x...`)
-4. Transactions are routed through the **CRAC gateway** on Tezos L1, forwarded atomically to the Etherlink kernel
+4. Transactions are routed through the **NAC gateway** on Tezos L1, forwarded atomically to the Etherlink kernel
 
 ## Status
 

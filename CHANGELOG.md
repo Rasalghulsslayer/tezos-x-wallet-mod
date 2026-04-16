@@ -34,7 +34,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 - EIP-1193 provider (`window.ethereum`) injected at runtime via IIFE bundle
 - EIP-6963 multi-wallet discovery — announces the relayer to dApps using RainbowKit, wagmi, etc.
 - Temple Wallet connection via Beacon SDK (`eth_requestAccounts`)
-- Transaction routing through CRAC gateway (`callMichelson` entrypoint)
+- Transaction routing through NAC gateway (`callMichelson` entrypoint)
 - Supported EIP-1193 methods: `eth_requestAccounts`, `eth_accounts`, `eth_chainId`, `net_version`, `eth_getBalance`, `eth_getTransactionCount`, `eth_sendTransaction`, `eth_getTransactionReceipt`
 - tz1 → EVM alias derivation via `tez_getEthereumTezosAddress` RPC
 - Tampermonkey userscript injection guide (inline bundle for EIP-6963 timing)

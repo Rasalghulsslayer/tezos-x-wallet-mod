@@ -6,7 +6,7 @@ import { TiltCard } from './TiltCard';
 const FEATURES = [
   { Icon: Zap, title: 'EIP-1193 Provider', desc: 'Full window.ethereum implementation, dApps see a standard Ethereum provider.', accent: '#6c47ff' },
   { Icon: Radio, title: 'EIP-6963 Discovery', desc: 'Multi-wallet discovery protocol. Works with RainbowKit, wagmi, and modern dApp stacks.', accent: '#00c2ff' },
-  { Icon: Hexagon, title: 'CRAC Gateway', desc: 'Transactions routed atomically through the TezosX gateway, tz1 becomes your EVM identity.', accent: '#7c3aed' },
+  { Icon: Hexagon, title: 'NAC Gateway', desc: 'Transactions routed atomically through the TezosX gateway, tz1 becomes your EVM identity.', accent: '#7c3aed' },
   { Icon: Gem, title: 'Temple Wallet', desc: 'Connect via Temple browser extension or mobile using the Beacon protocol.', accent: '#a855f7' },
   { Icon: Package, title: 'Chrome Extension', desc: 'MV3 extension for Chrome, Brave, and Firefox, injects automatically on every page.', accent: '#06b6d4' },
   { Icon: TestTube, title: 'Testnet Ready', desc: 'Built and tested on Etherlink Shadownet. Counter, faucet, and DEX interactions validated.', accent: '#10b981' },

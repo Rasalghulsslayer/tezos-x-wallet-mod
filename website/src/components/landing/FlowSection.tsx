@@ -4,7 +4,7 @@ import { motion, useInView } from 'framer-motion';
 const FLOW = [
   { icon: '◈', label: 'Temple', sub: 'Beacon · tz1' },
   { icon: '⚡', label: 'Relayer', sub: 'EIP-1193' },
-  { icon: '⬡', label: 'CRAC', sub: 'Gateway' },
+  { icon: '⬡', label: 'NAC', sub: 'Gateway' },
   { icon: '⬢', label: 'Etherlink', sub: 'EVM dApps' },
 ];
 

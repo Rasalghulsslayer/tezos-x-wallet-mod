@@ -194,7 +194,7 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
       throw rpcError(JSON_RPC_INVALID_PARAMS, 'eth_sendTransaction: missing "to" field');
     }
 
-    // Build CRAC gateway Micheline call (async: may resolve selector via 4byte.directory)
+    // Build NAC gateway Micheline call (async: may resolve selector via 4byte.directory)
     const { entrypoint, michelineArg, mutezAmount } = await this.gateway.fromEthTransaction(tx);
 
     // Submit to Temple via Beacon — opens signing popup

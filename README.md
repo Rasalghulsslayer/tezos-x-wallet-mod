@@ -1,6 +1,6 @@
 # Tezos X Relayer
 
-Injectable EIP-1193 provider that exposes `window.ethereum` to Etherlink dApps, routing all transactions through Temple Wallet and the Tezos X CRAC cross-runtime gateway.
+Injectable EIP-1193 provider that exposes `window.ethereum` to Etherlink dApps, routing all transactions through Temple Wallet and the Tezos X NAC cross-runtime gateway.
 
 ## Build
 
@@ -115,7 +115,7 @@ console.log('TxHash:', hash);
 // → 32-byte synthetic hash (keccak256 of the L1 opHash)
 ```
 
-Temple opens a signing popup. The transaction goes through the CRAC gateway (`KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw`, entrypoint `default`).
+Temple opens a signing popup. The transaction goes through the NAC gateway (`KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw`, entrypoint `default`).
 
 ### 7. Get the receipt
 
@@ -143,7 +143,7 @@ const hash = await window.ethereum.request({
 });
 console.log('TxHash:', hash);
 // The relayer resolves 0xd09de08a → "increment()" via 4byte.directory
-// then calls CRAC entrypoint `call` with Pair(dest, Pair("increment()", bytes("")))
+// then calls NAC entrypoint `call` with Pair(dest, Pair("increment()", bytes("")))
 ```
 
 Verify the state change by calling `retrieve()` (read-only, no wallet needed):
@@ -184,7 +184,7 @@ Derivation is performed via the Tezos X RPC `tez_getTezosEthereumAddress` — no
 |---|---|
 | EVM RPC (Tezlink) | `https://demo.txpark.nomadic-labs.com/rpc` |
 | Tezos L1 RPC | `https://demo.txpark.nomadic-labs.com/rpc/tezlink` |
-| CRAC Gateway | `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw` |
+| NAC Gateway | `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw` |
 
 ## Supported EIP-1193 methods
 
@@ -196,7 +196,7 @@ Derivation is performed via the Tezos X RPC `tez_getTezosEthereumAddress` — no
 | `net_version` | `parseInt(chainId, 16).toString()` |
 | `eth_getBalance` | Proxied from Tezlink |
 | `eth_getTransactionCount` | Returns `'0x0'` (nonce not managed in V1) |
-| `eth_sendTransaction` | Builds CRAC Micheline call → Temple popup → synthetic hash |
+| `eth_sendTransaction` | Builds NAC Micheline call → Temple popup → synthetic hash |
 | `eth_getTransactionReceipt` | Tezlink first, then synthetic receipt from `pendingOps` |
 | `eth_sign` / `personal_sign` / EIP-712 | Throws `4200 UNSUPPORTED_METHOD` |
 

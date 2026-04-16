@@ -6,7 +6,7 @@ sidebar_position: 3
 
 # Smart Contract Call Flow
 
-Call a Michelson smart contract from an Etherlink dApp via the CRAC gateway.
+Call a Michelson smart contract from an Etherlink dApp via the NAC gateway.
 
 ## Example: Counter contract
 
@@ -38,7 +38,7 @@ sequenceDiagram
     actor User
     participant dApp
     participant Relayer
-    participant Gateway as CRAC Gateway
+    participant Gateway as NAC Gateway
     participant Kernel
 
     dApp->>Relayer: eth_sendTransaction({ to: KT1, data: 0xd09de08a })

@@ -67,7 +67,7 @@ const balance = await window.ethereum.request({
 
 ### `eth_sendTransaction`
 
-Routes a transaction through the CRAC gateway. Opens Temple for signature.
+Routes a transaction through the NAC gateway. Opens Temple for signature.
 
 ```js
 const txHash = await window.ethereum.request({

@@ -1,6 +1,6 @@
 # TezosX Relayer — Browser Extension
 
-Chrome/Brave extension (Manifest V3) that automatically injects `window.ethereum` on all pages, routing transactions to Temple Wallet via the Tezos X CRAC gateway.
+Chrome/Brave extension (Manifest V3) that automatically injects `window.ethereum` on all pages, routing transactions to Temple Wallet via the Tezos X NAC gateway.
 
 Unlike the IIFE version (manually injected script), the extension is active as soon as the page loads, with no changes required on the dApp side.
 
@@ -101,4 +101,4 @@ compatible with wagmi v2, RainbowKit, and ConnectKit without any additional conf
 | Chain ID     | `0x1f094` (127124)                              |
 | EVM RPC      | `https://demo.txpark.nomadic-labs.com/rpc`      |
 | L1 RPC       | `https://demo.txpark.nomadic-labs.com/rpc/tezlink` |
-| CRAC contract| `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw`         |
+| NAC contract| `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw`         |
