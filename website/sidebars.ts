@@ -12,7 +12,7 @@ const sidebars: SidebarsConfig = {
         'architecture/overview',
         'architecture/eip1193',
         'architecture/eip6963',
-        'architecture/crac-gateway',
+        'architecture/nac-gateway',
       ],
     },
     {

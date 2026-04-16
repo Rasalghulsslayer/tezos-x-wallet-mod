@@ -6,7 +6,7 @@ import {
   type AccountInfo,
   type MichelineMichelsonV1Expression,
 } from '@airgap/beacon-sdk';
-import { TEZOS_L1_RPC, CRAC_CONTRACT } from './constants.js';
+import { TEZOS_L1_RPC, NAC_CONTRACT } from './constants.js';
 import type { BeaconPermissions } from './types.js';
 
 const EIP1193_USER_REJECTED = 4001;
@@ -79,7 +79,7 @@ export class BeaconClient {
   }
 
   /**
-   * Submit a TRANSACTION operation to the CRAC gateway via Temple.
+   * Submit a TRANSACTION operation to the NAC gateway via Temple.
    * Returns the Tezos L1 operation hash (Base58Check).
    *
    * @param michelineArg  Micheline JSON value for the entrypoint parameters
@@ -98,7 +98,7 @@ export class BeaconClient {
             fee: "1000",         // 0.001 XTZ in mutez
             gas_limit: "15000",   // Gas limit for transfers (increased to avoid OutOfGas)
             storage_limit: "0",    // No storage needed for transfers
-            destination: CRAC_CONTRACT,
+            destination: NAC_CONTRACT,
             parameters: {
               entrypoint,
               value: michelineArg,

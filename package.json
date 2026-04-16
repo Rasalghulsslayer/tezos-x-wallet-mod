@@ -1,13 +1,16 @@
 {
   "name": "tezosx-relayer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
+    "build:ext": "cd extension && node build.mjs",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src",
-    "serve": "npx serve --cors -l 8080 ."
+    "typecheck:ext": "tsc --noEmit -p extension/tsconfig.json",
+    "lint": "eslint src extension/src",
+    "serve": "npx serve --cors -l 8080 .",
+    "dev:ext": "web-ext run --source-dir extension --target chromium"
   },
   "dependencies": {
     "@airgap/beacon-sdk": "^4.8.1",
@@ -15,15 +18,22 @@
     "@taquito/rpc": "^24.2.0",
     "@taquito/taquito": "^24.2.0",
     "eventemitter3": "^5.0.4",
+    "lucide-react": "^1.8.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
     "viem": "^2.47.2"
   },
   "devDependencies": {
+    "@types/chrome": "^0.1.40",
     "@types/node": "^22.19.15",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^8.57.0",
     "@typescript-eslint/parser": "^8.57.0",
     "esbuild": "^0.24.2",
     "eslint": "^9.39.4",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "web-ext": "^10.1.0"
   },
   "description": "",
   "main": "index.js",

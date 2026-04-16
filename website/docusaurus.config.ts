@@ -17,6 +17,8 @@ const config: Config = {
     locales: ['en'],
   },
 
+  plugins: ['./src/plugins/tailwind-config.js'],
+
   markdown: {
     mermaid: true,
   },
@@ -41,7 +43,7 @@ const config: Config = {
   themeConfig: {
     colorMode: {
       defaultMode: 'dark',
-      disableSwitch: false,
+      disableSwitch: true,
       respectPrefersColorScheme: false,
     },
     image: 'img/tezos-logo.png',

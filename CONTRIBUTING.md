@@ -23,7 +23,7 @@ npm run build
 src/                  TypeScript source — relayer core
   provider.ts         EIP-1193 provider class
   beacon.ts           Temple/Beacon SDK integration
-  gateway.ts          CRAC Micheline call builder
+  gateway.ts          NAC Micheline call builder
   tezlink.ts          Tezlink RPC client
   index.ts            Entry point — window.ethereum injection + EIP-6963 announcement
 dist/                 Built IIFE bundle (gitignored output)
@@ -103,7 +103,7 @@ Update `package.json` version and run `npm run docusaurus docs:version <version>
 
 - **EIP-1193** — the `window.ethereum` interface dApps use to interact with wallets
 - **EIP-6963** — multi-wallet discovery via `eip6963:announceProvider` / `eip6963:requestProvider` events
-- **CRAC gateway** — Tezos X cross-runtime contract at `KT1...`, entrypoint `callMichelson`
+- **NAC gateway** — Tezos X cross-runtime contract at `KT1...`, entrypoint `callMichelson`
 - **Beacon** — wallet connection protocol used by Temple
 
 Refer to the [documentation site](https://tezos-infra.gitlab.io/techrel/support-xdev-qa/tezosx-relayer/) for architecture details.

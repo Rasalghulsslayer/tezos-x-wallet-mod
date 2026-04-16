@@ -22,7 +22,7 @@ export class TezlinkClient {
   /**
    * Returns the transaction receipt for a given EVM tx hash, or null if not
    * yet mined / not found. The Tezlink node may or may not index operations
-   * initiated via the CRAC gateway — use buildSyntheticReceipt as fallback.
+   * initiated via the NAC gateway — use buildSyntheticReceipt as fallback.
    */
   async getTransactionReceipt(txHash: string): Promise<EthTransactionReceipt | null> {
     return jsonRpc<EthTransactionReceipt | null>(

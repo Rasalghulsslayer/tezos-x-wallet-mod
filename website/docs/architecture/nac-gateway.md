@@ -1,12 +1,12 @@
 ---
-id: crac-gateway
-title: CRAC Gateway
+id: nac-gateway
+title: NAC Gateway
 sidebar_position: 4
 ---
 
-# CRAC Gateway
+# NAC Gateway
 
-**CRAC** (Cross-Runtime Atomic Calls) is the Tezos X mechanism for atomically forwarding EVM transactions to the Tezos L1 Michelson layer.
+**NAC** (Cross-Runtime Atomic Calls) is the Tezos X mechanism for atomically forwarding EVM transactions to the Tezos L1 Michelson layer.
 
 ## Entrypoints
 
@@ -36,7 +36,7 @@ Pair(
 sequenceDiagram
     participant Relayer
     participant Temple
-    participant Gateway as CRAC Gateway (KT1...)
+    participant Gateway as NAC Gateway (KT1...)
     participant Kernel as Tezos X Kernel
 
     Relayer->>Relayer: Build Micheline calldata
@@ -49,10 +49,10 @@ sequenceDiagram
 
 ## Sender identity
 
-When a transaction passes through CRAC:
+When a transaction passes through NAC:
 - `Tezos.get_sender` inside a Michelson contract = **the user's mapped tz1 address**
 - The kernel resolves the EVM caller's identity and forwards it as the sender to the Michelson contract
 
 :::info
-`Tezos.get_sender` returns the original caller's tz1 address (mapped from the EVM alias), not the CRAC gateway address.
+`Tezos.get_sender` returns the original caller's tz1 address (mapped from the EVM alias), not the NAC gateway address.
 :::

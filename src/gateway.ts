@@ -1,5 +1,5 @@
 import type { MichelineMichelsonV1Expression } from '@airgap/beacon-sdk';
-import { CRAC_ENTRYPOINT } from './constants.js';
+import { NAC_ENTRYPOINT } from './constants.js';
 import type { EthTransactionRequest } from './types.js';
 
 /**
@@ -79,7 +79,7 @@ export interface GatewayCallParams {
 
 export class GatewayBuilder {
   /**
-   * Build the CRAC gateway call parameters from an EVM transaction request.
+   * Build the NAC gateway call parameters from an EVM transaction request.
    * @param tx  EthTransactionRequest from eth_sendTransaction params[0]
    */
   async fromEthTransaction(tx: EthTransactionRequest): Promise<GatewayCallParams> {
@@ -115,14 +115,14 @@ export class GatewayBuilder {
         `passing raw hex as method_sig (calldata may mismatch on EVM side)`,
       );
       return {
-        entrypoint:   CRAC_ENTRYPOINT,
+        entrypoint:   NAC_ENTRYPOINT,
         michelineArg: buildCallArg(tx.to, selectorHex, abiParamsHex),
         mutezAmount,
       };
     }
 
     return {
-      entrypoint:   CRAC_ENTRYPOINT,
+      entrypoint:   NAC_ENTRYPOINT,
       michelineArg: buildCallArg(tx.to, methodSig, abiParamsHex),
       mutezAmount,
     };

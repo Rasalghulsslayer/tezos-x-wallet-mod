@@ -15,7 +15,7 @@ sequenceDiagram
     actor User
     participant dApp
     participant Relayer
-    participant Gateway as CRAC Gateway
+    participant Gateway as NAC Gateway
     participant Temple
 
     dApp->>Relayer: eth_sendTransaction({ to, value })

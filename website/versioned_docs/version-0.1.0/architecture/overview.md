@@ -19,7 +19,7 @@ The relayer sits between Etherlink dApps and the Tezos L1, acting as a translati
 | **RelayerProvider** | Implements `EIP1193Provider`, handles all `window.ethereum` calls |
 | **BeaconClient** | Connects to Temple wallet via Beacon SDK |
 | **TezlinkClient** | Sends operations to Tezos L1 via Tezlink RPC |
-| **GatewayBuilder** | Builds Micheline calldata for the CRAC gateway |
+| **GatewayBuilder** | Builds Micheline calldata for the NAC gateway |
 | **EIP-6963 announcer** | Broadcasts provider info for modern dApp wallet pickers |
 
 ## Address derivation
