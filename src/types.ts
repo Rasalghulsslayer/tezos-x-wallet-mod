@@ -38,18 +38,20 @@ export interface EthTransactionRequest {
 }
 
 export interface EthTransactionReceipt {
-  transactionHash:   string;
-  blockHash:         string;
-  blockNumber:       string;
-  from:              string;
-  to:                string | null;
-  contractAddress:   string | null;
-  cumulativeGasUsed: string;
-  gasUsed:           string;
-  logs:              unknown[];
-  logsBloom:         string;
-  status:            string;   // '0x1' success | '0x0' failure
-  type:              string;
+  transactionHash:    string;
+  transactionIndex:   string;
+  blockHash:          string;
+  blockNumber:        string;
+  from:               string;
+  to:                 string | null;
+  contractAddress:    string | null;
+  cumulativeGasUsed:  string;
+  gasUsed:            string;
+  effectiveGasPrice:  string;
+  logs:               unknown[];
+  logsBloom:          string;
+  status:             string;   // '0x1' success | '0x0' failure
+  type:               string;
 }
 
 // ── Relayer internal types ─────────────────────────────────────────────────

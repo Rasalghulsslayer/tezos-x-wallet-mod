@@ -3,7 +3,7 @@ import { BeaconClient } from './beacon.js';
 import { TezlinkClient } from './tezlink.js';
 import { GatewayBuilder } from './gateway.js';
 import { deriveEvmAlias } from './utils/derive.js';
-import { l1OpHashToEvmHash, buildSyntheticReceipt } from './utils/receipt.js';
+import { l1OpHashToEvmHash, buildSyntheticReceipt, pollForReceipt } from './utils/receipt.js';
 import type {
   EIP1193Provider,
   RequestArguments,
@@ -18,7 +18,6 @@ import type {
 
 const EIP1193_UNAUTHORIZED       = 4100;
 const EIP1193_UNSUPPORTED_METHOD = 4200;
-const JSON_RPC_METHOD_NOT_FOUND  = -32601;
 const JSON_RPC_INVALID_PARAMS    = -32602;
 
 function rpcError(code: number, message: string, data?: unknown): ProviderRpcError {
@@ -99,9 +98,10 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
         return this.handleGetBalance(args);
 
       case 'eth_getTransactionCount':
-        // Nonce management is out of scope for V1.
-        // Return '0x0' to avoid dApps blocking on this call.
-        return '0x0';
+        return this.tezlink.getTransactionCount(
+          (args.params as string[])[0],
+          (args.params as string[])[1] ?? 'latest',
+        );
 
       case 'eth_sendTransaction':
         return this.handleSendTransaction(args);
@@ -125,7 +125,7 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
         );
 
       default:
-        throw rpcError(JSON_RPC_METHOD_NOT_FOUND, `Method not found: ${args.method}`);
+        return this.tezlink.proxy(args.method, Array.isArray(args.params) ? args.params : []);
     }
   }
 
@@ -222,14 +222,19 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
     }
     const syntheticHash = params[0];
 
-    // Try the Tezlink EVM node first (may have indexed it)
+    // Try the Tezlink EVM node first (may have indexed it already)
     const evmReceipt = await this.tezlink.getTransactionReceipt(syntheticHash);
     if (evmReceipt != null) return evmReceipt;
 
-    // Fall back to synthetic receipt if we know this op
+    // If we don't know this op, nothing to do
     const pending = this.pendingOps.get(syntheticHash);
     if (pending == null) return null;
 
+    // Poll Tezlink for the real receipt (cross-runtime indexing may be delayed)
+    const realReceipt = await pollForReceipt(this.tezlink, syntheticHash, 10, 2000);
+    if (realReceipt != null) return realReceipt;
+
+    // Last resort: synthetic receipt so dApps don't hang indefinitely
     return buildSyntheticReceipt(syntheticHash, pending.from, pending.to);
   }
 

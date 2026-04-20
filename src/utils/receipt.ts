@@ -29,17 +29,19 @@ export function buildSyntheticReceipt(
 ): EthTransactionReceipt {
   return {
     transactionHash:   syntheticHash,
+    transactionIndex:  '0x0',
     blockHash:         syntheticHash,
     blockNumber:       '0x1',
     from,
     to,
     contractAddress:   null,
-    cumulativeGasUsed: '0x0',
-    gasUsed:           '0x0',
+    cumulativeGasUsed: '0x5208',
+    gasUsed:           '0x5208',
+    effectiveGasPrice: '0x0',
     logs:              [],
     logsBloom:         '0x' + '0'.repeat(512),
     status:            '0x1',
-    type:              '0x0',
+    type:              '0x2',
   };
 }
 

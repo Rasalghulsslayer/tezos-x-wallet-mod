@@ -6,6 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.2.1] — 2026-04-17
+
+### Fixed
+- **RPC proxy**: unknown JSON-RPC methods (`eth_blockNumber`, `eth_getBlockByNumber`, `eth_gasPrice`, `eth_estimateGas`, `eth_getCode`, `eth_getLogs`, etc.) are now forwarded to the Tezlink EVM node instead of throwing `METHOD_NOT_FOUND`. Fixes ethers.js `tx.wait()` and viem compatibility.
+- **callMichelson selector**: added a local registry (`KNOWN_SIGNATURES`) for Tezos X-specific selectors. `callMichelson(string,string,bytes)` is now resolved locally instead of failing on 4byte.directory lookup. Fixes `invalid input encoding` error on NAC gateway.
+- **Fee / gas / storage limits**: increased from `fee:1000 / gas:15000 / storage:0` to `fee:100000 / gas:1040000 / storage:60000`. Temple re-estimates before submission. Fixes "No tip, no trip" and OutOfGas errors on cross-runtime operations.
+- **Transaction receipts**: `eth_getTransactionReceipt` now polls Tezlink for the real receipt (10 attempts, 2s interval) before falling back to a synthetic receipt. Synthetic receipts enriched with `transactionIndex`, `effectiveGasPrice`, realistic `gasUsed` (`0x5208`), and EIP-1559 type.
+- **Nonce**: `eth_getTransactionCount` now proxies to Tezlink instead of returning hardcoded `0x0`.
+
+---
+
 ## [0.2.0] — 2026-04-15
 
 ### Added
@@ -52,7 +63,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ## Upcoming
 
-### [0.2.0] — planned
-- `eth_call` support
-- `eth_sign` and `personal_sign` support
-- Improved Beacon error handling (Buffer polyfill, Matrix relay fallback)
+### [0.3.0] — planned
+- `personal_sign` support (SIWE / EIP-4361, requires kernel ERC-1271)
+- `eth_signTypedData` support (EIP-712)
+- Gas estimation via `eth_estimateGas` before transaction submission

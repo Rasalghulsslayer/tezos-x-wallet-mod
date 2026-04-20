@@ -41,4 +41,14 @@ export class TezlinkClient {
   async getTransactionCount(address: string, block = 'latest'): Promise<string> {
     return jsonRpc<string>(this.rpcUrl, 'eth_getTransactionCount', [address, block]);
   }
+
+  /**
+   * Forward any JSON-RPC method to the Tezlink EVM node.
+   * Used as a catch-all for methods not explicitly handled by the relayer
+   * (e.g. eth_blockNumber, eth_getBlockByNumber, eth_gasPrice, eth_estimateGas,
+   * eth_getCode, eth_getLogs, etc.).
+   */
+  async proxy(method: string, params: unknown[] = []): Promise<unknown> {
+    return jsonRpc<unknown>(this.rpcUrl, method, params);
+  }
 }
