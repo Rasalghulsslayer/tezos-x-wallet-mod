@@ -9,8 +9,6 @@ import {
   Wallet,
   Link2,
   ChevronRight,
-  Hexagon,
-  Zap,
 } from 'lucide-react';
 import type { BackgroundRequest, BackgroundResponse, StoredSession } from './messages.js';
 
@@ -63,15 +61,15 @@ function CopyButton({ text }: { text: string }) {
 
 // ── Address row ──────────────────────────────────────────────────────────────
 
-function AddressRow({ label, icon: Icon, address }: {
-  label: string;
-  icon: typeof Hexagon;
+function AddressRow({ label, logo, address }: {
+  label:   string;
+  logo:    string;
   address: string;
 }) {
   return (
     <div className="addr-row">
       <div className="addr-label">
-        <Icon size={12} />
+        <img src={logo} alt="" className="addr-logo" />
         {label}
       </div>
       <div className="addr-value">
@@ -112,8 +110,8 @@ function SessionCard({
       </div>
 
       <div className="card-body">
-        <AddressRow label="EVM" icon={Hexagon} address={session.evmAlias} />
-        <AddressRow label="Tezos" icon={Zap} address={session.tz1Address} />
+        <AddressRow label="EVM"   logo="icons/etherlink.png"  address={session.evmAlias} />
+        <AddressRow label="Tezos" logo="icons/tezos-logo.png" address={session.tz1Address} />
       </div>
 
       <div className="card-footer">
