@@ -2,208 +2,84 @@
 
 Injectable EIP-1193 provider that exposes `window.ethereum` to Etherlink dApps, routing all transactions through Temple Wallet and the Tezos X NAC cross-runtime gateway.
 
-## Build
+Full architecture, API reference and user flows are documented on the [documentation site](https://tezosx-relayer-9c5cf1.gitlab.io/).
 
-### From binaries
+## Quick start
+
 ```bash
 npm install
-npm run typecheck   # TypeScript type check without compiling
+```
+
+### Run the relayer locally (script-tag / Tampermonkey)
+
+```bash
 npm run build       # produces dist/relayer.iife.js
+npm run serve       # serves the bundle at http://localhost:8080
 ```
 
-### With docker
-```bash
-docker compose up -d
-```
+See the [injection methods](https://tezosx-relayer-9c5cf1.gitlab.io/docs/technical/injection) doc for how to inject the IIFE bundle into a dApp page.
 
+### Run the Chrome extension (recommended)
 
-## Temple Wallet Setup (prerequisite)
-
-1. Open Temple extension → **Settings** (⚙️) → **Networks** → **Add network**
-2. Fill in:
-   - **Name**: `TezosX Testnet`
-   - **RPC URL**: `https://demo.txpark.nomadic-labs.com/rpc/tezlink`
-3. **Switch to this network** in Temple (network selector at the top of the extension)
-4. Reload the page **before** injecting the relayer
-
-## Testing via DevTools (browser console)
-
-### 1. Serve the bundle locally
+MV3 extension for Chrome / Brave / Firefox. Injects `window.ethereum` automatically on every page — no manual setup.
 
 ```bash
-npm run build
-npm run serve
-# → http://localhost:8080
+npm run build:ext   # produces extension/dist/
+npm run dev:ext     # launches Chromium with the extension loaded
 ```
 
-### 2. Inject the relayer on any page
+Or load it manually: `chrome://extensions` → **Developer mode** → **Load unpacked** → select the `extension/` folder.
 
-**Option A — DevTools console** (own page or quick test):
+See the [installation guide](https://tezosx-relayer-9c5cf1.gitlab.io/docs/installation) for details.
 
-```js
-const s = document.createElement('script');
-s.src = 'http://localhost:8080/dist/relayer.iife.js';
-document.head.prepend(s);
+### Run the documentation site locally
+
+```bash
+cd website
+npm install
+npm run start       # → http://localhost:3000
 ```
 
-**Option B — Tampermonkey (third-party dApps)**
+### Run the playground locally
 
-Create a new userscript and paste the full content of `dist/relayer.iife.js` **inline** inside the IIFE:
+A Next.js app for manual testing (connect, transfer, Counter interactions).
 
-```js
-// ==UserScript==
-// @name         TezosX Relayer Injector
-// @namespace    tezosx-relayer
-// @version      0.3
-// @match        *://*/*
-// @run-at       document-start
-// @grant        none
-// ==/UserScript==
-
-(function () {
-  // ── Paste the full content of dist/relayer.iife.js here ──
-})();
+```bash
+cd playground
+npm install
+npm run dev         # → http://localhost:3000
 ```
 
-> **Why inline?** dApps using EIP-6963 dispatch `eip6963:requestProvider` at page load. Loading the bundle async (via `GM_xmlhttpRequest` or `script.src`) causes the relayer to arrive too late — the provider is never registered. Inlining guarantees synchronous registration at `document-start`.
+## Syncing the extension with the latest relayer code
 
-Verify the injection worked:
+The extension bundles the relayer source directly from `src/` — there is no
+separate copy. After pulling new relayer changes, rebuild the extension:
 
-```js
-window.ethereum.isTezosXRelayer  // must return true
+```bash
+git pull
+npm install          # in case dependencies changed
+npm run build:ext    # rebuilds extension/dist/ with the latest src/
 ```
 
-### 3. Connect the wallet
+Then reload it in the browser:
 
-```js
-await window.ethereum.request({ method: 'eth_requestAccounts' });
-// → Temple popup opens
-// → Expected for bootstrap1: ['0x341af4de1e67241d8d2536b2ea47c7e9debf7cb2']
-```
+- **Chrome / Brave**: `chrome://extensions` → find *TezosX Relayer* → click the
+  **⟳ reload** icon on the card.
+- **Firefox**: `about:debugging` → *This Firefox* → click **Reload** next to
+  the extension.
 
-### 4. Check the network
+If you are running `npm run dev:ext`, the extension is reloaded automatically
+on every `build:ext`.
 
-```js
-await window.ethereum.request({ method: 'eth_chainId' });
-// → '0x1f094'  (127124 = Tezos X Testnet)
+Bump the version if the change is user-visible:
 
-await window.ethereum.request({ method: 'net_version' });
-// → '127124'
-```
+1. Update `"version"` in both `package.json` and `extension/manifest.json`.
+2. Add an entry to [CHANGELOG.md](./CHANGELOG.md).
+3. Snapshot the docs: `cd website && npx docusaurus docs:version <new>`.
+4. Tag the release: `git tag v<new>` on the merge commit.
 
-### 5. Check balance
+## Prerequisite: Temple Wallet
 
-```js
-await window.ethereum.request({
-  method: 'eth_getBalance',
-  params: ['0x341af4de1e67241d8d2536b2ea47c7e9debf7cb2', 'latest']
-});
-// → balance in hex wei
-```
-
-### 6. Send a transaction (simple transfer)
-
-```js
-const hash = await window.ethereum.request({
-  method: 'eth_sendTransaction',
-  params: [{
-    to: '0x341af4de1e67241d8d2536b2ea47c7e9debf7cb2',  // bootstrap1 EVM alias
-    value: '0xDE0B6B3A7640000',  // 1 tez in wei
-  }]
-});
-console.log('TxHash:', hash);
-// → 32-byte synthetic hash (keccak256 of the L1 opHash)
-```
-
-Temple opens a signing popup. The transaction goes through the NAC gateway (`KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw`, entrypoint `default`).
-
-### 7. Get the receipt
-
-```js
-await window.ethereum.request({
-  method: 'eth_getTransactionReceipt',
-  params: [hash]
-});
-// → { status: '0x1', transactionHash: hash, ... }
-```
-
-### 8. Contract call with calldata
-
-Example with a deployed `Counter` contract at `0x7b0e325FF8F70d21891A7494B5715C6dC3d08D7b`:
-
-```js
-// Call increment() — selector 0xd09de08a
-const hash = await window.ethereum.request({
-  method: 'eth_sendTransaction',
-  params: [{
-    to: '0x7b0e325FF8F70d21891A7494B5715C6dC3d08D7b',
-    data: '0xd09de08a',  // increment()
-    value: '0x0',
-  }]
-});
-console.log('TxHash:', hash);
-// The relayer resolves 0xd09de08a → "increment()" via 4byte.directory
-// then calls NAC entrypoint `call` with Pair(dest, Pair("increment()", bytes("")))
-```
-
-Verify the state change by calling `retrieve()` (read-only, no wallet needed):
-
-```js
-await fetch('https://demo.txpark.nomadic-labs.com/rpc', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    jsonrpc: '2.0', id: 1,
-    method: 'eth_call',
-    params: [{ to: '0x7b0e325FF8F70d21891A7494B5715C6dC3d08D7b', data: '0x2e64cec1' }, 'latest']
-    // 0x2e64cec1 = retrieve()
-  })
-}).then(r => r.json()).then(r => console.log('counter value:', parseInt(r.result, 16)));
-// → 2 after one increment (initial value is 1)
-```
-
-### 9. Disconnect the wallet
-
-```js
-await window.ethereum.request({ method: 'wallet_revokePermissions' });
-// Clears the session and the Beacon active account.
-// The next eth_requestAccounts call will reopen the Temple popup.
-```
-
-## Bootstrap accounts (testnet only)
-
-| Tezos tz1 | Derived EVM alias |
-|---|---|
-| `tz1KqTpEZ7Yob7QbPE4Hy4Wo8fHG8LhKxZSx` | `0x341af4de1e67241d8d2536b2ea47c7e9debf7cb2` |
-
-Derivation is performed via the Tezos X RPC `tez_getTezosEthereumAddress` — no hardcoded mapping.
-
-## Infrastructure
-
-| Endpoint | URL |
-|---|---|
-| EVM RPC (Tezlink) | `https://demo.txpark.nomadic-labs.com/rpc` |
-| Tezos L1 RPC | `https://demo.txpark.nomadic-labs.com/rpc/tezlink` |
-| NAC Gateway | `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw` |
-
-## Supported EIP-1193 methods
-
-| Method | Behaviour |
-|---|---|
-| `eth_requestAccounts` | Opens Temple, derives 0x alias via RPC, returns `[evmAlias]` |
-| `eth_accounts` | Returns current session or `[]` |
-| `eth_chainId` | Proxied from Tezlink (`0x1f094`) |
-| `net_version` | `parseInt(chainId, 16).toString()` |
-| `eth_getBalance` | Proxied from Tezlink |
-| `eth_getTransactionCount` | Returns `'0x0'` (nonce not managed in V1) |
-| `eth_sendTransaction` | Builds NAC Micheline call → Temple popup → synthetic hash |
-| `eth_getTransactionReceipt` | Tezlink first, then synthetic receipt from `pendingOps` |
-| `eth_sign` / `personal_sign` / EIP-712 | Throws `4200 UNSUPPORTED_METHOD` |
-
-## Out of scope V1
-
-- `eth_sign`, `personal_sign`, EIP-712 (SIWE)
-- Chrome/Firefox extension packaging
-- Kukai / Umami support
-- Real nonce management
-- Custom confirmation UI
+1. Open Temple extension → **Settings** → **Networks** → **Add network**
+2. Name: `Tezos X Testnet` — RPC URL: `https://demo.txpark.nomadic-labs.com/rpc/tezlink`
+3. Switch to this network before interacting with any dApp

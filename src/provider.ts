@@ -3,7 +3,8 @@ import { BeaconClient } from './beacon.js';
 import { TezlinkClient } from './tezlink.js';
 import { GatewayBuilder } from './gateway.js';
 import { deriveEvmAlias } from './utils/derive.js';
-import { l1OpHashToEvmHash, buildSyntheticReceipt, pollForReceipt } from './utils/receipt.js';
+import { l1OpHashToEvmHash, buildSyntheticReceipt } from './utils/receipt.js';
+import { findRealReceipt } from './utils/resolver.js';
 import type {
   EIP1193Provider,
   RequestArguments,
@@ -35,6 +36,7 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
 
   private session: RelayerSession | null = null;
   private readonly pendingOps = new Map<string, PendingOp>();
+  private readonly claimedRealHashes = new Set<string>();
 
   private readonly beacon  = new BeaconClient();
   private readonly tezlink = new TezlinkClient();
@@ -197,6 +199,10 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
     // Build NAC gateway Micheline call (async: may resolve selector via 4byte.directory)
     const { entrypoint, michelineArg, mutezAmount } = await this.gateway.fromEthTransaction(tx);
 
+    // Record the EVM head block BEFORE submission — used later by the resolver
+    // to bound the search for the real (kernel-synthesized) EVM transaction.
+    const fromBlock = await this.tezlink.blockNumber();
+
     // Submit to Temple via Beacon — opens signing popup
     const l1OpHash = await this.beacon.sendContractCall(entrypoint, michelineArg, mutezAmount);
 
@@ -208,6 +214,7 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
       l1OpHash,
       from: this.session.evmAlias,
       to:   tx.to,
+      fromBlock,
     });
 
     return syntheticHash;
@@ -222,25 +229,30 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
     }
     const syntheticHash = params[0];
 
-    // Try the Tezlink EVM node first (may have indexed it already)
-    const evmReceipt = await this.tezlink.getTransactionReceipt(syntheticHash);
-    if (evmReceipt != null) return evmReceipt;
+    const directReceipt = await this.tezlink.getTransactionReceipt(syntheticHash);
+    if (directReceipt != null) return directReceipt;
 
-    // If we don't know this op, nothing to do
+    // If we don't know this op, nothing to do.
     const pending = this.pendingOps.get(syntheticHash);
     if (pending == null) return null;
 
-    // Poll Tezlink for the real receipt (cross-runtime indexing may be delayed)
-    const realReceipt = await pollForReceipt(this.tezlink, syntheticHash, 10, 2000);
+    // Resolve the real kernel-synthesized EVM receipt by scanning blocks.
+    const realReceipt = await findRealReceipt(
+      this.tezlink,
+      pending.from,
+      pending.fromBlock,
+      this.claimedRealHashes,
+    );
     if (realReceipt != null) return realReceipt;
 
-    // Last resort: synthetic receipt so dApps don't hang indefinitely
+    // Last resort: synthetic receipt so dApps don't hang indefinitely.
     return buildSyntheticReceipt(syntheticHash, pending.from, pending.to);
   }
 
   private async handleDisconnect(): Promise<null> {
     this.session = null;
     this.pendingOps.clear();
+    this.claimedRealHashes.clear();
     await this.beacon.disconnect();
     this.emit('accountsChanged', []);
     this.emit('disconnect', rpcError(EIP1193_UNAUTHORIZED, 'Wallet disconnected'));

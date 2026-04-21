@@ -63,9 +63,10 @@ export interface RelayerSession {
 }
 
 export interface PendingOp {
-  l1OpHash: string;
-  from:     string;
-  to:       string;
+  l1OpHash:  string;
+  from:      string;    // EVM alias of the sender
+  to:        string;    // destination address (informational)
+  fromBlock: string;    // 0x-prefixed hex: EVM block number at send time
 }
 
 // ── Beacon narrowed types ──────────────────────────────────────────────────

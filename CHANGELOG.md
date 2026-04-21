@@ -8,11 +8,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ## [0.2.1] — 2026-04-17
 
+### Added
+- **Real EVM receipt resolution**: `eth_getTransactionReceipt` now maps the synthetic NAC hash back to the actual kernel-synthesized EVM transaction by scanning blocks from send-time onward and matching the first unclaimed tx whose `from` equals the user's alias. Returns the real receipt with real `transactionHash`, real `logs`, real `gasUsed`, real `blockNumber`. Unblocks event-driven dApps (TzButton, DEX, lending, etc.) that rely on `receipt.logs`. Pure-functional implementation in `src/utils/resolver.ts` with recursive block traversal and per-session hash deduplication.
+
 ### Fixed
 - **RPC proxy**: unknown JSON-RPC methods (`eth_blockNumber`, `eth_getBlockByNumber`, `eth_gasPrice`, `eth_estimateGas`, `eth_getCode`, `eth_getLogs`, etc.) are now forwarded to the Tezlink EVM node instead of throwing `METHOD_NOT_FOUND`. Fixes ethers.js `tx.wait()` and viem compatibility.
 - **callMichelson selector**: added a local registry (`KNOWN_SIGNATURES`) for Tezos X-specific selectors. `callMichelson(string,string,bytes)` is now resolved locally instead of failing on 4byte.directory lookup. Fixes `invalid input encoding` error on NAC gateway.
 - **Fee / gas / storage limits**: increased from `fee:1000 / gas:15000 / storage:0` to `fee:100000 / gas:1040000 / storage:60000`. Temple re-estimates before submission. Fixes "No tip, no trip" and OutOfGas errors on cross-runtime operations.
-- **Transaction receipts**: `eth_getTransactionReceipt` now polls Tezlink for the real receipt (10 attempts, 2s interval) before falling back to a synthetic receipt. Synthetic receipts enriched with `transactionIndex`, `effectiveGasPrice`, realistic `gasUsed` (`0x5208`), and EIP-1559 type.
+- **Transaction receipts**: when the real EVM tx cannot be located (timeout), the fallback synthetic receipt is now enriched with `transactionIndex`, `effectiveGasPrice`, realistic `gasUsed` (`0x5208`), and EIP-1559 type so ethers.js/viem don't reject it.
 - **Nonce**: `eth_getTransactionCount` now proxies to Tezlink instead of returning hardcoded `0x0`.
 
 ---
