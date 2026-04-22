@@ -4,7 +4,7 @@ import { TezlinkClient } from './tezlink.js';
 import { GatewayBuilder } from './gateway.js';
 import { deriveEvmAlias } from './utils/derive.js';
 import { l1OpHashToEvmHash, buildSyntheticReceipt } from './utils/receipt.js';
-import { findRealReceipt } from './utils/resolver.js';
+import { findRealHash } from './utils/resolver.js';
 import type {
   EIP1193Provider,
   RequestArguments,
@@ -36,7 +36,8 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
 
   private session: RelayerSession | null = null;
   private readonly pendingOps = new Map<string, PendingOp>();
-  private readonly claimedRealHashes = new Set<string>();
+  private readonly claimedRealHashes   = new Set<string>();
+  private readonly inFlightResolutions = new Map<string, Promise<string | null>>();
 
   private readonly beacon  = new BeaconClient();
   private readonly tezlink = new TezlinkClient();
@@ -108,6 +109,9 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
       case 'eth_sendTransaction':
         return this.handleSendTransaction(args);
 
+      case 'eth_getTransactionByHash':
+        return this.handleGetTransactionByHash(args);
+
       case 'eth_getTransactionReceipt':
         return this.handleGetTransactionReceipt(args);
 
@@ -127,6 +131,7 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
         );
 
       default:
+        console.info('[TezosX Relayer] proxy →', args.method, args.params);
         return this.tezlink.proxy(args.method, Array.isArray(args.params) ? args.params : []);
     }
   }
@@ -196,18 +201,24 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
       throw rpcError(JSON_RPC_INVALID_PARAMS, 'eth_sendTransaction: missing "to" field');
     }
 
+    console.info('[TezosX Relayer] eth_sendTransaction →', { to: tx.to, value: tx.value ?? '0x0', data: tx.data ?? '0x' });
+
     // Build NAC gateway Micheline call (async: may resolve selector via 4byte.directory)
     const { entrypoint, michelineArg, mutezAmount } = await this.gateway.fromEthTransaction(tx);
+    console.info('[TezosX Relayer] NAC call built →', { entrypoint, mutezAmount });
 
     // Record the EVM head block BEFORE submission — used later by the resolver
     // to bound the search for the real (kernel-synthesized) EVM transaction.
     const fromBlock = await this.tezlink.blockNumber();
+    console.info('[TezosX Relayer] fromBlock snapshot →', fromBlock);
 
     // Submit to Temple via Beacon — opens signing popup
     const l1OpHash = await this.beacon.sendContractCall(entrypoint, michelineArg, mutezAmount);
+    console.info('[TezosX Relayer] L1 opHash signed →', l1OpHash);
 
     // Derive a stable 32-byte EVM-style hash from the L1 opHash
     const syntheticHash = l1OpHashToEvmHash(l1OpHash);
+    console.info('[TezosX Relayer] synthetic EVM hash →', syntheticHash);
 
     // Store for receipt resolution
     this.pendingOps.set(syntheticHash, {
@@ -220,6 +231,62 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
     return syntheticHash;
   }
 
+  /**
+   * Resolve the real kernel-synthesized EVM tx hash for a given synthetic
+   * hash. Caches the result on the pending op and deduplicates concurrent
+   * callers via a per-hash in-flight promise.
+   */
+  private resolveRealHash(syntheticHash: string): Promise<string | null> {
+    const pending = this.pendingOps.get(syntheticHash);
+    if (pending == null) return Promise.resolve(null);
+    if (pending.realHash != null) return Promise.resolve(pending.realHash);
+
+    const existing = this.inFlightResolutions.get(syntheticHash);
+    if (existing != null) return existing;
+
+    const promise = findRealHash(
+      this.tezlink,
+      pending.from,
+      pending.fromBlock,
+      this.claimedRealHashes,
+    ).then((hash) => {
+      this.inFlightResolutions.delete(syntheticHash);
+      if (hash != null) {
+        pending.realHash = hash;
+        console.info('[TezosX Relayer] real EVM hash resolved →', hash);
+      }
+      return hash;
+    });
+
+    this.inFlightResolutions.set(syntheticHash, promise);
+    return promise;
+  }
+
+  private async handleGetTransactionByHash(args: RequestArguments): Promise<unknown> {
+    const params = args.params;
+    if (!Array.isArray(params) || typeof params[0] !== 'string') {
+      throw rpcError(JSON_RPC_INVALID_PARAMS, 'eth_getTransactionByHash: expected [txHash]');
+    }
+    const syntheticHash = params[0];
+    console.info('[TezosX Relayer] eth_getTransactionByHash →', syntheticHash);
+
+    // Fast path: if we have no pending op for this hash, proxy as-is.
+    if (!this.pendingOps.has(syntheticHash)) {
+      console.info('[TezosX Relayer] unknown synthetic hash, proxying to Tezlink');
+      return this.tezlink.proxy('eth_getTransactionByHash', [syntheticHash]);
+    }
+
+    console.info('[TezosX Relayer] scanning blocks for real EVM tx…');
+    const realHash = await this.resolveRealHash(syntheticHash);
+    if (realHash == null) {
+      console.info('[TezosX Relayer] real tx not mined yet, returning null');
+      return null;
+    }
+
+    console.info('[TezosX Relayer] proxying getTransactionByHash with real hash →', realHash);
+    return this.tezlink.proxy('eth_getTransactionByHash', [realHash]);
+  }
+
   private async handleGetTransactionReceipt(
     args: RequestArguments,
   ): Promise<unknown> {
@@ -228,24 +295,22 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
       throw rpcError(JSON_RPC_INVALID_PARAMS, 'eth_getTransactionReceipt: expected [txHash]');
     }
     const syntheticHash = params[0];
+    console.info('[TezosX Relayer] eth_getTransactionReceipt →', syntheticHash);
 
-    const directReceipt = await this.tezlink.getTransactionReceipt(syntheticHash);
-    if (directReceipt != null) return directReceipt;
-
-    // If we don't know this op, nothing to do.
+    // If we don't know this op, proxy as-is (might be a non-NAC tx hash).
     const pending = this.pendingOps.get(syntheticHash);
-    if (pending == null) return null;
+    if (pending == null) {
+      return this.tezlink.proxy('eth_getTransactionReceipt', [syntheticHash]);
+    }
 
-    // Resolve the real kernel-synthesized EVM receipt by scanning blocks.
-    const realReceipt = await findRealReceipt(
-      this.tezlink,
-      pending.from,
-      pending.fromBlock,
-      this.claimedRealHashes,
-    );
-    if (realReceipt != null) return realReceipt;
+    const realHash = await this.resolveRealHash(syntheticHash);
+    if (realHash != null) {
+      const realReceipt = await this.tezlink.getTransactionReceipt(realHash);
+      if (realReceipt != null) return realReceipt;
+    }
 
     // Last resort: synthetic receipt so dApps don't hang indefinitely.
+    console.warn('[TezosX Relayer] real tx not found, returning synthetic receipt →', syntheticHash);
     return buildSyntheticReceipt(syntheticHash, pending.from, pending.to);
   }
 
@@ -253,6 +318,7 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
     this.session = null;
     this.pendingOps.clear();
     this.claimedRealHashes.clear();
+    this.inFlightResolutions.clear();
     await this.beacon.disconnect();
     this.emit('accountsChanged', []);
     this.emit('disconnect', rpcError(EIP1193_UNAUTHORIZED, 'Wallet disconnected'));

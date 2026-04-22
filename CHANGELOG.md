@@ -6,10 +6,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
-## [0.2.1] — 2026-04-17
+## [0.2.1] — 2026-04-22
 
 ### Added
-- **Real EVM receipt resolution**: `eth_getTransactionReceipt` now maps the synthetic NAC hash back to the actual kernel-synthesized EVM transaction by scanning blocks from send-time onward and matching the first unclaimed tx whose `from` equals the user's alias. Returns the real receipt with real `transactionHash`, real `logs`, real `gasUsed`, real `blockNumber`. Unblocks event-driven dApps (TzButton, DEX, lending, etc.) that rely on `receipt.logs`. Pure-functional implementation in `src/utils/resolver.ts` with recursive block traversal and per-session hash deduplication.
+- **Real EVM transaction resolution**: both `eth_getTransactionByHash` and `eth_getTransactionReceipt` now map the synthetic NAC hash back to the actual kernel-synthesized EVM transaction. The resolver scans EVM blocks from send-time snapshot onward and matches the first unclaimed tx whose `from` **or** `to` equals the user's alias (the kernel may put the alias on either side). Returns the real tx object / receipt with real `transactionHash`, real `logs`, real `gasUsed`, real `blockNumber`. Unblocks ethers.js `tx.wait()` (which polls `eth_getTransactionByHash` before `eth_getTransactionReceipt`) and event-driven dApps (TzButton, DEX, lending, etc.) that rely on `receipt.logs`.
+- **In-flight deduplication**: concurrent callers for the same synthetic hash share a single block-scan promise instead of spawning N concurrent scans. Critical under ethers.js / viem polling load (~1 call/s).
+- **Per-session claim set**: once a real hash has been assigned to one pending op, no other pending op can match the same transaction.
+- **Diagnostic logs**: the relayer logs each step of the transaction lifecycle (`eth_sendTransaction` → NAC build → `fromBlock` snapshot → L1 signing → synthetic hash → scan → real hash resolved), making dApp integration issues easier to diagnose.
+- **Pure-functional resolver** in `src/utils/resolver.ts` (recursive `attemptFind` → `scanRange` → `scanBlock`), with per-block tx summary logs.
 
 ### Fixed
 - **RPC proxy**: unknown JSON-RPC methods (`eth_blockNumber`, `eth_getBlockByNumber`, `eth_gasPrice`, `eth_estimateGas`, `eth_getCode`, `eth_getLogs`, etc.) are now forwarded to the Tezlink EVM node instead of throwing `METHOD_NOT_FOUND`. Fixes ethers.js `tx.wait()` and viem compatibility.

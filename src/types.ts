@@ -67,6 +67,7 @@ export interface PendingOp {
   from:      string;    // EVM alias of the sender
   to:        string;    // destination address (informational)
   fromBlock: string;    // 0x-prefixed hex: EVM block number at send time
+  realHash?: string;    // cached real EVM tx hash once resolved
 }
 
 // ── Beacon narrowed types ──────────────────────────────────────────────────

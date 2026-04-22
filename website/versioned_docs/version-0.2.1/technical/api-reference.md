@@ -21,9 +21,7 @@ window.ethereum.request({ method: string, params?: unknown[] }): Promise<unknown
 Opens Temple wallet via Beacon and returns the EVM alias for the connected tz1 address.
 
 ```js
-const accounts = await window.ethereum.request({
-  method: 'eth_requestAccounts'
-});
+const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
 // → ['0x341af4de1e67241d8d2536b2ea47c7e9debf7cb2']
 ```
 
@@ -40,91 +38,145 @@ const accounts = await window.ethereum.request({ method: 'eth_accounts' });
 
 ---
 
-### `eth_chainId`
+### `eth_chainId` / `net_version`
 
-Returns the Tezos X chain ID as a hex string.
+Chain ID as hex (`eth_chainId`) or decimal string (`net_version`).
 
 ```js
-const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-// → '0x...'
+await window.ethereum.request({ method: 'eth_chainId' });    // → '0x1f094'
+await window.ethereum.request({ method: 'net_version' });    // → '127124'
 ```
 
 ---
 
 ### `eth_getBalance`
 
-Returns the balance of an address in wei (as hex).
+Returns the balance of an address in wei (as hex). Proxied to Tezlink.
 
 ```js
-const balance = await window.ethereum.request({
+await window.ethereum.request({
   method: 'eth_getBalance',
-  params: ['0x341af4de1e67241d8d2536b2ea47c7e9debf7cb2', 'latest']
+  params: ['0x341af4de...', 'latest']
 });
-// → '0xde0b6b3a7640000'  (1 tez = 1e18)
+```
+
+---
+
+### `eth_getTransactionCount`
+
+Returns the current nonce for an address. Proxied to Tezlink.
+
+```js
+await window.ethereum.request({
+  method: 'eth_getTransactionCount',
+  params: ['0x341af4de...', 'latest']
+});
+```
+
+---
+
+### `eth_call`
+
+Read-only call against an EVM contract. Proxied to Tezlink.
+
+```js
+await window.ethereum.request({
+  method: 'eth_call',
+  params: [{ to: '0x...', data: '0x2e64cec1' }, 'latest']
+});
 ```
 
 ---
 
 ### `eth_sendTransaction`
 
-Routes a transaction through the NAC gateway. Opens Temple for signature.
+Routes a transaction through the NAC gateway. Opens Temple for signature and
+returns a **synthetic** hash (the real kernel-synthesized hash is resolved
+lazily — see [EIP-1193 → synthetic hash](../architecture/eip1193#transaction-receipts--the-synthetic-hash)).
 
 ```js
-const txHash = await window.ethereum.request({
+const syntheticHash = await window.ethereum.request({
   method: 'eth_sendTransaction',
   params: [{
-    from: '0x341af4de...',
-    to: '0xRecipient...',
-    value: '0xde0b6b3a7640000',   // 1 tez in wei
-    data: '0x',                    // empty for native transfer
-    gas: '0x5208',
-  }]
-});
-```
-
-**With contract calldata:**
-
-```js
-// increment() on Counter contract
-await window.ethereum.request({
-  method: 'eth_sendTransaction',
-  params: [{
-    to: '0x7b0e325FF8F70d21891A7494B5715C6dC3d08D7b',
-    data: '0xd09de08a',   // increment() selector
-    gas: '0x186a0',
+    to: '0x...',
+    data: '0xd09de08a',          // e.g. increment() selector
+    value: '0x0',
   }]
 });
 ```
 
 ---
 
-### `wallet_revokePermissions`
+### `eth_getTransactionByHash`
 
-Disconnects the Temple session.
+Resolves the real kernel-synthesized EVM transaction when called with a
+synthetic hash returned by `eth_sendTransaction`. Falls back to a Tezlink
+proxy for any other hash.
+
+```js
+await window.ethereum.request({
+  method: 'eth_getTransactionByHash',
+  params: [syntheticHash]
+});
+// → { hash: '0xrealHash', from, to, blockNumber, ... }
+```
+
+---
+
+### `eth_getTransactionReceipt`
+
+Resolves the real receipt (with real `logs`, `gasUsed`, `blockNumber`) by
+scanning EVM blocks from the send-time snapshot onward. Returns a synthetic
+receipt after timeout if nothing matches.
+
+```js
+await window.ethereum.request({
+  method: 'eth_getTransactionReceipt',
+  params: [syntheticHash]
+});
+```
+
+---
+
+### `wallet_revokePermissions` / `wallet_disconnect`
+
+Disconnects the Temple session and clears all pending op mappings.
 
 ```js
 await window.ethereum.request({ method: 'wallet_revokePermissions' });
 ```
 
+---
+
+### RPC proxy (fallback)
+
+Any JSON-RPC method **not listed above** is forwarded transparently to the
+Tezlink EVM node. This unblocks ethers.js `tx.wait()`, viem, wagmi and any
+other library that relies on methods like `eth_blockNumber`,
+`eth_getBlockByNumber`, `eth_gasPrice`, `eth_estimateGas`, `eth_getCode`,
+`eth_getLogs`, `eth_feeHistory`, etc.
+
+```js
+await window.ethereum.request({ method: 'eth_blockNumber' });
+await window.ethereum.request({
+  method: 'eth_getLogs',
+  params: [{ address: '0x...', fromBlock: '0x0', toBlock: 'latest' }]
+});
+```
+
 ## Events
 
 ```js
-// Account change
-window.ethereum.on('accountsChanged', (accounts) => {
-  console.log('New account:', accounts[0]);
-});
-
-// Chain change
-window.ethereum.on('chainChanged', (chainId) => {
-  console.log('New chain:', chainId);
-});
+window.ethereum.on('accountsChanged', (accounts) => { /* ... */ });
+window.ethereum.on('chainChanged',    (chainId)  => { /* ... */ });
+window.ethereum.on('connect',         (info)     => { /* { chainId } */ });
+window.ethereum.on('disconnect',      (err)      => { /* EIP-1193 error */ });
 ```
 
 ## Not supported
 
 | Method | Reason |
 |---|---|
-| `eth_sign` | SIWE out of scope for V1 |
-| `personal_sign` | Out of scope for V1 |
-| `eth_signTypedData_v4` | EIP-712 out of scope for V1 |
-| `eth_call` | Not yet implemented |
+| `eth_sign` | Out of scope for V1 |
+| `personal_sign` | SIWE / EIP-4361 — requires kernel ERC-1271 (planned 0.3.0) |
+| `eth_signTypedData` / `_v3` / `_v4` | EIP-712 — out of scope for V1 |

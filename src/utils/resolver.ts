@@ -1,21 +1,21 @@
 import type { TezlinkClient } from '../tezlink.js';
-import type { EthTransactionReceipt } from '../types.js';
 import { hexToNum, numToHex } from './hex.js';
 import { sleep } from './async.js';
 
 /**
- * Map a synthetic NAC hash back to the real EVM receipt by scanning blocks
- * from `fromBlock` to head, matching the first unclaimed tx whose `from`
- * equals `evmAlias`. Retries up to `maxAttempts` times with `intervalMs` delay.
+ * Map a synthetic NAC hash back to the real EVM transaction hash by scanning
+ * blocks from `fromBlock` to head, matching the first unclaimed tx whose
+ * `from` equals `evmAlias`. Retries up to `maxAttempts` times with
+ * `intervalMs` delay. Returns the real hash or null.
  */
-export async function findRealReceipt(
+export async function findRealHash(
   tezlink:       TezlinkClient,
   evmAlias:      string,
   fromBlock:     string,
   claimedHashes: Set<string>,
   maxAttempts = 15,
   intervalMs  = 2000,
-): Promise<EthTransactionReceipt | null> {
+): Promise<string | null> {
   return attemptFind(
     tezlink,
     hexToNum(fromBlock),
@@ -35,7 +35,7 @@ async function attemptFind(
   claimedHashes: Set<string>,
   attemptsLeft:  number,
   intervalMs:    number,
-): Promise<EthTransactionReceipt | null> {
+): Promise<string | null> {
   if (attemptsLeft <= 0) return null;
 
   const headBlock = hexToNum(await tezlink.blockNumber());
@@ -52,7 +52,7 @@ async function scanRange(
   to:            number,
   alias:         string,
   claimedHashes: Set<string>,
-): Promise<EthTransactionReceipt | null> {
+): Promise<string | null> {
   if (from > to) return null;
 
   const found = await scanBlock(tezlink, from, alias, claimedHashes);
@@ -64,18 +64,28 @@ async function scanBlock(
   blockNum:      number,
   alias:         string,
   claimedHashes: Set<string>,
-): Promise<EthTransactionReceipt | null> {
+): Promise<string | null> {
   const block = await tezlink.getBlockByNumber(numToHex(blockNum), true);
-  if (block === null) return null;
+  if (block === null || block.transactions.length === 0) return null;
 
+  console.info(
+    `[TezosX Relayer] scanBlock ${numToHex(blockNum)} →`,
+    block.transactions.map((tx) => ({
+      hash: tx.hash,
+      from: tx.from,
+      to:   tx.to,
+    })),
+  );
+
+  // Kernel-synthesized tx may list the alias as `from` OR `to` depending on
+  // the cross-runtime flow, so we match both sides.
   const match = block.transactions.find(
-    (tx) => !claimedHashes.has(tx.hash) && tx.from.toLowerCase() === alias,
+    (tx) =>
+      !claimedHashes.has(tx.hash) &&
+      (tx.from.toLowerCase() === alias || tx.to?.toLowerCase() === alias),
   );
   if (match === undefined) return null;
 
-  const receipt = await tezlink.getTransactionReceipt(match.hash);
-  if (receipt === null) return null;
-
   claimedHashes.add(match.hash);
-  return receipt;
+  return match.hash;
 }
