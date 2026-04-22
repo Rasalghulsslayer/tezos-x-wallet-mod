@@ -2,10 +2,10 @@ import { useRef } from 'react';
 import { motion, useInView } from 'framer-motion';
 
 const FLOW = [
-  { icon: '◈', label: 'Temple', sub: 'Beacon · tz1' },
-  { icon: '⚡', label: 'Relayer', sub: 'EIP-1193' },
-  { icon: '⬡', label: 'NAC', sub: 'Gateway' },
-  { icon: '⬢', label: 'Etherlink', sub: 'EVM dApps' },
+  { logo: '/img/temple.png',         label: 'Temple',    sub: 'Beacon · tz1' },
+  { logo: '/img/relayer-logo.png',   label: 'Relayer',   sub: 'EIP-1193' },
+  { logo: '/img/tezos-logo.png', label: 'NAC',       sub: 'Gateway' },
+  { logo: '/img/etherlink.png',      label: 'Etherlink', sub: 'EVM dApps' },
 ];
 
 export function FlowSection() {
@@ -40,7 +40,7 @@ export function FlowSection() {
               className="flex min-w-[120px] flex-col items-center gap-1.5 rounded-2xl border border-[rgba(108,71,255,0.12)] p-5 transition-all hover:-translate-y-1 hover:border-[rgba(108,71,255,0.35)] hover:shadow-[0_4px_24px_rgba(108,71,255,0.12)]"
               style={{ background: 'rgba(15,15,25,0.8)' }}
             >
-              <span className="text-2xl">{node.icon}</span>
+              <img src={node.logo} alt={node.label} className="h-8 w-8 object-contain" />
               <span className="text-sm font-bold" style={{ color: 'var(--ifm-heading-color)' }}>{node.label}</span>
               <span className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--ifm-color-emphasis-500)' }}>
                 {node.sub}
@@ -71,7 +71,7 @@ export function FlowSection() {
               className="flex w-full max-w-[200px] flex-col items-center gap-1.5 rounded-2xl border border-[rgba(108,71,255,0.12)] p-4 transition-all"
               style={{ background: 'rgba(15,15,25,0.8)' }}
             >
-              <span className="text-xl">{node.icon}</span>
+              <img src={node.logo} alt={node.label} className="h-7 w-7 object-contain" />
               <span className="text-sm font-bold" style={{ color: 'var(--ifm-heading-color)' }}>{node.label}</span>
               <span className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--ifm-color-emphasis-500)' }}>
                 {node.sub}

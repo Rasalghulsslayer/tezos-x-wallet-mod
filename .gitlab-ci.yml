@@ -1,3 +1,51 @@
+stages:
+  - test
+  - build
+  - deploy
+
+lint:
+  image: node:20
+  stage: test
+  script:
+    - npm ci
+    - npm run lint
+    - npm run typecheck
+    - npm run typecheck:ext
+
+build:relayer:
+  image: node:20
+  stage: build
+  script:
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
+
+build:extension:
+  image: node:20
+  stage: build
+  script:
+    - npm ci
+    - npm run build:ext
+  artifacts:
+    paths:
+      - extension/dist/
+    expire_in: 1 week
+
+build:website:
+  image: node:20
+  stage: build
+  script:
+    - cd website
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - website/build/
+    expire_in: 1 week
+
 pages:
   image: node:20
   stage: deploy

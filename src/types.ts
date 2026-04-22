@@ -38,18 +38,20 @@ export interface EthTransactionRequest {
 }
 
 export interface EthTransactionReceipt {
-  transactionHash:   string;
-  blockHash:         string;
-  blockNumber:       string;
-  from:              string;
-  to:                string | null;
-  contractAddress:   string | null;
-  cumulativeGasUsed: string;
-  gasUsed:           string;
-  logs:              unknown[];
-  logsBloom:         string;
-  status:            string;   // '0x1' success | '0x0' failure
-  type:              string;
+  transactionHash:    string;
+  transactionIndex:   string;
+  blockHash:          string;
+  blockNumber:        string;
+  from:               string;
+  to:                 string | null;
+  contractAddress:    string | null;
+  cumulativeGasUsed:  string;
+  gasUsed:            string;
+  effectiveGasPrice:  string;
+  logs:               unknown[];
+  logsBloom:          string;
+  status:             string;   // '0x1' success | '0x0' failure
+  type:               string;
 }
 
 // ── Relayer internal types ─────────────────────────────────────────────────
@@ -61,9 +63,11 @@ export interface RelayerSession {
 }
 
 export interface PendingOp {
-  l1OpHash: string;
-  from:     string;
-  to:       string;
+  l1OpHash:  string;
+  from:      string;    // EVM alias of the sender
+  to:        string;    // destination address (informational)
+  fromBlock: string;    // 0x-prefixed hex: EVM block number at send time
+  realHash?: string;    // cached real EVM tx hash once resolved
 }
 
 // ── Beacon narrowed types ──────────────────────────────────────────────────

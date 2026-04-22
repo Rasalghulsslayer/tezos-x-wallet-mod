@@ -18,6 +18,15 @@ function isEmptyCalldata(calldata: string): boolean {
 }
 
 /**
+ * Tezos X-specific selectors that 4byte.directory doesn't know about.
+ * The NAC gateway expects the full text signature (not the raw hex selector)
+ * because it recomputes the selector itself.
+ */
+const KNOWN_SIGNATURES: Record<string, string> = {
+  'a1544fc3': 'callMichelson(string,string,bytes)',
+};
+
+/**
  * Look up a 4-byte selector on 4byte.directory to recover the full method
  * signature (e.g. "a9059cbb" → "transfer(address,uint256)").
  *
@@ -35,6 +44,24 @@ async function lookupMethodSignature(selectorHex: string): Promise<string | null
   } catch {
     return null;
   }
+}
+
+/**
+ * Resolve a 4-byte selector to a full method signature.
+ * Checks the local registry first (Tezos X-specific), then falls back to
+ * 4byte.directory, then to the raw hex selector as last resort.
+ */
+async function resolveMethodSignature(selectorHex: string): Promise<string> {
+  const known = KNOWN_SIGNATURES[selectorHex];
+  if (known) return known;
+
+  const remote = await lookupMethodSignature(selectorHex);
+  if (remote) return remote;
+
+  console.warn(
+    `[TezosX Relayer] Unknown selector 0x${selectorHex} — using raw hex`,
+  );
+  return selectorHex;
 }
 
 // ── Micheline builders ─────────────────────────────────────────────────────
@@ -106,20 +133,8 @@ export class GatewayBuilder {
     const abiParamsHex = calldataHex.slice(8);             // everything after selector
 
     // Resolve the full method signature from the 4-byte selector.
-    const methodSig = await lookupMethodSignature(selectorHex);
-
-    if (methodSig === null) {
-      // Fallback: pass the raw hex selector as method_sig.
-      console.warn(
-        `[TezosX Relayer] Could not resolve selector 0x${selectorHex} — ` +
-        `passing raw hex as method_sig (calldata may mismatch on EVM side)`,
-      );
-      return {
-        entrypoint:   NAC_ENTRYPOINT,
-        michelineArg: buildCallArg(tx.to, selectorHex, abiParamsHex),
-        mutezAmount,
-      };
-    }
+    // Checks local registry first (Tezos X-specific), then 4byte.directory.
+    const methodSig = await resolveMethodSignature(selectorHex);
 
     return {
       entrypoint:   NAC_ENTRYPOINT,

@@ -95,9 +95,9 @@ export class BeaconClient {
           {
             kind: TezosOperationType.TRANSACTION,
             amount: mutezAmount,
-            fee: "1000",         // 0.001 XTZ in mutez
-            gas_limit: "15000",   // Gas limit for transfers (increased to avoid OutOfGas)
-            storage_limit: "0",    // No storage needed for transfers
+            fee: "100000",          // 0.1 XTZ — safe ceiling for cross-runtime ops (Temple re-estimates)
+            gas_limit: "1040000",   // High ceiling for NAC call_evm (Temple simulates & adjusts)
+            storage_limit: "60000", // Allows storage allocation via NAC gateway
             destination: NAC_CONTRACT,
             parameters: {
               entrypoint,

@@ -6,6 +6,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.2.1] — 2026-04-22
+
+### Added
+- **Real EVM transaction resolution**: both `eth_getTransactionByHash` and `eth_getTransactionReceipt` now map the synthetic NAC hash back to the actual kernel-synthesized EVM transaction. The resolver scans EVM blocks from send-time snapshot onward and matches the first unclaimed tx whose `from` **or** `to` equals the user's alias (the kernel may put the alias on either side). Returns the real tx object / receipt with real `transactionHash`, real `logs`, real `gasUsed`, real `blockNumber`. Unblocks ethers.js `tx.wait()` (which polls `eth_getTransactionByHash` before `eth_getTransactionReceipt`) and event-driven dApps (TzButton, DEX, lending, etc.) that rely on `receipt.logs`.
+- **In-flight deduplication**: concurrent callers for the same synthetic hash share a single block-scan promise instead of spawning N concurrent scans. Critical under ethers.js / viem polling load (~1 call/s).
+- **Per-session claim set**: once a real hash has been assigned to one pending op, no other pending op can match the same transaction.
+- **Diagnostic logs**: the relayer logs each step of the transaction lifecycle (`eth_sendTransaction` → NAC build → `fromBlock` snapshot → L1 signing → synthetic hash → scan → real hash resolved), making dApp integration issues easier to diagnose.
+- **Pure-functional resolver** in `src/utils/resolver.ts` (recursive `attemptFind` → `scanRange` → `scanBlock`), with per-block tx summary logs.
+
+### Fixed
+- **RPC proxy**: unknown JSON-RPC methods (`eth_blockNumber`, `eth_getBlockByNumber`, `eth_gasPrice`, `eth_estimateGas`, `eth_getCode`, `eth_getLogs`, etc.) are now forwarded to the Tezlink EVM node instead of throwing `METHOD_NOT_FOUND`. Fixes ethers.js `tx.wait()` and viem compatibility.
+- **callMichelson selector**: added a local registry (`KNOWN_SIGNATURES`) for Tezos X-specific selectors. `callMichelson(string,string,bytes)` is now resolved locally instead of failing on 4byte.directory lookup. Fixes `invalid input encoding` error on NAC gateway.
+- **Fee / gas / storage limits**: increased from `fee:1000 / gas:15000 / storage:0` to `fee:100000 / gas:1040000 / storage:60000`. Temple re-estimates before submission. Fixes "No tip, no trip" and OutOfGas errors on cross-runtime operations.
+- **Transaction receipts**: when the real EVM tx cannot be located (timeout), the fallback synthetic receipt is now enriched with `transactionIndex`, `effectiveGasPrice`, realistic `gasUsed` (`0x5208`), and EIP-1559 type so ethers.js/viem don't reject it.
+- **Nonce**: `eth_getTransactionCount` now proxies to Tezlink instead of returning hardcoded `0x0`.
+
+---
+
 ## [0.2.0] — 2026-04-15
 
 ### Added
@@ -52,7 +70,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ## Upcoming
 
-### [0.2.0] — planned
-- `eth_call` support
-- `eth_sign` and `personal_sign` support
-- Improved Beacon error handling (Buffer polyfill, Matrix relay fallback)
+### [0.3.0] — planned
+- `personal_sign` support (SIWE / EIP-4361, requires kernel ERC-1271)
+- `eth_signTypedData` support (EIP-712)
+- Gas estimation via `eth_estimateGas` before transaction submission
