@@ -73,13 +73,12 @@ function buildDefaultArg(destination: string): MichelineMichelsonV1Expression {
   return { string: destination };
 }
 
-/**
- * Gateway `call` entrypoint — cross-runtime call with ABI-encoded parameters.
- */
+/** Gateway `call_evm` entrypoint — cross-runtime call with ABI-encoded parameters. */
 function buildCallArg(
-  destination: string,
-  methodSig: string,
+  destination:  string,
+  methodSig:    string,
   abiParamsHex: string,
+  callback:     MichelineMichelsonV1Expression = { prim: 'None' },
 ): MichelineMichelsonV1Expression {
   return {
     prim: 'Pair',
@@ -89,7 +88,13 @@ function buildCallArg(
         prim: 'Pair',
         args: [
           { string: methodSig },
-          { bytes: abiParamsHex },
+          {
+            prim: 'Pair',
+            args: [
+              { bytes: abiParamsHex },
+              callback,
+            ],
+          },
         ],
       },
     ],
@@ -107,9 +112,13 @@ export interface GatewayCallParams {
 export class GatewayBuilder {
   /**
    * Build the NAC gateway call parameters from an EVM transaction request.
-   * @param tx  EthTransactionRequest from eth_sendTransaction params[0]
+   * @param tx        EthTransactionRequest from eth_sendTransaction params[0]
+   * @param callback  Optional Michelson callback (default: None)
    */
-  async fromEthTransaction(tx: EthTransactionRequest): Promise<GatewayCallParams> {
+  async fromEthTransaction(
+    tx: EthTransactionRequest,
+    callback: MichelineMichelsonV1Expression = { prim: 'None' },
+  ): Promise<GatewayCallParams> {
     const calldata = tx.data ?? '0x';
 
     // Convert EVM wei value to mutez (1 tez = 10^6 mutez = 10^18 wei)
@@ -138,7 +147,7 @@ export class GatewayBuilder {
 
     return {
       entrypoint:   NAC_ENTRYPOINT,
-      michelineArg: buildCallArg(tx.to, methodSig, abiParamsHex),
+      michelineArg: buildCallArg(tx.to, methodSig, abiParamsHex, callback),
       mutezAmount,
     };
   }

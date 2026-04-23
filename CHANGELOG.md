@@ -6,6 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.2.2] — 2026-04-23
+
+### Changed (breaking — matches kernel hard reset)
+- **`call_evm` entrypoint signature**: migrated to the new Michelson shape `pair string (pair string (pair bytes (option (contract bytes))))`. The 4th field is an optional Michelson callback invoked by the kernel after the EVM call completes.
+- **`GatewayBuilder.fromEthTransaction`**: now accepts an optional 2nd argument `callback` (default `{ prim: 'None' }`) to let advanced callers supply a Michelson callback. Relayer default behavior is unchanged — all transactions pass `None`.
+
+### Compatibility
+- Only works against kernels deployed **on or after 2026-04-22** (demo, previewnet). Previous kernels expected the legacy 3-field signature and will reject calls from 0.2.2+.
+
+---
+
 ## [0.2.1] — 2026-04-22
 
 ### Added
