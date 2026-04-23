@@ -21,7 +21,7 @@ The **Tezos X Relayer** is an injectable TypeScript script that implements [EIP-
 
 | | |
 |---|---|
-| Version | 0.2.0 |
+| Version | 0.2.2 |
 | Network | Etherlink Shadownet (testnet) |
 | Wallet | Temple (browser extension) |
 | Protocol | EIP-1193 + EIP-6963 |
@@ -30,6 +30,6 @@ The **Tezos X Relayer** is an injectable TypeScript script that implements [EIP-
 
 ## Links
 
-- [GitHub Repository](https://github.com/Antonybyrt/Tezosx-relayer)
+- [GitLab Repository](https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer)
 - [Etherlink Documentation](https://docs.etherlink.com)
 - [Tezos X Overview](https://tezos.com)
