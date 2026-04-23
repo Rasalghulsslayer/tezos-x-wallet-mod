@@ -6,8 +6,10 @@ import {
   type AccountInfo,
   type MichelineMichelsonV1Expression,
 } from '@airgap/beacon-sdk';
+import type { MichelsonV1Expression } from '@taquito/rpc';
 import { TEZOS_L1_RPC, NAC_CONTRACT } from './constants.js';
 import type { BeaconPermissions } from './types.js';
+import type { ITezosWalletClient } from './wallet-client.js';
 
 const EIP1193_USER_REJECTED = 4001;
 const JSON_RPC_INTERNAL = -32603;
@@ -26,7 +28,7 @@ function isUserAbort(err: unknown): boolean {
   return false;
 }
 
-export class BeaconClient {
+export class BeaconClient implements ITezosWalletClient {
   private readonly client: DAppClient;
   private accountChangeHandler?: (tz1: string | null) => void;
 
@@ -86,7 +88,7 @@ export class BeaconClient {
    */
   async sendContractCall(
     entrypoint: string,
-    michelineArg: MichelineMichelsonV1Expression,
+    michelineArg: MichelsonV1Expression,
     mutezAmount = '0',
   ): Promise<string> {
     try {
@@ -101,7 +103,7 @@ export class BeaconClient {
             destination: NAC_CONTRACT,
             parameters: {
               entrypoint,
-              value: michelineArg,
+              value: michelineArg as MichelineMichelsonV1Expression,
             },
           },
         ],

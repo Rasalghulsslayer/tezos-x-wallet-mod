@@ -1,10 +1,10 @@
 import EventEmitter from 'eventemitter3';
-import { BeaconClient } from './beacon.js';
 import { TezlinkClient } from './tezlink.js';
 import { GatewayBuilder } from './gateway.js';
 import { deriveEvmAlias } from './utils/derive.js';
 import { l1OpHashToEvmHash, buildSyntheticReceipt } from './utils/receipt.js';
 import { findRealHash } from './utils/resolver.js';
+import type { ITezosWalletClient } from './wallet-client.js';
 import type {
   EIP1193Provider,
   RequestArguments,
@@ -39,12 +39,18 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
   private readonly claimedRealHashes   = new Set<string>();
   private readonly inFlightResolutions = new Map<string, Promise<string | null>>();
 
-  private readonly beacon  = new BeaconClient();
+  private readonly beacon:  ITezosWalletClient;
   private readonly tezlink = new TezlinkClient();
   private readonly gateway = new GatewayBuilder();
 
-  constructor() {
+  /**
+   * @param walletClient Wallet backend implementing ITezosWalletClient. Pass
+   *                     BeaconClient for Temple integration, or a custom
+   *                     LocalSignerClient for a standalone wallet.
+   */
+  constructor(walletClient: ITezosWalletClient) {
     super();
+    this.beacon = walletClient;
 
     // Restore session if Temple already has an active account (page reload)
     void this.beacon.getActiveAccount().then((account) => {

@@ -1,27 +1,22 @@
 {
-  "name": "tezosx-relayer",
-  "version": "0.2.2",
+  "name": "tezosx-monorepo",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "build": "node build.mjs",
-    "build:ext": "cd extension && node build.mjs",
-    "typecheck": "tsc --noEmit",
-    "typecheck:ext": "tsc --noEmit -p extension/tsconfig.json",
-    "lint": "eslint src extension/src",
-    "serve": "npx serve --cors -l 8080 .",
-    "dev:ext": "web-ext run --source-dir extension --target chromium"
-  },
-  "dependencies": {
-    "@airgap/beacon-sdk": "^4.8.1",
-    "@taquito/michel-codec": "^24.2.0",
-    "@taquito/rpc": "^24.2.0",
-    "@taquito/taquito": "^24.2.0",
-    "eventemitter3": "^5.0.4",
-    "lucide-react": "^1.8.0",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
-    "viem": "^2.47.2"
+    "build": "npm run build -w tezosx-relayer",
+    "build:ext": "npm run build:ext -w tezosx-relayer",
+    "wallet:build": "npm --workspace=tezosx-wallet run build",
+    "wallet:dev":   "npm --workspace=tezosx-wallet run dev",
+    "wallet:typecheck": "npm --workspace=tezosx-wallet run typecheck",
+    "typecheck": "npm run typecheck -w tezosx-relayer && npm run typecheck:ext -w tezosx-relayer",
+    "typecheck:wallet": "npm run typecheck -w tezosx-wallet",
+    "lint": "eslint packages/relayer/src packages/relayer/extension/src packages/wallet/src",
+    "serve": "cd packages/relayer && npx serve --cors -l 8080 .",
+    "dev:ext": "npm run dev:ext -w tezosx-relayer"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.40",
@@ -36,7 +31,6 @@
     "web-ext": "^10.1.0"
   },
   "description": "",
-  "main": "index.js",
   "keywords": [],
   "author": "",
   "license": "ISC"

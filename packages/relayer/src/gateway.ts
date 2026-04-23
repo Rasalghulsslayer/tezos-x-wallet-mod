@@ -1,4 +1,4 @@
-import type { MichelineMichelsonV1Expression } from '@airgap/beacon-sdk';
+import type { MichelsonV1Expression } from '@taquito/rpc';
 import { NAC_ENTRYPOINT } from './constants.js';
 import type { EthTransactionRequest } from './types.js';
 
@@ -69,7 +69,7 @@ async function resolveMethodSignature(selectorHex: string): Promise<string> {
 /**
  * Gateway `default` entrypoint — bare cross-runtime transfer with no calldata.
  */
-function buildDefaultArg(destination: string): MichelineMichelsonV1Expression {
+function buildDefaultArg(destination: string): MichelsonV1Expression {
   return { string: destination };
 }
 
@@ -78,8 +78,8 @@ function buildCallArg(
   destination:  string,
   methodSig:    string,
   abiParamsHex: string,
-  callback:     MichelineMichelsonV1Expression = { prim: 'None' },
-): MichelineMichelsonV1Expression {
+  callback:     MichelsonV1Expression = { prim: 'None' },
+): MichelsonV1Expression {
   return {
     prim: 'Pair',
     args: [
@@ -105,7 +105,7 @@ function buildCallArg(
 
 export interface GatewayCallParams {
   entrypoint:   string;
-  michelineArg: MichelineMichelsonV1Expression;
+  michelineArg: MichelsonV1Expression;
   mutezAmount:  string;
 }
 
@@ -117,7 +117,7 @@ export class GatewayBuilder {
    */
   async fromEthTransaction(
     tx: EthTransactionRequest,
-    callback: MichelineMichelsonV1Expression = { prim: 'None' },
+    callback: MichelsonV1Expression = { prim: 'None' },
   ): Promise<GatewayCallParams> {
     const calldata = tx.data ?? '0x';
 

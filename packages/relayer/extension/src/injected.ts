@@ -1,4 +1,5 @@
 import { RelayerProvider } from '../../src/provider.js';
+import { BeaconClient }    from '../../src/beacon.js';
 import type { EIP1193Provider, ProviderConnectInfo } from '../../src/types.js';
 import type { SessionUpdateMessage } from './messages.js';
 
@@ -52,7 +53,7 @@ function postSessionUpdate(session: TrackedSession | null): void {
 function inject(): void {
   if (typeof window === 'undefined') return;
 
-  const provider = new RelayerProvider();
+  const provider = new RelayerProvider(new BeaconClient());
 
   // Poser window.ethereum — tente de le verrouiller contre les surcharges
   try {
