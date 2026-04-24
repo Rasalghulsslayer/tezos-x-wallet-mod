@@ -36,14 +36,21 @@ export class LocalSignerClient implements ITezosWalletClient {
     michelineArg: MichelsonV1Expression,
     mutezAmount = '0',
   ): Promise<string> {
-    const op = await this.toolkit.contract.transfer({
-      to:        NAC_CONTRACT,
-      amount:    Number(mutezAmount),
-      mutez:     true,
-      parameter: { entrypoint, value: michelineArg },
-    });
-    console.info('[TezosX Wallet] L1 opHash:', op.hash);
-    return op.hash;
+    try {
+      const op = await this.toolkit.contract.transfer({
+        to:        NAC_CONTRACT,
+        amount:    Number(mutezAmount),
+        mutez:     true,
+        parameter: { entrypoint, value: michelineArg },
+      });
+      console.info('[TezosX Wallet] L1 opHash:', op.hash);
+      return op.hash;
+    } catch (err) {
+      const e = err as { errors?: unknown[]; message?: string; name?: string };
+      console.error('[TezosX Wallet] Taquito transfer failed',
+        { name: e.name, message: e.message, errors: e.errors, raw: err });
+      throw err;
+    }
   }
 
   async disconnect(): Promise<void> {

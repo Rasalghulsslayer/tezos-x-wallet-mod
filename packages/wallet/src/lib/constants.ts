@@ -1,5 +1,5 @@
-/** Testnet USDC deployed on Tezos X EVM (same contract as tzButton). */
-export const USDC_CONTRACT = '0xb155450fbbe8b5bf1f584374243c7bde5609ab1f';
+/** Testnet USDC deployed on Tezos X EVM. */
+export const USDC_CONTRACT = '0xdcd349f9c09085ba51ab0d317238664aa5d8a134';
 
 /** Testnet faucet URL for users who need funds. */
 export const FAUCET_URL = 'https://tezosx-evm-usdc-airdrop.vercel.app/';

@@ -1,30 +1,38 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
-import { isValidMnemonic } from '@/lib/seed';
+import { isValidEdsk, isValidMnemonic } from '@/lib/seed';
 import { sendPopupRequest } from '@/lib/messaging';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Button } from '../tx/Button';
+import { TopBar } from '../tx/TopBar';
+
+type Mode = 'mnemonic' | 'edsk';
 
 export function Import({ onDone }: { onDone: () => void }) {
   const navigate           = useNavigate();
-  const [mnemonic, setM]   = useState('');
+  const [mode, setMode]    = useState<Mode>('mnemonic');
+  const [secret, setSec]   = useState('');
   const [password, setPwd] = useState('');
   const [confirm,  setCnf] = useState('');
   const [error,    setErr] = useState<string | null>(null);
   const [loading,  setLd]  = useState(false);
 
+  const switchMode = (m: Mode) => { setMode(m); setSec(''); setErr(null); };
+
   const submit = async () => {
     setErr(null);
-    const trimmed = mnemonic.trim().toLowerCase();
-    if (!isValidMnemonic(trimmed))   return setErr('Invalid BIP39 mnemonic');
-    if (password.length < 8)          return setErr('Password must be at least 8 characters');
-    if (password !== confirm)         return setErr('Passwords do not match');
-
+    if (password.length < 8) return setErr('Password must be at least 8 characters');
+    if (password !== confirm) return setErr('Passwords do not match');
     setLd(true);
     try {
-      await sendPopupRequest({ type: 'IMPORT_WALLET', mnemonic: trimmed, password });
+      if (mode === 'mnemonic') {
+        const trimmed = secret.trim().toLowerCase();
+        if (!isValidMnemonic(trimmed)) throw new Error('Invalid BIP39 mnemonic');
+        await sendPopupRequest({ type: 'IMPORT_WALLET', mnemonic: trimmed, password });
+      } else {
+        const trimmed = secret.trim();
+        if (!isValidEdsk(trimmed)) throw new Error('Invalid Tezos secret key (expected edsk…)');
+        await sendPopupRequest({ type: 'IMPORT_SECRET_KEY', edsk: trimmed, password });
+      }
       onDone();
       navigate('/', { replace: true });
     } catch (e) {
@@ -35,46 +43,52 @@ export function Import({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <div className="flex flex-col min-h-150 p-4 gap-4">
-      <button onClick={() => navigate(-1)} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground w-fit">
-        <ArrowLeft className="h-3 w-3" /> Back
-      </button>
+    <div className="tx-page">
+      <TopBar title="Import wallet" onBack={() => navigate(-1)} />
 
-      <header>
-        <h1 className="text-lg font-bold">Import a seed</h1>
-        <p className="text-xs text-muted-foreground mt-1">
-          Paste your 12/15/18/21/24-word BIP39 mnemonic.
-        </p>
-      </header>
-
-      <div className="space-y-3">
-        <div>
-          <Label htmlFor="mn">Recovery phrase</Label>
-          <textarea
-            id="mn"
-            value={mnemonic}
-            onChange={(e) => setM(e.target.value)}
-            placeholder="word1 word2 word3 …"
-            rows={4}
-            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none resize-none font-mono"
-          />
+      <div className="tx-page-scroll" style={{ padding: 20 }}>
+        <div style={{ fontSize: 13, color: 'var(--tx-fg-muted)', marginBottom: 14 }}>
+          {mode === 'mnemonic'
+            ? 'Paste your 12/15/18/21/24-word BIP39 mnemonic. Words are separated by spaces.'
+            : 'Paste a Tezos secret key (edsk…). This imports a single standalone account.'}
         </div>
 
-        <div>
-          <Label htmlFor="password">Password</Label>
-          <Input id="password" type="password" value={password} onChange={(e) => setPwd(e.target.value)} placeholder="At least 8 characters" />
-        </div>
-        <div>
-          <Label htmlFor="confirm">Confirm password</Label>
-          <Input id="confirm" type="password" value={confirm} onChange={(e) => setCnf(e.target.value)} />
+        <div className="tx-runtime-toggle" style={{ display: 'flex', marginBottom: 16 }}>
+          <button className={mode === 'mnemonic' ? 'on l1' : ''} onClick={() => switchMode('mnemonic')} style={{ flex: 1 }}>
+            Recovery phrase
+          </button>
+          <button className={mode === 'edsk' ? 'on l2' : ''} onClick={() => switchMode('edsk')} style={{ flex: 1 }}>
+            Private key
+          </button>
         </div>
 
-        {error != null && <p className="text-xs text-red-400">{error}</p>}
+        <textarea
+          className="tx-input mono"
+          value={secret}
+          onChange={(e) => setSec(e.target.value)}
+          placeholder={mode === 'mnemonic' ? 'harbor slope violet …' : 'edsk…'}
+          style={{ height: mode === 'mnemonic' ? 120 : 80, padding: 14, resize: 'none', lineHeight: 1.55 }}
+        />
+        <div className="tx-field-hint">Your secret never leaves this device.</div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 18 }}>
+          <label>
+            <span className="tx-field-label">Password</span>
+            <input className="tx-input" type="password" value={password} onChange={(e) => setPwd(e.target.value)} placeholder="At least 8 characters" />
+          </label>
+          <label>
+            <span className="tx-field-label">Confirm password</span>
+            <input className="tx-input" type="password" value={confirm} onChange={(e) => setCnf(e.target.value)} />
+          </label>
+          {error != null && <p style={{ fontSize: 12, color: 'var(--tx-danger)' }}>{error}</p>}
+        </div>
       </div>
 
-      <Button onClick={submit} disabled={loading} className="w-full mt-auto">
-        {loading ? 'Importing…' : 'Import wallet'}
-      </Button>
+      <div className="tx-action-bar">
+        <Button variant="accent" full disabled={loading} onClick={submit}>
+          {loading ? 'Importing…' : 'Import wallet'}
+        </Button>
+      </div>
     </div>
   );
 }

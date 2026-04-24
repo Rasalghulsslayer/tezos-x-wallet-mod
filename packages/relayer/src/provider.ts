@@ -112,6 +112,15 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
           (args.params as string[])[1] ?? 'latest',
         );
 
+      // Fees handled by the NAC gateway on L1 — return constants.
+      case 'eth_estimateGas':
+        return '0x1e8480';
+      case 'eth_gasPrice':
+      case 'eth_maxPriorityFeePerGas':
+        return '0x0';
+      case 'eth_feeHistory':
+        return { oldestBlock: '0x0', baseFeePerGas: ['0x0'], gasUsedRatio: [0], reward: [['0x0']] };
+
       case 'eth_sendTransaction':
         return this.handleSendTransaction(args);
 

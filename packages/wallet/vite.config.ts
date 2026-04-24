@@ -20,7 +20,8 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@':    path.resolve(__dirname, './src'),
+      buffer: 'buffer/',
     },
   },
   server: {
@@ -29,6 +30,7 @@ export default defineConfig({
     hmr: { port: 5173 },
   },
   optimizeDeps: {
+    include: ['buffer'],
     esbuildOptions: {
       define: {
         global: 'globalThis',  // same as top-level define but applied to pre-bundled deps

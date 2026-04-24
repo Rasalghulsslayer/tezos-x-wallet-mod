@@ -40,6 +40,7 @@ export type PopupRequest =
   | { type: 'GET_STATE' }
   | { type: 'CREATE_WALLET'; mnemonic: string; password: string }
   | { type: 'IMPORT_WALLET'; mnemonic: string; password: string }
+  | { type: 'IMPORT_SECRET_KEY'; edsk: string; password: string }
   | { type: 'UNLOCK';        password: string }
   | { type: 'LOCK' }
   | { type: 'EXPORT_SEED';   password: string }

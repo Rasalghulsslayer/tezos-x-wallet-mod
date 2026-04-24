@@ -1,5 +1,16 @@
-import { deriveTezosIdentity, isValidMnemonic, newMnemonic } from '../lib/seed';
+import {
+  deriveTezosIdentity,
+  deriveTezosIdentityFromSecretKey,
+  isValidEdsk,
+  isValidMnemonic,
+  newMnemonic,
+} from '../lib/seed';
 import { vaultStore, type EncryptedVault } from '../lib/storage';
+
+/** Payload chiffré dans le vault. Distingue l'origine du secret. */
+export type VaultPayload =
+  | { kind: 'mnemonic'; value: string }
+  | { kind: 'edsk';     value: string };
 
 /** Number of PBKDF2 iterations used to stretch the password into an AES-GCM key. */
 const PBKDF2_ITERATIONS = 200_000;
@@ -51,7 +62,7 @@ async function deriveAesKey(password: string, salt: Uint8Array, iterations: numb
   );
 }
 
-async function encryptMnemonic(mnemonic: string, password: string): Promise<EncryptedVault> {
+async function encryptPayload(payload: VaultPayload, password: string): Promise<EncryptedVault> {
   const salt = randomBytes(SALT_BYTES);
   const iv   = randomBytes(IV_BYTES);
   const key  = await deriveAesKey(password, salt, PBKDF2_ITERATIONS);
@@ -60,7 +71,7 @@ async function encryptMnemonic(mnemonic: string, password: string): Promise<Encr
     await crypto.subtle.encrypt(
       { name: 'AES-GCM', iv: iv as BufferSource },
       key,
-      new TextEncoder().encode(mnemonic),
+      new TextEncoder().encode(JSON.stringify(payload)),
     ),
   );
 
@@ -72,14 +83,26 @@ async function encryptMnemonic(mnemonic: string, password: string): Promise<Encr
   };
 }
 
-async function decryptVault(vault: EncryptedVault, password: string): Promise<string> {
+async function decryptVault(vault: EncryptedVault, password: string): Promise<VaultPayload> {
   const key = await deriveAesKey(password, fromBase64(vault.salt), vault.iterations);
   const plaintext = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv: fromBase64(vault.iv) as BufferSource },
     key,
     fromBase64(vault.ciphertext) as BufferSource,
   );
-  return new TextDecoder().decode(plaintext);
+  const raw = new TextDecoder().decode(plaintext);
+
+  // Format actuel : JSON typé { kind, value }. Fallback sur l'ancien format
+  // (plain mnemonic) pour les vaults créés avant l'introduction de edsk.
+  try {
+    const parsed = JSON.parse(raw) as VaultPayload;
+    if (parsed != null && (parsed.kind === 'mnemonic' || parsed.kind === 'edsk')) {
+      return parsed;
+    }
+  } catch {
+    /* fallthrough : ancien format */
+  }
+  return { kind: 'mnemonic', value: raw };
 }
 
 // ── Keyring public API — orchestrates storage + crypto + derivation ───────────
@@ -112,17 +135,25 @@ export class Keyring {
   /** Import an existing mnemonic and persist the encrypted vault. */
   async importFromMnemonic(mnemonic: string, password: string): Promise<UnlockedIdentity> {
     const trimmed = mnemonic.trim().toLowerCase();
-    if (!isValidMnemonic(trimmed)) {
-      throw new Error('Invalid BIP39 mnemonic');
-    }
-    if (password.length < 8) {
-      throw new Error('Password must be at least 8 characters');
-    }
+    if (!isValidMnemonic(trimmed)) throw new Error('Invalid BIP39 mnemonic');
+    if (password.length < 8)      throw new Error('Password must be at least 8 characters');
 
-    const vault = await encryptMnemonic(trimmed, password);
-    await vaultStore.save(vault);
-
+    await vaultStore.save(await encryptPayload({ kind: 'mnemonic', value: trimmed }, password));
     const identity = await deriveTezosIdentity(trimmed);
+    this.unlocked = identity;
+    return identity;
+  }
+
+  /** Import directly from a Tezos-encoded secret key (edsk...). */
+  async importFromSecretKey(edsk: string, password: string): Promise<UnlockedIdentity> {
+    const trimmed = edsk.trim();
+    if (!isValidEdsk(trimmed))    throw new Error('Invalid Tezos secret key (expected edsk…)');
+    if (password.length < 8)      throw new Error('Password must be at least 8 characters');
+
+    const identity = await deriveTezosIdentityFromSecretKey(trimmed).catch(() => {
+      throw new Error('Could not decode the secret key');
+    });
+    await vaultStore.save(await encryptPayload({ kind: 'edsk', value: trimmed }, password));
     this.unlocked = identity;
     return identity;
   }
@@ -132,11 +163,13 @@ export class Keyring {
     const vault = await vaultStore.load();
     if (vault == null) throw new Error('No wallet found');
 
-    const mnemonic = await decryptVault(vault, password).catch(() => {
+    const payload = await decryptVault(vault, password).catch(() => {
       throw new Error('Incorrect password');
     });
 
-    const identity = await deriveTezosIdentity(mnemonic);
+    const identity = payload.kind === 'mnemonic'
+      ? await deriveTezosIdentity(payload.value)
+      : await deriveTezosIdentityFromSecretKey(payload.value);
     this.unlocked = identity;
     return identity;
   }
@@ -146,8 +179,8 @@ export class Keyring {
     this.unlocked = null;
   }
 
-  /** Re-decrypt and return the mnemonic for user-initiated seed export. */
-  async exportMnemonic(password: string): Promise<string> {
+  /** Re-decrypt and return the raw secret (mnemonic or edsk) for user-initiated export. */
+  async exportSecret(password: string): Promise<VaultPayload> {
     const vault = await vaultStore.load();
     if (vault == null) throw new Error('No wallet found');
     return decryptVault(vault, password).catch(() => {

@@ -1,3 +1,4 @@
+import '@/lib/buffer-shim';
 import { RelayerProvider } from '@tezosx/relayer/provider';
 import { deriveEvmAlias } from '@tezosx/relayer/utils/derive';
 import { Keyring } from './keyring';
@@ -102,6 +103,12 @@ async function handlePopupRequest(msg: PopupRequest): Promise<WalletResponse> {
         return { ok: true, data: await currentVaultState() };
       }
 
+      case 'IMPORT_SECRET_KEY': {
+        await keyring.importFromSecretKey(msg.edsk, msg.password);
+        rebuildProviderForUnlockedKey();
+        return { ok: true, data: await currentVaultState() };
+      }
+
       case 'UNLOCK': {
         await keyring.unlock(msg.password);
         rebuildProviderForUnlockedKey();
@@ -117,8 +124,8 @@ async function handlePopupRequest(msg: PopupRequest): Promise<WalletResponse> {
       }
 
       case 'EXPORT_SEED': {
-        const mnemonic = await keyring.exportMnemonic(msg.password);
-        return { ok: true, data: mnemonic };
+        const secret = await keyring.exportSecret(msg.password);
+        return { ok: true, data: secret };
       }
 
       case 'LIST_PENDING':
@@ -238,6 +245,7 @@ async function handleEthereumRequest(msg: EthereumRequest): Promise<WalletRespon
 
     return { ok: true, data: result };
   } catch (err) {
+    console.error('[TezosX Wallet] handleEthereumRequest error', method, err);
     const e = err as { code?: number; message?: string };
     return { ok: false, code: e.code ?? -32603, message: e.message ?? 'Internal error' };
   }

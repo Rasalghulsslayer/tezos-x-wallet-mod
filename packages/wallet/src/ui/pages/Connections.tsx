@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Globe, Unplug, Clock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import type { StoredSession, VaultState } from '@/lib/messages';
 import { sendPopupRequest } from '@/lib/messaging';
 import { timeAgo } from '@/lib/format';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Header } from '../components/Header';
-import { NavBar } from '../components/NavBar';
-import { Spinner } from '../components/Spinner';
+import { TopBar } from '../tx/TopBar';
+import { Icon } from '../tx/Icon';
+import { Button } from '../tx/Button';
 
 export function Connections({ state, onChanged }: { state: VaultState; onChanged: () => void }) {
+  const navigate = useNavigate();
   const [sessions, setSessions] = useState<StoredSession[] | null>(null);
 
   const refresh = async () => {
@@ -28,56 +27,41 @@ export function Connections({ state, onChanged }: { state: VaultState; onChanged
   if (state.status !== 'unlocked') return null;
 
   return (
-    <div className="flex flex-col min-h-150">
-      <Header state={state} />
-
-      <main className="flex-1 p-3 space-y-2">
-        <h1 className="text-sm font-bold uppercase tracking-wider text-muted-foreground px-1">
-          Connected sites
-        </h1>
-
+    <div className="tx-page">
+      <TopBar title="Connected sites" onBack={() => navigate(-1)} />
+      <div className="tx-page-scroll">
         {sessions == null ? (
-          <div className="flex justify-center py-10"><Spinner /></div>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--tx-fg-muted)', fontSize: 13 }}>Loading…</div>
         ) : sessions.length === 0 ? (
-          <Card className="flex flex-col items-center justify-center gap-2 py-10">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
-              <Globe className="h-5 w-5" />
-            </div>
-            <p className="text-sm font-semibold">No connected sites</p>
-            <p className="text-xs text-muted-foreground text-center max-w-[240px]">
+          <div style={{ padding: '48px 24px', textAlign: 'center' }}>
+            <div style={{ fontSize: 14, fontWeight: 500 }}>No connected sites</div>
+            <div style={{ fontSize: 12, color: 'var(--tx-fg-muted)', marginTop: 6, maxWidth: 260, margin: '6px auto 0' }}>
               Visit a dApp and approve the connection — it will appear here.
-            </p>
-          </Card>
+            </div>
+          </div>
         ) : (
-          sessions.map((s) => (
-            <Card key={s.origin} className="gap-2 p-3">
-              <div className="flex items-center gap-2">
-                <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-semibold truncate" title={s.origin}>
-                    {new URL(s.origin).hostname}
+          <div style={{ padding: '8px 0' }}>
+            {sessions.map((s) => {
+              let host = s.origin;
+              try { host = new URL(s.origin).hostname; } catch { /* keep raw */ }
+              return (
+                <div key={s.origin} style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid var(--tx-border)' }}>
+                  <div className="tx-origin-fav">{host.charAt(0).toUpperCase()}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.origin}>
+                      {host}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--tx-fg-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Icon name="info" size={11} /> {timeAgo(s.connectedAt)}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <Clock className="h-2.5 w-2.5" />
-                    {timeAgo(s.connectedAt)}
-                  </div>
+                  <Button variant="danger" size="sm" onClick={() => disconnect(s.origin)}>Disconnect</Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-7"
-                  onClick={() => disconnect(s.origin)}
-                >
-                  <Unplug className="h-3 w-3" />
-                  Disconnect
-                </Button>
-              </div>
-            </Card>
-          ))
+              );
+            })}
+          </div>
         )}
-      </main>
-
-      <NavBar />
+      </div>
     </div>
   );
 }

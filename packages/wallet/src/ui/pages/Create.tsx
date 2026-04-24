@@ -1,40 +1,47 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Copy, Check, ShieldCheck } from 'lucide-react';
 import { newMnemonic } from '@/lib/seed';
 import { sendPopupRequest } from '@/lib/messaging';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Button } from '../tx/Button';
+import { Icon } from '../tx/Icon';
+import { TopBar } from '../tx/TopBar';
+import { Dots } from '../tx/Dots';
 
-type Stage = 'seed' | 'confirm' | 'password';
+type Stage = 'intro' | 'reveal' | 'confirm' | 'password';
 
 export function Create({ onDone }: { onDone: () => void }) {
-  const navigate            = useNavigate();
-  const [stage, setStage]   = useState<Stage>('seed');
+  const navigate = useNavigate();
+  const [stage, setStage]   = useState<Stage>('intro');
   const [mnemonic]          = useState(() => newMnemonic());
-  const [confirmOk, setOk]  = useState(false);
+  const words               = useMemo(() => mnemonic.split(' '), [mnemonic]);
+
+  const [ack1, setAck1]     = useState(false);
+  const [ack2, setAck2]     = useState(false);
+  const [revealed, setRevealed] = useState(false);
+
+  const positions           = useMemo(() => pickPositions(words.length), [words.length]);
+  const [confirmVals, setCv] = useState(['', '', '']);
+  const allCorrect          = positions.every((p, i) => confirmVals[i].trim().toLowerCase() === words[p - 1]);
+
   const [password, setPwd]  = useState('');
   const [confirm,  setCnf]  = useState('');
   const [error,    setErr]  = useState<string | null>(null);
-  const [loading,  setLoad] = useState(false);
-  const [copied,   setCpd]  = useState(false);
+  const [loading,  setLd]   = useState(false);
 
-  const words = useMemo(() => mnemonic.split(' '), [mnemonic]);
+  const stageIdx = { intro: 0, reveal: 1, confirm: 2, password: 3 }[stage];
 
-  const copy = async () => {
-    await navigator.clipboard.writeText(mnemonic);
-    setCpd(true);
-    setTimeout(() => setCpd(false), 1500);
+  const back = () => {
+    if (stage === 'intro') navigate(-1);
+    else if (stage === 'reveal') setStage('intro');
+    else if (stage === 'confirm') setStage('reveal');
+    else setStage('confirm');
   };
 
   const submit = async () => {
     setErr(null);
     if (password.length < 8) return setErr('Password must be at least 8 characters');
     if (password !== confirm) return setErr('Passwords do not match');
-
-    setLoad(true);
+    setLd(true);
     try {
       await sendPopupRequest({ type: 'CREATE_WALLET', mnemonic, password });
       onDone();
@@ -42,106 +49,156 @@ export function Create({ onDone }: { onDone: () => void }) {
     } catch (e) {
       setErr((e as Error).message);
     } finally {
-      setLoad(false);
+      setLd(false);
     }
   };
 
   return (
-    <div className="flex flex-col min-h-150 p-4 gap-4">
-      <button onClick={() => navigate(-1)} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground w-fit">
-        <ArrowLeft className="h-3 w-3" /> Back
-      </button>
+    <div className="tx-page">
+      <TopBar
+        title={
+          stage === 'intro' ? 'Create wallet' :
+          stage === 'reveal' ? 'Recovery phrase' :
+          stage === 'confirm' ? 'Confirm phrase' :
+          'Set password'
+        }
+        onBack={back}
+        right={<Dots i={stageIdx} n={4} />}
+      />
 
-      {stage === 'seed' && (
+      {stage === 'intro' && (
         <>
-          <header>
-            <h1 className="text-lg font-bold">Your recovery phrase</h1>
-            <p className="text-xs text-muted-foreground mt-1">
-              Write these 24 words down. They are the only way to restore your wallet.
-            </p>
-          </header>
-
-          <Card className="p-3">
-            <div className="grid grid-cols-3 gap-1.5 font-mono text-[11px]">
-              {words.map((w, i) => (
-                <div key={i} className="flex items-center gap-1.5 rounded-md bg-muted px-2 py-1.5">
-                  <span className="text-muted-foreground w-4 text-right">{i + 1}</span>
-                  <span>{w}</span>
-                </div>
-              ))}
+          <div className="tx-page-scroll" style={{ padding: 20 }}>
+            <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.015em', lineHeight: 1.2, marginBottom: 8 }}>
+              Before we generate your recovery phrase
             </div>
-          </Card>
-
-          <Button variant="secondary" onClick={copy} className="w-full">
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? 'Copied' : 'Copy to clipboard'}
-          </Button>
-
-          <div className="flex items-start gap-2 rounded-lg border border-testnet/30 bg-testnet/5 p-3 text-[11px] text-testnet">
-            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-            Anyone with this phrase can access your wallet. Never share it.
+            <div style={{ fontSize: 13, color: 'var(--tx-fg-muted)', marginBottom: 20 }}>
+              These words unlock both your L1 and L2 addresses. There's no recovery beyond them.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer' }}>
+                <input type="checkbox" checked={ack1} onChange={(e) => setAck1(e.target.checked)} style={{ marginTop: 2, accentColor: 'var(--tx-purple)' }} />
+                <span style={{ fontSize: 13 }}>I'll write the phrase down offline. TezosX can't restore it for me.</span>
+              </label>
+              <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer' }}>
+                <input type="checkbox" checked={ack2} onChange={(e) => setAck2(e.target.checked)} style={{ marginTop: 2, accentColor: 'var(--tx-purple)' }} />
+                <span style={{ fontSize: 13 }}>Anyone with this phrase can move my funds on both chains.</span>
+              </label>
+            </div>
           </div>
+          <div className="tx-action-bar">
+            <Button variant="accent" full disabled={!ack1 || !ack2} onClick={() => setStage('reveal')}>
+              Generate phrase
+            </Button>
+          </div>
+        </>
+      )}
 
-          <Button onClick={() => setStage('confirm')} className="w-full mt-auto">
-            I have saved my phrase
-          </Button>
+      {stage === 'reveal' && (
+        <>
+          <div className="tx-page-scroll" style={{ padding: 20 }}>
+            <div style={{ fontSize: 13, color: 'var(--tx-fg-muted)', marginBottom: 14 }}>
+              Write these {words.length} words down in order. Keep them offline.
+            </div>
+            <div style={{ position: 'relative' }}>
+              <div className={`tx-seed-grid ${revealed ? '' : 'blurred'}`}>
+                {words.map((w, i) => (
+                  <div className="tx-seed-word" key={i}>
+                    <span className="n">{i + 1}</span><span className="w">{w}</span>
+                  </div>
+                ))}
+              </div>
+              {!revealed && (
+                <div className="tx-seed-overlay" onClick={() => setRevealed(true)}>
+                  <div className="tx-seed-reveal-box">
+                    <Icon name="eye" size={28} color="var(--tx-fg)" />
+                    <div style={{ fontSize: 15, fontWeight: 500 }}>Tap to reveal</div>
+                    <div style={{ fontSize: 12, color: 'var(--tx-fg-muted)', textAlign: 'center', maxWidth: 240 }}>
+                      Make sure nobody's looking at your screen.
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            {revealed && (
+              <button className="tx-btn ghost sm" style={{ marginTop: 14 }} onClick={() => setRevealed(false)}>
+                <Icon name="eye-off" size={14} />Hide
+              </button>
+            )}
+          </div>
+          <div className="tx-action-bar">
+            <Button variant="accent" full disabled={!revealed} onClick={() => setStage('confirm')}>
+              I've written it down
+            </Button>
+          </div>
         </>
       )}
 
       {stage === 'confirm' && (
         <>
-          <header>
-            <h1 className="text-lg font-bold">Confirm</h1>
-            <p className="text-xs text-muted-foreground mt-1">
-              Check the box once you've safely stored your recovery phrase.
-            </p>
-          </header>
-
-          <Card className="p-3 flex-1 flex items-center justify-center">
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={confirmOk}
-                onChange={(e) => setOk(e.target.checked)}
-                className="h-5 w-5 rounded border-border bg-transparent text-brand-500 focus:ring-brand-500"
-              />
-              <span className="text-sm">I have written down my 24 words and stored them securely.</span>
-            </label>
-          </Card>
-
-          <Button onClick={() => setStage('password')} disabled={!confirmOk} className="w-full">
-            Continue
-          </Button>
+          <div className="tx-page-scroll" style={{ padding: 20 }}>
+            <div style={{ fontSize: 13, color: 'var(--tx-fg-muted)', marginBottom: 16 }}>
+              Type the words that go in these positions.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {positions.map((p, i) => (
+                <label key={p}>
+                  <span className="tx-field-label">Word #{p}</span>
+                  <input
+                    className="tx-input mono"
+                    value={confirmVals[i]}
+                    placeholder="…"
+                    onChange={(e) => {
+                      const next = [...confirmVals];
+                      next[i] = e.target.value;
+                      setCv(next);
+                    }}
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="tx-action-bar">
+            <Button variant="accent" full disabled={!allCorrect} onClick={() => setStage('password')}>
+              Continue
+            </Button>
+          </div>
         </>
       )}
 
       {stage === 'password' && (
         <>
-          <header className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-brand-300" />
-            <h1 className="text-lg font-bold">Set a password</h1>
-          </header>
-          <p className="text-xs text-muted-foreground -mt-2">
-            Encrypts your seed on this device. Required at every browser restart.
-          </p>
-
-          <div className="space-y-3">
-            <div>
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPwd(e.target.value)} placeholder="At least 8 characters" autoFocus />
+          <div className="tx-page-scroll" style={{ padding: 20 }}>
+            <div style={{ fontSize: 13, color: 'var(--tx-fg-muted)', marginBottom: 16 }}>
+              Unlocks this wallet on this device. It's separate from your recovery phrase.
             </div>
-            <div>
-              <Label htmlFor="confirm">Confirm password</Label>
-              <Input id="confirm" type="password" value={confirm} onChange={(e) => setCnf(e.target.value)} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <label>
+                <span className="tx-field-label">Password</span>
+                <input className="tx-input" type="password" value={password} onChange={(e) => setPwd(e.target.value)} placeholder="At least 8 characters" />
+              </label>
+              <label>
+                <span className="tx-field-label">Confirm password</span>
+                <input className="tx-input" type="password" value={confirm} onChange={(e) => setCnf(e.target.value)} placeholder="Repeat it" />
+              </label>
+              {error != null && <p style={{ fontSize: 12, color: 'var(--tx-danger)' }}>{error}</p>}
             </div>
-            {error != null && <p className="text-xs text-red-400">{error}</p>}
           </div>
-
-          <Button onClick={submit} disabled={loading} className="w-full mt-auto">
-            {loading ? 'Creating…' : 'Create wallet'}
-          </Button>
+          <div className="tx-action-bar">
+            <Button variant="accent" full disabled={loading || password.length < 8 || password !== confirm} onClick={submit}>
+              {loading ? 'Creating…' : 'Open wallet'}
+            </Button>
+          </div>
         </>
       )}
     </div>
   );
+}
+
+function pickPositions(n: number): [number, number, number] {
+  // Deterministic-ish: pick 3 spread positions
+  const a = Math.max(1, Math.floor(n * 0.2));
+  const b = Math.max(a + 1, Math.floor(n * 0.5));
+  const c = Math.max(b + 1, Math.floor(n * 0.8));
+  return [a, b, c];
 }

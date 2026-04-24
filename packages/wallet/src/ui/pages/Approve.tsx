@@ -1,149 +1,253 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Globe, Link2, XCircle } from 'lucide-react';
 import type { PendingRequest } from '@/lib/messages';
 import { sendApproveRequest } from '@/lib/messaging';
-import { shortAddr } from '@/lib/format';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Spinner } from '../components/Spinner';
+import { Button } from '../tx/Button';
+import { Icon } from '../tx/Icon';
+import { Badge } from '../tx/Badge';
+import { Line } from '../tx/Line';
+import { truncAddr } from '../tx/utils';
+
+type Stage = 'request' | 'signing' | 'done' | 'error';
 
 export function Approve() {
   const [pending, setPending] = useState<PendingRequest | null>(null);
+  const [stage,   setStage]   = useState<Stage>('request');
   const [error,   setError]   = useState<string | null>(null);
-  const [busy,    setBusy]    = useState<'approve' | 'reject' | null>(null);
 
-  const requestId = useMemo(() => new URLSearchParams(window.location.search).get('requestId') ?? '', []);
+  const requestId = useMemo(
+    () => new URLSearchParams(window.location.search).get('requestId') ?? '',
+    [],
+  );
 
   useEffect(() => {
-    if (requestId === '') {
-      setError('Missing requestId in URL');
-      return;
-    }
+    if (requestId === '') { setError('Missing requestId'); setStage('error'); return; }
     sendApproveRequest<PendingRequest>({ type: 'GET_PENDING', requestId })
       .then(setPending)
-      .catch((e: Error) => setError(e.message));
+      .catch((e: Error) => { setError(e.message); setStage('error'); });
   }, [requestId]);
 
   const respond = async (decision: 'approve' | 'reject') => {
-    setBusy(decision);
+    setStage(decision === 'approve' ? 'signing' : 'done');
     try {
       await sendApproveRequest({ type: 'RESOLVE_PENDING', requestId, decision });
-      window.close();
+      setStage('done');
+      setTimeout(() => window.close(), 900);
     } catch (e) {
       setError((e as Error).message);
-      setBusy(null);
+      setStage('error');
     }
   };
 
-  if (error != null) {
+  if (stage === 'signing') {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-6 gap-3">
-        <XCircle className="h-10 w-10 text-red-400" />
-        <p className="text-sm text-red-400">{error}</p>
-        <Button variant="secondary" onClick={() => window.close()}>Close</Button>
+      <div className="tx-approval">
+        <div className="tx-topbar"><span className="tx-topbar-title">Signing…</span></div>
+        <div className="tx-page-scroll" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 18 }}>
+          <div className="tx-sending" />
+          <div style={{ fontSize: 15 }}>Waiting for confirmation</div>
+        </div>
       </div>
     );
   }
 
-  if (pending == null) {
+  if (stage === 'done') {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Spinner />
+      <div className="tx-approval">
+        <div className="tx-topbar" />
+        <div className="tx-page-scroll" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16, textAlign: 'center' }}>
+          <div className="tx-success-burst">
+            <Icon name="check" size={32} color="var(--tx-success)" strokeWidth={2.25} />
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.015em' }}>Done</div>
+          <div style={{ fontSize: 13, color: 'var(--tx-fg-muted)' }}>You can close this window.</div>
+        </div>
       </div>
     );
   }
 
-  return (
-    <div className="flex flex-col min-h-screen p-4 gap-3 max-w-md mx-auto">
-      {pending.kind === 'connect' ? <ConnectView origin={pending.origin} /> : <TxView pending={pending} />}
-
-      <div className="grid grid-cols-2 gap-2 mt-auto">
-        <Button
-          variant="destructive"
-          onClick={() => respond('reject')}
-          disabled={busy !== null}
-          className="gap-2"
-        >
-          <XCircle className="h-4 w-4" />
-          {busy === 'reject' ? 'Rejecting…' : 'Reject'}
-        </Button>
-        <Button
-          onClick={() => respond('approve')}
-          disabled={busy !== null}
-          className="gap-2"
-        >
-          <CheckCircle2 className="h-4 w-4" />
-          {busy === 'approve' ? 'Signing…' : 'Approve'}
-        </Button>
+  if (stage === 'error' || pending == null) {
+    return (
+      <div className="tx-approval">
+        <div className="tx-topbar" />
+        <div className="tx-page-scroll" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12, textAlign: 'center' }}>
+          {error ? (
+            <>
+              <Icon name="alert" size={36} color="var(--tx-danger)" />
+              <div style={{ fontSize: 14, color: 'var(--tx-danger)' }}>{error}</div>
+            </>
+          ) : (
+            <div className="tx-sending" />
+          )}
+        </div>
+        {error && (
+          <div className="tx-action-bar">
+            <Button variant="outline" full onClick={() => window.close()}>Close</Button>
+          </div>
+        )}
       </div>
-    </div>
-  );
+    );
+  }
+
+  return pending.kind === 'connect'
+    ? <ConnectView pending={pending} respond={respond} />
+    : <TxView pending={pending} respond={respond} />;
 }
 
-function ConnectView({ origin }: { origin: string }) {
-  const hostname = useMemo(() => {
-    try { return new URL(origin).hostname; }
-    catch { return origin; }
-  }, [origin]);
-
-  return (
-    <>
-      <header className="flex flex-col items-center gap-2 pt-4">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-500/10 text-brand-300">
-          <Link2 className="h-6 w-6" />
-        </div>
-        <h1 className="text-lg font-bold">Connection request</h1>
-      </header>
-
-      <Card className="gap-2">
-        <div className="flex items-center gap-2">
-          <Globe className="h-4 w-4 text-muted-foreground" />
-          <span className="font-semibold">{hostname}</span>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          This site wants to see your EVM alias and request transactions through your wallet.
-          You'll be asked to approve each transaction individually.
-        </p>
-      </Card>
-    </>
-  );
-}
-
-function TxView({ pending }: { pending: Extract<PendingRequest, { kind: 'transaction' }> }) {
+function ConnectView({
+  pending,
+  respond,
+}: {
+  pending: Extract<PendingRequest, { kind: 'connect' }>;
+  respond: (d: 'approve' | 'reject') => void;
+}) {
   const hostname = useMemo(() => {
     try { return new URL(pending.origin).hostname; }
     catch { return pending.origin; }
   }, [pending.origin]);
 
   return (
-    <>
-      <header className="flex flex-col items-center gap-2 pt-4">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-tz/10 text-cyan-tz">
-          <CheckCircle2 className="h-6 w-6" />
+    <div className="tx-approval">
+      <div
+        style={{
+          padding: '12px 16px',
+          borderBottom: '1px solid var(--tx-border)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+        }}
+      >
+        <div className="tx-origin-fav">{hostname.charAt(0).toUpperCase()}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 500 }}>{hostname}</div>
+          <div style={{ fontSize: 11, color: 'var(--tx-fg-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Icon name="lock" size={11} color="var(--tx-success)" />
+            <span>Connection request</span>
+          </div>
         </div>
-        <h1 className="text-lg font-bold">Signature request</h1>
-        <p className="text-xs text-muted-foreground">from {hostname}</p>
-      </header>
+        <Badge variant="purple">L1</Badge>
+      </div>
 
-      <Card className="space-y-2 p-3">
-        <Row label="To"     value={shortAddr(pending.to, 8, 6)} mono />
-        <Row label="Value"  value={pending.value} mono />
-        <Row label="Data"   value={pending.data === '0x' ? '(empty)' : shortAddr(pending.data, 10, 6)} mono />
-        {pending.methodSig && <Row label="Method" value={pending.methodSig} mono />}
-      </Card>
+      <div className="tx-page-scroll" style={{ padding: 16 }}>
+        <div className="tx-kicker" style={{ marginBottom: 6 }}>Requesting</div>
+        <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.015em', marginBottom: 14 }}>
+          Connect to {hostname}
+        </div>
 
-      <p className="text-[10px] text-center text-muted-foreground px-4">
-        This transaction will be signed with your Tezos key and routed through the NAC gateway.
-      </p>
-    </>
+        <div className="tx-risk" style={{ marginBottom: 14 }}>
+          <Icon name="shield" size={16} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 500 }}>Low risk</div>
+            <div style={{ fontSize: 11, opacity: 0.9 }}>The site will see your EVM alias. You'll approve each transaction individually.</div>
+          </div>
+          <span className="bars">
+            <span className="on" />
+            <span />
+            <span />
+          </span>
+        </div>
+
+        <div className="tx-card" style={{ padding: 0 }}>
+          <Line label="Origin" value={hostname} />
+          <div className="tx-divider" />
+          <Line label="Will receive" value="Your EVM alias (0x…)" />
+          <div className="tx-divider" />
+          <Line label="Can request" value="Transactions (each needs approval)" />
+        </div>
+      </div>
+
+      <div className="tx-action-bar" style={{ gap: 8 }}>
+        <Button variant="outline" full onClick={() => respond('reject')}>Reject</Button>
+        <Button variant="accent" full onClick={() => respond('approve')}>Connect</Button>
+      </div>
+    </div>
   );
 }
 
-function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function TxView({
+  pending,
+  respond,
+}: {
+  pending: Extract<PendingRequest, { kind: 'transaction' }>;
+  respond: (d: 'approve' | 'reject') => void;
+}) {
+  const hostname = useMemo(() => {
+    try { return new URL(pending.origin).hostname; }
+    catch { return pending.origin; }
+  }, [pending.origin]);
+
+  const riskCfg = {
+    label: 'Moderate risk',
+    msg:   'Review the recipient and amount before signing.',
+    icon:  'alert' as const,
+    bars:  2,
+    variant: 'med' as const,
+  };
+
   return (
-    <div className="flex justify-between gap-3 py-0.5 text-xs">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`text-right break-all ${mono ? 'font-mono' : ''}`}>{value}</span>
+    <div className="tx-approval">
+      <div
+        style={{
+          padding: '12px 16px',
+          borderBottom: '1px solid var(--tx-border)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+        }}
+      >
+        <div className="tx-origin-fav">{hostname.charAt(0).toUpperCase()}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 500 }}>{hostname}</div>
+          <div style={{ fontSize: 11, color: 'var(--tx-fg-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Icon name="lock" size={11} color="var(--tx-success)" />
+            <span>Signature request</span>
+          </div>
+        </div>
+        <Badge variant="purple">L1</Badge>
+      </div>
+
+      <div className="tx-page-scroll" style={{ padding: 16 }}>
+        <div className="tx-kicker" style={{ marginBottom: 6 }}>Requesting</div>
+        <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.015em', marginBottom: 14 }}>
+          {pending.methodSig ?? 'Contract call'}
+        </div>
+
+        <div className={`tx-risk ${riskCfg.variant}`} style={{ marginBottom: 14 }}>
+          <Icon name={riskCfg.icon} size={16} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 500 }}>{riskCfg.label}</div>
+            <div style={{ fontSize: 11, opacity: 0.9 }}>{riskCfg.msg}</div>
+          </div>
+          <span className="bars">
+            {[0, 1, 2].map((i) => <span key={i} className={i < riskCfg.bars ? 'on' : ''} />)}
+          </span>
+        </div>
+
+        <div className="tx-card" style={{ padding: 0 }}>
+          <Line label="To" value={truncAddr(pending.to, 8)} />
+          <div className="tx-divider" />
+          <Line label="Value" value={pending.value} />
+          <div className="tx-divider" />
+          <Line label="Data" value={pending.data === '0x' ? '(empty)' : truncAddr(pending.data, 10)} />
+        </div>
+
+        <div
+          style={{
+            marginTop: 14,
+            padding: '10px 12px',
+            borderRadius: 8,
+            background: 'var(--tx-surface-2)',
+            fontSize: 11,
+            color: 'var(--tx-fg-muted)',
+          }}
+        >
+          Signed with your Tezos key, routed through the NAC gateway.
+        </div>
+      </div>
+
+      <div className="tx-action-bar" style={{ gap: 8 }}>
+        <Button variant="outline" full onClick={() => respond('reject')}>Reject</Button>
+        <Button variant="accent" full onClick={() => respond('approve')}>Approve</Button>
+      </div>
     </div>
   );
 }

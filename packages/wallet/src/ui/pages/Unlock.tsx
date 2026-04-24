@@ -1,21 +1,17 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock } from 'lucide-react';
 import { sendPopupRequest } from '@/lib/messaging';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Button } from '../tx/Button';
 
 export function Unlock({ onDone }: { onDone: () => void }) {
-  const navigate           = useNavigate();
+  const navigate = useNavigate();
   const [password, setPwd] = useState('');
-  const [error,    setErr] = useState<string | null>(null);
-  const [loading,  setLd]  = useState(false);
+  const [error, setErr]    = useState<string | null>(null);
+  const [loading, setLd]   = useState(false);
 
   const submit = async () => {
-    setErr(null);
     if (password.length === 0) return;
-
+    setErr(null);
     setLd(true);
     try {
       await sendPopupRequest({ type: 'UNLOCK', password });
@@ -30,49 +26,52 @@ export function Unlock({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-150 gap-6 p-6">
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500/10 text-brand-300">
-        <Lock className="h-7 w-7" />
-      </div>
+    <div className="tx-page">
+      <div className="tx-page-scroll" style={{ padding: '40px 24px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', gap: 16 }}>
+          <div className="tx-logo-mark lg" style={{ width: 48, height: 48, borderRadius: 12 }} />
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.015em' }}>Welcome back</div>
+            <div style={{ fontSize: 13, color: 'var(--tx-fg-muted)', marginTop: 6 }}>
+              Enter your password to unlock.
+            </div>
+          </div>
+        </div>
 
-      <div className="text-center">
-        <h1 className="text-lg font-bold">Welcome back</h1>
-        <p className="text-xs text-muted-foreground mt-1">
-          Enter your password to unlock.
-        </p>
-      </div>
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submit();
-        }}
-        className="w-full space-y-3"
-      >
-        <div>
-          <Label htmlFor="pwd">Password</Label>
-          <Input
-            id="pwd"
+        <form
+          onSubmit={(e) => { e.preventDefault(); void submit(); }}
+          style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
+        >
+          <input
+            className="tx-input"
             type="password"
             value={password}
-            onChange={(e) => setPwd(e.target.value)}
             autoFocus
-            placeholder="••••••••"
+            onChange={(e) => setPwd(e.target.value)}
+            placeholder="Password"
           />
-        </div>
-        {error != null && <p className="text-xs text-red-400">{error}</p>}
+          {error != null && (
+            <p style={{ fontSize: 12, color: 'var(--tx-danger)', textAlign: 'center', margin: 0 }}>{error}</p>
+          )}
+          <Button variant="accent" full type="submit" disabled={loading || password.length === 0}>
+            {loading ? 'Unlocking…' : 'Unlock'}
+          </Button>
+        </form>
 
-        <Button type="submit" disabled={loading || password.length === 0} className="w-full">
-          {loading ? 'Unlocking…' : 'Unlock'}
-        </Button>
-      </form>
-
-      <button
-        onClick={() => navigate('/import')}
-        className="text-xs text-muted-foreground hover:text-foreground"
-      >
-        Forgot password? Import with seed phrase
-      </button>
+        <button
+          onClick={() => navigate('/import')}
+          style={{
+            marginTop: 14,
+            background: 'transparent',
+            border: 0,
+            color: 'var(--tx-fg-muted)',
+            fontSize: 12,
+            cursor: 'pointer',
+          }}
+        >
+          Forgot password? Import with seed phrase
+        </button>
+      </div>
     </div>
   );
 }

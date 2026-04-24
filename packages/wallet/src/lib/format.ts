@@ -4,6 +4,17 @@ export function shortAddr(addr: string, head = 6, tail = 4): string {
   return `${addr.slice(0, head)}…${addr.slice(-tail)}`;
 }
 
+/** Parse a mutez string (L1 RPC format, 6 decimals) into a decimal XTZ string. */
+export function mutezToXtz(mutez: string): string {
+  if (!mutez || mutez === '0') return '0';
+  const raw   = BigInt(mutez);
+  const whole = raw / 1_000_000n;
+  const frac  = raw % 1_000_000n;
+  return frac === 0n
+    ? whole.toString()
+    : `${whole.toString()}.${frac.toString().padStart(6, '0').replace(/0+$/, '')}`;
+}
+
 /** Parse a 0x-prefixed hex wei string into a decimal XTZ string (6 decimals). */
 export function weiToXtz(weiHex: string): string {
   if (!weiHex || weiHex === '0x0') return '0';

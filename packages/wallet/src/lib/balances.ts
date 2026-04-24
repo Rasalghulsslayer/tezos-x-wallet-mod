@@ -1,6 +1,14 @@
 import { TezlinkClient } from '@tezosx/relayer/tezlink';
+import { TEZOS_L1_RPC } from '@tezosx/relayer/constants';
 
 const tezlink = new TezlinkClient();
+
+/** Fetch native XTZ balance on Tezos L1 (mutez as decimal string) for a tz1/tz2/tz3/KT1. */
+export async function fetchL1XtzBalance(tz1: string): Promise<string> {
+  const res = await fetch(`${TEZOS_L1_RPC}/chains/main/blocks/head/context/contracts/${tz1}/balance`);
+  if (!res.ok) throw new Error(`L1 RPC ${res.status}: ${await res.text()}`);
+  return (await res.json()) as string;
+}
 
 /** Standard ERC-20 balanceOf(address) selector. */
 const BALANCE_OF_SELECTOR = '0x70a08231';

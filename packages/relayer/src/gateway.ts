@@ -23,7 +23,24 @@ function isEmptyCalldata(calldata: string): boolean {
  * because it recomputes the selector itself.
  */
 const KNOWN_SIGNATURES: Record<string, string> = {
+  // Tezos X-specific
   'a1544fc3': 'callMichelson(string,string,bytes)',
+  // ERC-20
+  'a9059cbb': 'transfer(address,uint256)',
+  '095ea7b3': 'approve(address,uint256)',
+  '23b872dd': 'transferFrom(address,address,uint256)',
+  '70a08231': 'balanceOf(address)',
+  'dd62ed3e': 'allowance(address,address)',
+  '18160ddd': 'totalSupply()',
+  '313ce567': 'decimals()',
+  // Common DeFi / escrow
+  'b6b55f25': 'deposit(uint256)',
+  '2e1a7d4d': 'withdraw(uint256)',
+  'd0e30db0': 'deposit()',
+  '3ccfd60b': 'withdraw()',
+  '4e71d92d': 'claim()',
+  // Wrapped native
+  '2e17de78': 'unstake(uint256)',
 };
 
 /**
@@ -144,6 +161,7 @@ export class GatewayBuilder {
     // Resolve the full method signature from the 4-byte selector.
     // Checks local registry first (Tezos X-specific), then 4byte.directory.
     const methodSig = await resolveMethodSignature(selectorHex);
+    console.info('[TezosX Relayer] gateway selector →', `0x${selectorHex}`, '→', methodSig);
 
     return {
       entrypoint:   NAC_ENTRYPOINT,
