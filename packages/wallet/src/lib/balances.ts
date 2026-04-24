@@ -1,4 +1,4 @@
-import { TezlinkClient } from 'tezosx-relayer/tezlink';
+import { TezlinkClient } from '@tezosx/relayer/tezlink';
 
 const tezlink = new TezlinkClient();
 

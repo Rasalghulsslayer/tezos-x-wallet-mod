@@ -6,6 +6,11 @@ sidebar_position: 1
 
 # Installation
 
+:::tip TezosX Wallet
+This page covers the **Relayer** extension (requires Temple Wallet). If you want a standalone wallet with no external dependencies, see [Wallet — Installation](/wallet/installation).
+:::
+
+
 ## Prerequisites
 
 - Node.js 20+

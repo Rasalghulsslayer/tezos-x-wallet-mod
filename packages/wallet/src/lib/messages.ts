@@ -3,7 +3,7 @@
  * All runtime boundaries in the wallet flow through one of these.
  */
 
-import type { RequestArguments } from 'tezosx-relayer/types';
+import type { RequestArguments } from '@tezosx/relayer/types';
 
 // ── Vault / session state snapshot ────────────────────────────────────────────
 

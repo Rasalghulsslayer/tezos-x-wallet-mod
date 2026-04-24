@@ -1,5 +1,6 @@
 import tseslint from '@typescript-eslint/eslint-plugin';
 import tsparser from '@typescript-eslint/parser';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 const sharedRules = {
   '@typescript-eslint/no-explicit-any': 'error',
@@ -46,7 +47,25 @@ export default [
         ecmaFeatures: { jsx: true },
       },
     },
+    plugins: { '@typescript-eslint': tseslint, 'react-hooks': reactHooks },
+    rules: {
+      ...sharedRules,
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
+    },
+  },
+  {
+    files: ['website/src/**/*.{ts,tsx}'],
+    languageOptions: {
+      parser: tsparser,
+      parserOptions: {
+        ecmaFeatures: { jsx: true },
+      },
+    },
     plugins: { '@typescript-eslint': tseslint },
-    rules: sharedRules,
+    rules: {
+      ...sharedRules,
+      '@typescript-eslint/no-explicit-any': 'warn',
+    },
   },
 ];

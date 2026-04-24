@@ -1,8 +1,8 @@
 import { TezosToolkit } from '@taquito/taquito';
 import { InMemorySigner } from '@taquito/signer';
 import type { MichelsonV1Expression } from '@taquito/rpc';
-import type { ITezosWalletClient, WalletPermissions } from 'tezosx-relayer/wallet-client';
-import { TEZOS_L1_RPC, NAC_CONTRACT } from 'tezosx-relayer/constants';
+import type { ITezosWalletClient, WalletPermissions } from '@tezosx/relayer/wallet-client';
+import { TEZOS_L1_RPC, NAC_CONTRACT } from '@tezosx/relayer/constants';
 
 /**
  * `ITezosWalletClient` implementation that signs Tezos operations locally

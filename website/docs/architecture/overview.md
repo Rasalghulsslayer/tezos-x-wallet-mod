@@ -31,3 +31,9 @@ tz1 → SHA3(prefix + tz1_bytes) → 0xAlias
 ```
 
 This alias is computed by the Tezlink RPC via `tez_getEthereumTezosAddress` and used as the account returned by `eth_requestAccounts`.
+
+## Wallet variant
+
+The **TezosX Wallet** extension uses the same `RelayerProvider` and `GatewayBuilder`, but replaces `BeaconClient` with `LocalSignerClient` — a self-contained signer that holds the Tezos secret key in service worker memory. This eliminates the Temple dependency entirely.
+
+See the [Wallet Architecture](/wallet/architecture/overview) for the full runtime boundary diagram specific to the wallet extension.

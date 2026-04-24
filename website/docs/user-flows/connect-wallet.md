@@ -6,6 +6,10 @@ sidebar_position: 1
 
 # Connect Wallet Flow
 
+:::note Two ways to connect
+This page describes connecting via the **TezosX Relayer** extension (requires Temple Wallet). If you are using the **TezosX Wallet** extension instead, see [dApp Approval](/wallet/user-flows/dapp-approval) — the wallet handles connections without Temple.
+:::
+
 :::warning Temple mobile only
 The Beacon connection currently works with **Temple mobile** (QR code scan) only. The Temple browser extension is **not yet supported** — the connection flow via the extension is still under development.
 :::

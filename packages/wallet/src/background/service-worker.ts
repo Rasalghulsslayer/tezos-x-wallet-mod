@@ -1,5 +1,5 @@
-import { RelayerProvider } from 'tezosx-relayer/provider';
-import { deriveEvmAlias } from 'tezosx-relayer/utils/derive';
+import { RelayerProvider } from '@tezosx/relayer/provider';
+import { deriveEvmAlias } from '@tezosx/relayer/utils/derive';
 import { Keyring } from './keyring';
 import { LocalSignerClient } from './signer';
 import { ApprovalQueue } from './approval-queue';
@@ -30,8 +30,9 @@ async function currentVaultState(): Promise<VaultState> {
   const unlocked = keyring.getUnlocked();
   if (unlocked == null) return { status: 'locked' };
 
-  if (evmAlias == null) evmAlias = await deriveEvmAlias(unlocked.tz1);
-  return { status: 'unlocked', tz1: unlocked.tz1, evmAlias };
+  const alias = evmAlias ?? await deriveEvmAlias(unlocked.tz1);
+  evmAlias = alias;
+  return { status: 'unlocked', tz1: unlocked.tz1, evmAlias: alias };
 }
 
 function rebuildProviderForUnlockedKey(): void {

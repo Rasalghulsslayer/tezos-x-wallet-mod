@@ -1,5 +1,5 @@
 {
-  "name": "tezosx-relayer",
+  "name": "@tezosx/relayer",
   "version": "0.3.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,8 @@
     "./tezlink": "./src/tezlink.ts",
     "./constants": "./src/constants.ts",
     "./types": "./src/types.ts",
-    "./utils/*": "./src/utils/*.ts"
+    "./utils/*": "./src/utils/*.ts",
+    "./package.json": "./package.json"
   },
   "scripts": {
     "build": "node build.mjs",

@@ -7,7 +7,7 @@
  * the content bridge (ISOLATED world), which then uses chrome.runtime.sendMessage.
  */
 
-import type { RequestArguments } from 'tezosx-relayer/types';
+import type { RequestArguments } from '@tezosx/relayer/types';
 
 type Listener = (...args: unknown[]) => void;
 

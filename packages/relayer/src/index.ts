@@ -1,4 +1,5 @@
 import { RelayerProvider } from './provider.js';
+import { BeaconClient } from './beacon.js';
 import type { EIP1193Provider } from './types.js';
 
 declare global {
@@ -20,7 +21,7 @@ function inject(): void {
     console.warn('[TezosX Relayer] window.ethereum already set — overriding with Tezos X Relayer.');
   }
 
-  const provider = new RelayerProvider();
+  const provider = new RelayerProvider(new BeaconClient());
 
   // Try to lock window.ethereum so other extensions cannot override it.
   // Falls back to simple assignment if the property is already non-configurable

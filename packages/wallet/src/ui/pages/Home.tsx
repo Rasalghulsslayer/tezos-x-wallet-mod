@@ -39,7 +39,8 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
     }
   };
 
-  useEffect(() => { void refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [state.status]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void refresh(); }, [state.status]);
 
   if (state.status !== 'unlocked') return null;
 
