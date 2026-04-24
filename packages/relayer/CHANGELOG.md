@@ -6,6 +6,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.3.0] — 2026-04-24
+
+### Changed
+- **Monorepo restructure**: the relayer moved from the repository root to `packages/relayer/`. The package is now published as `@tezosx/relayer`. Workspace scripts (`npm -w @tezosx/relayer ...`) are the supported way to build the relayer and its browser extension. The injected `window.ethereum` surface is identical to 0.2.2 — no dApp-facing breaking change.
+
+### Fixed
+- **Fee-model methods**: `eth_estimateGas`, `eth_gasPrice`, `eth_maxPriorityFeePerGas` and `eth_feeHistory` are now short-circuited to fixed constants instead of being proxied to the Tezlink EVM node. Fees on Tezos X are paid on the Michelson runtime via the NAC gateway, so EVM-side fee figures are irrelevant and the proxied values were producing responses that ethers.js v6 could not coalesce into a usable fee model (triggered `could not coalesce error` on `BrowserProvider.populate`). `eth_estimateGas` returns `0x1e8480` (2M gas), `eth_gasPrice` / `eth_maxPriorityFeePerGas` return `0x0`, `eth_feeHistory` returns a minimal well-formed envelope.
+- **Selector resolution**: the local `KNOWN_SIGNATURES` registry used by `GatewayBuilder.fromEthTransaction` now ships standard ERC-20 and common DeFi selectors (`transfer`, `approve`, `transferFrom`, `balanceOf`, `allowance`, `totalSupply`, `decimals`, `deposit(uint256)`, `deposit()`, `withdraw(uint256)`, `withdraw()`, `claim()`, `unstake(uint256)`). Previously these fell through to 4byte.directory, whose `results[0]` can return a colliding signature for common 4-byte prefixes, causing the NAC gateway to recompute a different selector and the target contract to reject the call.
+- Gateway now logs the resolved `selector → methodSig` mapping for each `call_evm` build, simplifying diagnosis of selector lookup issues.
+
+### Compatibility
+- No breaking changes vs. 0.2.2. Kernel requirements unchanged.
+
+---
+
 ## [0.2.2] — 2026-04-23
 
 ### Changed (breaking — matches kernel hard reset)
@@ -81,7 +96,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ## Upcoming
 
-### [0.3.0] — planned
+### [0.4.0] — planned
 - `personal_sign` support (SIWE / EIP-4361, requires kernel ERC-1271)
 - `eth_signTypedData` support (EIP-712)
-- Gas estimation via `eth_estimateGas` before transaction submission
+- ABI hook so dApps can register their own method signatures (removes the 4byte.directory fallback entirely)
