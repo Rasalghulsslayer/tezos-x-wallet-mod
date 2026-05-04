@@ -1,0 +1,40 @@
+# Changelog
+
+This monorepo ships **two independently versioned packages**. Each has its own changelog with the full set of release notes:
+
+- **`@tezosx/relayer`** — [packages/relayer/CHANGELOG.md](packages/relayer/CHANGELOG.md)
+- **`@tezosx/wallet`** — [packages/wallet/CHANGELOG.md](packages/wallet/CHANGELOG.md)
+
+This file is an index of releases. For details (added / changed / fixed / compatibility notes), follow the link to the relevant package changelog.
+
+---
+
+## 2026-04-24
+
+- **`@tezosx/relayer` 0.3.0** — monorepo restructure (now published as `@tezosx/relayer`), fee-model methods short-circuited (`eth_estimateGas`, `eth_gasPrice`, `eth_maxPriorityFeePerGas`, `eth_feeHistory`), `KNOWN_SIGNATURES` registry expanded with standard ERC-20 / DeFi escrow selectors, gateway selector logging. No breaking change vs 0.2.2. → [details](packages/relayer/CHANGELOG.md#030--2026-04-24)
+- **`@tezosx/wallet` 0.2.0** — first release as a published package. UI redesign on the new `--tx-*` design system, Tezos `edsk…` import alongside BIP-39, L1 XTZ balance read from the tz1, Receive page, Buffer polyfill shim, shadcn cleanup. Embeds `@tezosx/relayer` 0.3.0. → [details](packages/wallet/CHANGELOG.md#020--2026-04-24)
+
+---
+
+## 2026-04-23
+
+- **`@tezosx/relayer` 0.2.2** — `call_evm` migrated to the new 4-field Michelson signature (matches kernel hard reset). Breaking: only works against kernels deployed on or after 2026-04-22. → [details](packages/relayer/CHANGELOG.md#022--2026-04-23)
+- **`@tezosx/wallet` 0.1.0** — initial wallet MVP shipped with the v0.3.0 monorepo restructure. → [details](packages/wallet/CHANGELOG.md#010--2026-04-23)
+
+---
+
+## 2026-04-22
+
+- **`@tezosx/relayer` 0.2.1** — real EVM transaction resolution (`eth_getTransactionByHash` / `Receipt` map synthetic NAC hashes back to kernel-synthesized EVM tx), in-flight deduplication, RPC proxy fallback, callMichelson selector registry, fee/gas/storage limits raised, nonce now proxied. → [details](packages/relayer/CHANGELOG.md#021--2026-04-22)
+
+---
+
+## 2026-04-15
+
+- **`@tezosx/relayer` 0.2.0** — Chrome/Brave/Firefox MV3 extension introduced (replaces Tampermonkey), persistent session tracking, popup UI. → [details](packages/relayer/CHANGELOG.md#020--2026-04-15)
+
+---
+
+## 2026-03-24
+
+- **`@tezosx/relayer` 0.1.0** — first release. EIP-1193 provider, EIP-6963 discovery, Temple via Beacon, NAC gateway routing, Tampermonkey injection guide, Docusaurus docs, GitLab CI, playground. → [details](packages/relayer/CHANGELOG.md#010--2026-03-24)
