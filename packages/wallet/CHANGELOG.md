@@ -6,6 +6,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.3.0] — 2026-04-25
+
+### Changed (breaking — default network)
+- **Default network migrated from `testnet` to Tezos X Previewnet.** Inherits the new endpoint defaults from `@tezosx/relayer` 0.4.0 (`evm.previewnet.tezosx.nomadic-labs.com` and `michelson.previewnet.tezosx.nomadic-labs.com`). The deprecated `demo.txpark.nomadic-labs.com` is removed from `manifest.json` `host_permissions`.
+- Block explorer URLs in `src/lib/constants.ts` updated:
+  - `EVM_EXPLORER`   → `https://blockscout.previewnet.tezosx.nomadic-labs.com`
+  - `TEZOS_EXPLORER` → `https://previewnet.tezosx.tzkt.io`
+- Settings → Network row now reads **Tezos X Previewnet**.
+
+### Added
+- **`isTezosXRelayer = true`** flag on the injected `window.ethereum` provider. dApps that route through the NAC gateway flow (notably tzbutton) detect this flag to skip "no native XTZ on L2 for gas" balance checks — fees are paid on Michelson L1, so an empty L2 balance is normal for relayer-routed wallets. Convention shared with `@tezosx/relayer`.
+
+### Fixed
+- Home page XTZ balance now formats with **2 decimal places max** instead of up to 4. Aligns with how XTZ amounts are typically displayed and avoids overflow on large balances.
+
+### Compatibility
+- Requires `@tezosx/relayer` 0.4.0.
+
+---
+
 ## [0.2.0] — 2026-04-24
 
 ### Added

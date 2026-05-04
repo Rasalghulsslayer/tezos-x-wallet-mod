@@ -9,6 +9,13 @@ This file is an index of releases. For details (added / changed / fixed / compat
 
 ---
 
+## 2026-04-25
+
+- **`@tezosx/relayer` 0.4.0** — **breaking, default network**: migration from the legacy `demo.txpark` testnet to **Tezos X Previewnet** (`evm.previewnet.tezosx.nomadic-labs.com` + `michelson.previewnet.tezosx.nomadic-labs.com`). Extension `host_permissions` and chain-name table updated to chain ID `128064`. → [details](packages/relayer/CHANGELOG.md#040--2026-04-25)
+- **`@tezosx/wallet` 0.3.0** — inherits the Previewnet endpoints from relayer 0.4.0; explorer URLs (`blockscout.previewnet…` + `previewnet.tezosx.tzkt.io`) updated; Settings → Network reads Tezos X Previewnet; Home XTZ balance now capped at 2 decimal places. → [details](packages/wallet/CHANGELOG.md#030--2026-04-25)
+
+---
+
 ## 2026-04-24
 
 - **`@tezosx/relayer` 0.3.0** — monorepo restructure (now published as `@tezosx/relayer`), fee-model methods short-circuited (`eth_estimateGas`, `eth_gasPrice`, `eth_maxPriorityFeePerGas`, `eth_feeHistory`), `KNOWN_SIGNATURES` registry expanded with standard ERC-20 / DeFi escrow selectors, gateway selector logging. No breaking change vs 0.2.2. → [details](packages/relayer/CHANGELOG.md#030--2026-04-24)

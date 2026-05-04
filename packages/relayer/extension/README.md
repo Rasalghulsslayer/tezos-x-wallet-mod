@@ -7,9 +7,9 @@ Unlike the IIFE version (manually injected script), the extension is active as s
 ## Prerequisites
 
 - **Temple Wallet** installed in the browser
-- **Tezos X Testnet** network configured in Temple:
-  - Name: `Tezos X Testnet`
-  - RPC URL: `https://demo.txpark.nomadic-labs.com/rpc/tezlink`
+- **Tezos X Previewnet** network configured in Temple:
+  - Name: `Tezos X Previewnet`
+  - RPC URL: `https://michelson.previewnet.tezosx.nomadic-labs.com`
 
 ## Installation (developer mode)
 
@@ -93,12 +93,14 @@ const [tz1] = await window.ethereum.request({ method: 'tez_getAccounts' });
 The extension also announces the provider via **EIP-6963**, making it
 compatible with wagmi v2, RainbowKit, and ConnectKit without any additional configuration.
 
-## Test network
+## Network
 
-| Parameter    | Value                                           |
-|--------------|-------------------------------------------------|
-| Name         | Tezos X Testnet                                 |
-| Chain ID     | `0x1f094` (127124)                              |
-| EVM RPC      | `https://demo.txpark.nomadic-labs.com/rpc`      |
-| L1 RPC       | `https://demo.txpark.nomadic-labs.com/rpc/tezlink` |
-| NAC contract| `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw`         |
+| Parameter    | Value                                                    |
+|--------------|----------------------------------------------------------|
+| Name         | Tezos X Previewnet                                       |
+| Chain ID     | `0x1f440` (128064)                                       |
+| EVM RPC      | `https://evm.previewnet.tezosx.nomadic-labs.com`         |
+| L1 RPC       | `https://michelson.previewnet.tezosx.nomadic-labs.com`   |
+| EVM explorer | `https://blockscout.previewnet.tezosx.nomadic-labs.com`  |
+| L1 explorer  | `https://previewnet.tezosx.tzkt.io`                      |
+| NAC contract | `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw`                   |
