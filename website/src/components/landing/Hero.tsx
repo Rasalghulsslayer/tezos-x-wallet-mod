@@ -2,7 +2,11 @@ import Link from '@docusaurus/Link';
 import BrowserOnly from '@docusaurus/BrowserOnly';
 import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
-import pkg from '../../../../package.json';
+import relayerPkg from '../../../../packages/relayer/package.json';
+import walletPkg from '../../../../packages/wallet/package.json';
+
+const RELAYER_VERSION = relayerPkg.version;
+const WALLET_VERSION  = walletPkg.version;
 
 const HYPERSPEED_OPTIONS = {
   distortion: 'turbulentDistortion',
@@ -72,14 +76,21 @@ export function Hero() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="mb-8"
+          className="mb-8 flex flex-wrap justify-center gap-2"
         >
           <span className="inline-flex items-center gap-2 rounded-full border border-[rgba(108,71,255,0.25)] bg-[rgba(108,71,255,0.08)] px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-[#a890ff] backdrop-blur-sm">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#7c5cff] opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-[#7c5cff]" />
             </span>
-            v{pkg.version} · Testnet · Shadownet
+            Relayer v{RELAYER_VERSION}
+          </span>
+          <span className="inline-flex items-center gap-2 rounded-full border border-[rgba(0,194,255,0.25)] bg-[rgba(0,194,255,0.08)] px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-[#7dd3fc] backdrop-blur-sm">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#00c2ff] opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#00c2ff]" />
+            </span>
+            Wallet v{WALLET_VERSION}
           </span>
         </motion.div>
 
@@ -98,7 +109,7 @@ export function Hero() {
               animation: 'shimmer 4s linear infinite',
             }}
           >
-            Tezos X Relayer
+            TezosX
           </span>
         </motion.h1>
 
@@ -119,13 +130,13 @@ export function Hero() {
           className="mx-auto mt-4 max-w-xl text-base sm:text-lg leading-relaxed"
           style={{ color: 'var(--ifm-color-emphasis-700)' }}
         >
-          Interact with <strong>Etherlink dApps</strong> using your Tezos wallet.
+          Relayer & Wallet for <strong>Tezos X / Etherlink</strong>.
           <br />
-          No EVM account required: just a{' '}
+          Use any Etherlink dApp with just a{' '}
           <code className="rounded-md bg-[rgba(108,71,255,0.1)] px-1.5 py-0.5 font-mono text-sm text-[#a890ff]">
             tz1
           </code>{' '}
-          address.
+          — no EVM account required.
         </motion.p>
 
         {/* Actions */}
@@ -137,16 +148,17 @@ export function Hero() {
         >
           <Link
             to="/docs/intro"
-            className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#6c47ff] to-[#00c2ff] px-6 py-3 text-sm font-bold text-white shadow-[0_4px_24px_rgba(108,71,255,0.3)] transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_32px_rgba(108,71,255,0.45)] no-underline hover:no-underline"
+            className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#6c47ff] to-[#7c3aed] px-6 py-3 text-sm font-bold text-white shadow-[0_4px_24px_rgba(108,71,255,0.3)] transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_32px_rgba(108,71,255,0.45)] no-underline hover:no-underline"
           >
-            Get Started
+            Relayer docs
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
           <Link
-            to="/docs/architecture/overview"
-            className="inline-flex items-center rounded-xl border border-[rgba(108,71,255,0.35)] px-6 py-3 text-sm font-bold text-[#a890ff] backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:border-[rgba(108,71,255,0.6)] hover:bg-[rgba(108,71,255,0.08)] no-underline hover:no-underline"
+            to="/wallet/intro"
+            className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#0284c7] to-[#00c2ff] px-6 py-3 text-sm font-bold text-white shadow-[0_4px_24px_rgba(0,194,255,0.25)] transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_32px_rgba(0,194,255,0.4)] no-underline hover:no-underline"
           >
-            Architecture
+            Wallet docs
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
           <Link
             href="https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer"

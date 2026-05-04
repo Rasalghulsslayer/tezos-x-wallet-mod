@@ -1,10 +1,20 @@
 {
-  // This file is not used in compilation. It is here just for a nice editor experience.
-  "extends": "@docusaurus/tsconfig",
+  // Editor-only tsconfig (Docusaurus compiles via its own tooling).
   "compilerOptions": {
-    "baseUrl": ".",
-    "jsx": "react-jsx",
-    "resolveJsonModule": true
+    "allowJs":             true,
+    "esModuleInterop":     true,
+    "jsx":                 "react-jsx",
+    "target":              "ES2022",
+    "lib":                 ["ES2022", "DOM"],
+    "moduleResolution":    "bundler",
+    "module":              "esnext",
+    "noEmit":              true,
+    "resolveJsonModule":   true,
+    "skipLibCheck":        true,
+    "paths": {
+      "@site/*": ["./*"]
+    }
   },
-  "exclude": [".docusaurus", "build"]
+  "include": ["src", "docs", "versioned_docs", "docusaurus.config.ts", "sidebars.ts"],
+  "exclude": [".docusaurus", "build", "node_modules"]
 }

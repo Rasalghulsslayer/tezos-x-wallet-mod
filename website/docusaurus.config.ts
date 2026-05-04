@@ -1,11 +1,10 @@
 import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
-import pkg from '../package.json';
 
 const config: Config = {
-  title: 'Tezos X Relayer',
-  tagline: `v${pkg.version} — Interact with Etherlink dApps using your Tezos wallet`,
+  title: 'TezosX',
+  tagline: `Relayer & Wallet for Tezos X / Etherlink`,
   favicon: 'img/tezos-logo.png',
   url: 'https://tezosx-relayer-9c5cf1.gitlab.io',
   baseUrl: process.env.BASE_URL ?? '/',
@@ -17,7 +16,18 @@ const config: Config = {
     locales: ['en'],
   },
 
-  plugins: ['./src/plugins/tailwind-config.js'],
+  plugins: [
+    './src/plugins/tailwind-config.js',
+    [
+      '@docusaurus/plugin-content-docs',
+      {
+        id: 'wallet',
+        path: 'wallet-docs',
+        routeBasePath: 'wallet',
+        sidebarPath: './sidebars-wallet.ts',
+      },
+    ],
+  ],
 
   markdown: {
     mermaid: true,
@@ -48,7 +58,7 @@ const config: Config = {
     },
     image: 'img/tezos-logo.png',
     navbar: {
-      title: 'Tezos X Relayer',
+      title: 'TezosX',
       logo: {
         alt: 'Tezos X Logo',
         src: 'img/tezos-logo.png',
@@ -58,20 +68,20 @@ const config: Config = {
           type: 'docSidebar',
           sidebarId: 'docs',
           position: 'left',
-          label: 'Docs',
-        },
-        {
-          to: '/docs/technical/api-reference',
-          label: 'API',
-          position: 'left',
-        },
-        {
-          to: '/docs/user-flows/connect-wallet',
-          label: 'User Flows',
-          position: 'left',
+          label: 'Relayer',
         },
         {
           type: 'docsVersionDropdown',
+          position: 'left',
+        },
+        {
+          to: '/wallet/intro',
+          label: 'Wallet',
+          position: 'right',
+        },
+        {
+          type: 'docsVersionDropdown',
+          docsPluginId: 'wallet',
           position: 'right',
         },
         {
@@ -90,6 +100,8 @@ const config: Config = {
             { label: 'Introduction', to: '/docs/intro' },
             { label: 'Architecture', to: '/docs/architecture/overview' },
             { label: 'API Reference', to: '/docs/technical/api-reference' },
+            { label: 'Wallet', to: '/wallet/intro' },
+            { label: 'Security Model', to: '/wallet/technical/security-model' },
           ],
         },
         {
@@ -101,7 +113,7 @@ const config: Config = {
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} Nomadic Labs — Tezos X Relayer`,
+      copyright: `Copyright © ${new Date().getFullYear()} Nomadic Labs — TezosX — Relayer & Wallet`,
     },
     prism: {
       theme: prismThemes.oneDark,

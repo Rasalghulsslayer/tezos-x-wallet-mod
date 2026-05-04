@@ -3,59 +3,96 @@ stages:
   - build
   - deploy
 
+# ── Shared ─────────────────────────────────────────────────────────────────────
+
+.node: &node
+  image: node:22
+  before_script:
+    - npm ci
+
+# ── Test stage ─────────────────────────────────────────────────────────────────
+
 lint:
-  image: node:20
+  <<: *node
   stage: test
   script:
-    - npm ci
     - npm run lint
+
+typecheck:relayer:
+  <<: *node
+  stage: test
+  script:
     - npm run typecheck
-    - npm run typecheck:ext
+
+typecheck:wallet:
+  <<: *node
+  stage: test
+  script:
+    - npm run typecheck:wallet
+
+typecheck:website:
+  image: node:22
+  stage: test
+  script:
+    - cd website && npm ci && npx tsc --noEmit
+
+# ── Build stage ────────────────────────────────────────────────────────────────
 
 build:relayer:
-  image: node:20
+  <<: *node
   stage: build
+  needs: [lint, typecheck:relayer]
   script:
-    - npm ci
     - npm run build
   artifacts:
     paths:
-      - dist/
+      - packages/relayer/dist/
     expire_in: 1 week
 
 build:extension:
-  image: node:20
+  <<: *node
   stage: build
+  needs: [lint, typecheck:relayer]
   script:
-    - npm ci
     - npm run build:ext
   artifacts:
     paths:
-      - extension/dist/
+      - packages/relayer/extension/dist/
+    expire_in: 1 week
+
+build:wallet:
+  <<: *node
+  stage: build
+  needs: [lint, typecheck:wallet]
+  script:
+    - npm run build:wallet
+  artifacts:
+    paths:
+      - packages/wallet/dist/
     expire_in: 1 week
 
 build:website:
-  image: node:20
+  image: node:22
   stage: build
+  needs: [typecheck:website]
   script:
-    - cd website
-    - npm ci
-    - npm run build
+    - cd website && npm ci && npm run build
   artifacts:
     paths:
       - website/build/
     expire_in: 1 week
 
+# ── Deploy stage ───────────────────────────────────────────────────────────────
+
 pages:
-  image: node:20
+  image: node:22
   stage: deploy
+  needs: [build:website]
   script:
-    - cd website
-    - npm ci
-    - BASE_URL=/ npm run build
-    - mv build ../public
+    - cd website && npm ci && BASE_URL=/ npm run build
+    - mv website/build public
   artifacts:
     paths:
       - public
-  only:
-    - main
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"

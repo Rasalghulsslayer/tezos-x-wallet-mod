@@ -1,0 +1,45 @@
+import type { SidebarsConfig } from '@docusaurus/plugin-content-docs';
+
+const sidebars: SidebarsConfig = {
+  wallet: [
+    'intro',
+    'installation',
+    {
+      type: 'category',
+      label: 'Architecture',
+      collapsed: false,
+      items: [
+        'architecture/overview',
+        'architecture/runtime-boundaries',
+        'architecture/keyring',
+        'architecture/dapp-bridge',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'User Flows',
+      collapsed: false,
+      items: [
+        'user-flows/create-wallet',
+        'user-flows/import-wallet',
+        'user-flows/view-balances',
+        'user-flows/send-xtz',
+        'user-flows/dapp-approval',
+        'user-flows/manage-connections',
+        'user-flows/settings',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Technical',
+      collapsed: false,
+      items: [
+        'technical/build',
+        'technical/local-signer',
+        'technical/security-model',
+      ],
+    },
+  ],
+};
+
+export default sidebars;
