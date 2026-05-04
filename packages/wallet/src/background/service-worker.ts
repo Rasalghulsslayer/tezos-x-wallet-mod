@@ -271,7 +271,7 @@ chrome.runtime.onMessage.addListener(
 );
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.info('[TezosX Wallet] service worker installed, v0.3.0');
+  console.info('[TezosX Wallet] service worker installed, v0.3.1');
 });
 
 console.info('[TezosX Wallet] service worker booted');

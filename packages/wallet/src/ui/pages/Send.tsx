@@ -2,25 +2,36 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { VaultState } from '@/lib/messages';
 import { sendPopupRequest } from '@/lib/messaging';
+import { detectRuntime, type DestRuntime } from '@/lib/address';
 import { Button } from '../tx/Button';
 import { Icon } from '../tx/Icon';
 import { TopBar } from '../tx/TopBar';
 import { AssetMark } from '../tx/AssetMark';
 import { ChainPill } from '../tx/ChainPill';
 import { Line } from '../tx/Line';
+import { RoutingCard } from '../tx/RoutingCard';
 import { truncAddr } from '../tx/utils';
 
 type Stage = 'form' | 'review' | 'sending' | 'done';
 type Asset = 'XTZ' | 'USDC';
-
-const TZ_ADDR_RE  = /^(tz[1234]|KT1)[a-zA-Z0-9]{33}$/;
-const EVM_ADDR_RE = /^0x[a-fA-F0-9]{40}$/;
 
 function xtzToHexWei(xtz: string): string {
   const [whole, frac = ''] = xtz.trim().split('.');
   const padded = (whole + frac.padEnd(18, '0')).slice(0, whole.length + 18);
   const big = BigInt(padded);
   return '0x' + big.toString(16);
+}
+
+function routingLabel(dest: DestRuntime): string {
+  if (dest === 'l1') return 'Same-runtime · Tezos L1';
+  if (dest === 'l2') return 'Cross-runtime · L1 → L2 via NAC gateway';
+  return '—';
+}
+
+function settlingSuffix(dest: DestRuntime): string {
+  if (dest === 'l2') return 'via NAC gateway';
+  if (dest === 'l1') return 'on Tezos L1';
+  return '';
 }
 
 export function Send({ state, onDone }: { state: VaultState; onDone: () => void }) {
@@ -34,7 +45,15 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
 
   if (state.status !== 'unlocked') return null;
 
-  const valid = (TZ_ADDR_RE.test(to) || EVM_ADDR_RE.test(to)) && /^\d+(\.\d+)?$/.test(amount) && Number(amount) > 0;
+  const dest    = detectRuntime(to);
+  const isCross = dest === 'l2';
+
+  const usdcOnL1 = asset === 'USDC' && dest === 'l1';
+  const valid =
+    dest !== null &&
+    !usdcOnL1 &&
+    /^\d+(\.\d+)?$/.test(amount) &&
+    Number(amount) > 0;
 
   const submit = async () => {
     setStage('sending');
@@ -60,6 +79,7 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
     if (stage === 'review') setStage('form');
   };
 
+  // ── Sending stage ────────────────────────────────────────────────────────
   if (stage === 'sending') {
     return (
       <div className="tx-page">
@@ -69,7 +89,7 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
           <div>
             <div style={{ fontSize: 18, fontWeight: 500 }}>Broadcasting…</div>
             <div style={{ fontSize: 13, color: 'var(--tx-fg-muted)', marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>
-              {parseFloat(amount || '0').toLocaleString()} {asset} · {asset === 'XTZ' ? 'Tezos L1' : 'Etherlink L2'}
+              {parseFloat(amount || '0').toLocaleString()} {asset} · {settlingSuffix(dest)}
             </div>
           </div>
         </div>
@@ -77,6 +97,7 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
     );
   }
 
+  // ── Done stage ───────────────────────────────────────────────────────────
   if (stage === 'done') {
     return (
       <div className="tx-page">
@@ -90,6 +111,9 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
             <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.015em' }}>Sent</div>
             <div style={{ fontSize: 13, color: 'var(--tx-fg-muted)', marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>
               {parseFloat(amount || '0').toLocaleString()} {asset} to {truncAddr(to, 6)}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--tx-fg-subtle)', marginTop: 4 }}>
+              {settlingSuffix(dest)}
             </div>
           </div>
           <div style={{ flex: 1 }} />
@@ -106,6 +130,7 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
     );
   }
 
+  // ── Review stage ─────────────────────────────────────────────────────────
   if (stage === 'review') {
     return (
       <div className="tx-page">
@@ -114,21 +139,29 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
           <div className="tx-lane" style={{ marginBottom: 16 }}>
             <div className="tx-lane-side">
               <span className="k">From</span>
-              <span className="v">{truncAddr(asset === 'XTZ' ? state.tz1 : state.evmAlias, 6)}</span>
-              <ChainPill chain={asset === 'XTZ' ? 'l1' : 'l2'} />
+              <span className="v">{truncAddr(state.tz1, 6)}</span>
+              <ChainPill chain="l1" />
             </div>
-            <span className="tx-lane-arrow"><Icon name="arrow-right" size={14} /></span>
+            <span
+              className="tx-lane-arrow"
+              title={isCross ? 'via NAC gateway' : 'native L1 transfer'}
+              style={isCross ? { background: 'linear-gradient(90deg, var(--tx-purple), var(--tx-cyan))', color: '#fff' } : undefined}
+            >
+              <Icon name="arrow-right" size={14} />
+            </span>
             <div className="tx-lane-side">
               <span className="k">To</span>
               <span className="v">{truncAddr(to, 6)}</span>
-              <ChainPill chain={asset === 'XTZ' ? 'l1' : 'l2'} />
+              <ChainPill chain={dest === 'l2' ? 'l2' : 'l1'} />
             </div>
           </div>
 
           <div className="tx-card" style={{ padding: 0 }}>
             <Line label="Amount" value={`${parseFloat(amount).toLocaleString()} ${asset}`} />
             <div className="tx-divider" />
-            <Line label="Network" value="Tezos X Testnet · via NAC" />
+            <Line label="Routing" value={routingLabel(dest)} />
+            <div className="tx-divider" />
+            <Line label="Network" value="Tezos X Previewnet" />
           </div>
 
           {error != null && (
@@ -137,7 +170,11 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
 
           <div style={{ fontSize: 11, color: 'var(--tx-fg-subtle)', padding: '12px 4px', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
             <Icon name="info" size={14} color="var(--tx-fg-subtle)" />
-            <span>Make sure the recipient is correct — transfers can't be reversed.</span>
+            <span>
+              {isCross
+                ? 'Your tz1 signs an L1 op routed to the EVM runtime through the NAC gateway. The receiving 0x address is credited atomically.'
+                : 'Make sure the recipient is correct — transfers can\'t be reversed.'}
+            </span>
           </div>
         </div>
         <div className="tx-action-bar" style={{ gap: 8 }}>
@@ -148,7 +185,7 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
     );
   }
 
-  // form
+  // ── Form stage ───────────────────────────────────────────────────────────
   return (
     <div className="tx-page">
       <TopBar title="Send" onBack={back} />
@@ -168,7 +205,7 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
             <AssetMark asset="xtz" size="sm" />
             <div style={{ textAlign: 'left', marginLeft: 4 }}>
               <div style={{ fontSize: 13 }}>XTZ</div>
-              <div style={{ fontSize: 11, color: 'var(--tx-fg-muted)', fontWeight: 400 }}>Tezos L1</div>
+              <div style={{ fontSize: 11, color: 'var(--tx-fg-muted)', fontWeight: 400 }}>Native asset</div>
             </div>
           </button>
           <button
@@ -184,7 +221,7 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
             <AssetMark asset="usdc" size="sm" />
             <div style={{ textAlign: 'left', marginLeft: 4 }}>
               <div style={{ fontSize: 13 }}>USDC</div>
-              <div style={{ fontSize: 11, color: 'var(--tx-fg-muted)', fontWeight: 400 }}>Etherlink L2</div>
+              <div style={{ fontSize: 11, color: 'var(--tx-fg-muted)', fontWeight: 400 }}>Etherlink L2 · ERC-20</div>
             </div>
           </button>
         </div>
@@ -194,12 +231,9 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
           className="tx-input mono"
           value={to}
           onChange={(e) => setTo(e.target.value)}
-          placeholder={asset === 'XTZ' ? 'tz1… or tz2…' : '0x…'}
+          placeholder={asset === 'USDC' ? '0x…' : 'tz1… or 0x…'}
         />
-        <div style={{ fontSize: 11, color: 'var(--tx-fg-subtle)', marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <ChainPill chain={asset === 'XTZ' ? 'l1' : 'l2'} />
-          <span>Sending on {asset === 'XTZ' ? 'Tezos L1' : 'Etherlink L2'}</span>
-        </div>
+        <RoutingCard asset={asset} dest={dest} />
 
         <div className="tx-kicker" style={{ padding: '18px 0 8px' }}>Amount</div>
         <div className="tx-card flat" style={{ padding: 16 }}>

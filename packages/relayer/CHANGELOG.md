@@ -6,7 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
-## [0.4.0] — 2026-04-25
+## [0.4.0] — 2026-05-04
 
 ### Changed (breaking — default network)
 - **Default network migrated from `testnet` (`demo.txpark.nomadic-labs.com`) to Tezos X Previewnet.** New endpoint defaults baked into `src/constants.ts`:

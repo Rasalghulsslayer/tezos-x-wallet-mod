@@ -9,10 +9,11 @@ This file is an index of releases. For details (added / changed / fixed / compat
 
 ---
 
-## 2026-04-25
+## 2026-05-04
 
-- **`@tezosx/relayer` 0.4.0** — **breaking, default network**: migration from the legacy `demo.txpark` testnet to **Tezos X Previewnet** (`evm.previewnet.tezosx.nomadic-labs.com` + `michelson.previewnet.tezosx.nomadic-labs.com`). Extension `host_permissions` and chain-name table updated to chain ID `128064`. → [details](packages/relayer/CHANGELOG.md#040--2026-04-25)
-- **`@tezosx/wallet` 0.3.0** — inherits the Previewnet endpoints from relayer 0.4.0; explorer URLs (`blockscout.previewnet…` + `previewnet.tezosx.tzkt.io`) updated; Settings → Network reads Tezos X Previewnet; Home XTZ balance now capped at 2 decimal places. → [details](packages/wallet/CHANGELOG.md#030--2026-04-25)
+- **`@tezosx/wallet` 0.3.1** — Send page makes the cross-runtime semantics explicit: a `RoutingCard` reacts to the recipient address in real time (same-runtime `tz1 → tz1` vs cross-runtime `tz1 → 0x` via NAC gateway), Review stage shows a Routing row and a gradient arrow when the call crosses runtimes, asset cards no longer claim a fixed runtime for XTZ. New `lib/address.ts` helper for recipient parsing. UI-only, no wire-protocol change. Upcoming 0.4.0 will skip the NAC gateway for same-runtime `tz1 → tz1` transfers (native Michelson op directly). → [details](packages/wallet/CHANGELOG.md#031--2026-05-04)
+- **`@tezosx/relayer` 0.4.0** — **breaking, default network**: migration from the legacy `demo.txpark` testnet to **Tezos X Previewnet** (`evm.previewnet.tezosx.nomadic-labs.com` + `michelson.previewnet.tezosx.nomadic-labs.com`). Extension `host_permissions` and chain-name table updated to chain ID `128064`. → [details](packages/relayer/CHANGELOG.md#040--2026-05-04)
+- **`@tezosx/wallet` 0.3.0** — inherits the Previewnet endpoints from relayer 0.4.0; explorer URLs (`blockscout.previewnet…` + `previewnet.tezosx.tzkt.io`) updated; Settings → Network reads Tezos X Previewnet; Home XTZ balance now capped at 2 decimal places. → [details](packages/wallet/CHANGELOG.md#030--2026-05-04)
 
 ---
 
