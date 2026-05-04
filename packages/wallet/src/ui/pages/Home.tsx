@@ -99,7 +99,7 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
               fontVariantNumeric: 'tabular-nums',
             }}
           >
-            <span>{bal ? xtzNumeric.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '—'}</span>
+            <span>{bal ? xtzNumeric.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</span>
             <span style={{ color: 'var(--tx-fg-muted)', fontWeight: 400, marginLeft: 6 }}>XTZ</span>
           </div>
           {error && (
@@ -140,7 +140,7 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
               </div>
             </div>
             <div className="tx-row-right">
-              <div className="amt">{bal ? xtzNumeric.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '—'}</div>
+              <div className="amt">{bal ? xtzNumeric.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</div>
             </div>
           </div>
           <div className="tx-row">

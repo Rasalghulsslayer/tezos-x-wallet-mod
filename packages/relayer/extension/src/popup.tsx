@@ -21,7 +21,7 @@ function shortAddr(addr: string, head = 6, tail = 4): string {
 
 function chainName(chainId: string): string {
   const dec = parseInt(chainId, 16);
-  if (dec === 127124) return 'Tezos X Testnet';
+  if (dec === 128064) return 'Tezos X Previewnet';
   if (!isNaN(dec)) return `Chain ${dec}`;
   return chainId || 'Unknown';
 }
@@ -266,12 +266,12 @@ function App() {
       <footer>
         <span>Tezos X · EIP-1193 Bridge</span>
         <a
-          href="https://demo.txpark.nomadic-labs.com"
+          href="https://blockscout.previewnet.tezosx.nomadic-labs.com"
           target="_blank"
           rel="noopener noreferrer"
           className="footer-link"
         >
-          Testnet
+          Previewnet
           <ExternalLink size={10} />
         </a>
       </footer>

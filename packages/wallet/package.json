@@ -1,7 +1,7 @@
 {
   "name": "@tezosx/wallet",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,7 +16,7 @@
     "@taquito/rpc": "^24.3.0",
     "@taquito/signer": "^24.3.0",
     "@taquito/taquito": "^24.3.0",
-    "@tezosx/relayer": "^0.3.0",
+    "@tezosx/relayer": "^0.4.0",
     "buffer": "^6.0.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

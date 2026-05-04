@@ -6,6 +6,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.4.0] — 2026-04-25
+
+### Changed (breaking — default network)
+- **Default network migrated from `testnet` (`demo.txpark.nomadic-labs.com`) to Tezos X Previewnet.** New endpoint defaults baked into `src/constants.ts`:
+  - `TEZLINK_EVM_RPC` → `https://evm.previewnet.tezosx.nomadic-labs.com`
+  - `TEZOS_L1_RPC`    → `https://michelson.previewnet.tezosx.nomadic-labs.com` (note: on Previewnet the Michelson RPC is the host root — **no `/rpc/tezlink` suffix**)
+- Browser extension `host_permissions` updated to grant access to the two Previewnet hosts only (the deprecated `demo.txpark` host is removed).
+- Extension popup chain-name table now resolves chain ID `128064` (`0x1f440`) to **Tezos X Previewnet**. The old `127124` (`0x1f094`) testnet label is gone.
+
+### Compatibility
+- Kernel requirement unchanged from 0.3.0 (the new 4-field `call_evm` signature introduced in 0.2.2).
+
+---
+
 ## [0.3.0] — 2026-04-24
 
 ### Changed
