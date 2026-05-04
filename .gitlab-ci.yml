@@ -89,7 +89,6 @@ pages:
   stage: deploy
   needs: [build:website]
   script:
-    - cd website && npm ci && BASE_URL=/ npm run build
     - mv website/build public
   artifacts:
     paths:

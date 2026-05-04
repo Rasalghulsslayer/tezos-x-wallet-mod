@@ -6,7 +6,7 @@ sidebar_label: dApp Bridge & Approval
 
 # dApp Bridge & Approval Queue
 
-When a dApp calls `eth_requestAccounts` or `eth_sendTransaction`, the wallet cannot proceed silently — it must show the user a consent screen. The `ApprovalQueue` ([`packages/wallet/src/background/approval-queue.ts`](../../packages/wallet/src/background/approval-queue.ts)) manages this flow.
+When a dApp calls `eth_requestAccounts` or `eth_sendTransaction`, the wallet cannot proceed silently — it must show the user a consent screen. The `ApprovalQueue` ([`packages/wallet/src/background/approval-queue.ts`](https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer/-/blob/main/packages/wallet/src/background/approval-queue.ts)) manages this flow.
 
 ## Two request types
 

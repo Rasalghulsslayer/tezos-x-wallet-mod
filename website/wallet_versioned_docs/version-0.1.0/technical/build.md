@@ -21,7 +21,7 @@ The build produces four independent bundles:
 
 ## Vite config highlights
 
-**File**: [`packages/wallet/vite.config.ts`](../../../packages/wallet/vite.config.ts)
+**File**: [`packages/wallet/vite.config.ts`](https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer/-/blob/main/packages/wallet/vite.config.ts)
 
 ```ts
 export default defineConfig({

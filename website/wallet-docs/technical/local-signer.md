@@ -6,11 +6,11 @@ sidebar_label: Local Signer
 
 # Local Signer
 
-`LocalSignerClient` ([`packages/wallet/src/background/signer.ts`](../../../packages/wallet/src/background/signer.ts)) is the wallet's implementation of `ITezosWalletClient`. It signs Tezos L1 operations locally using a secret key held in service worker memory — no Temple or Beacon SDK required.
+`LocalSignerClient` ([`packages/wallet/src/background/signer.ts`](https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer/-/blob/main/packages/wallet/src/background/signer.ts)) is the wallet's implementation of `ITezosWalletClient`. It signs Tezos L1 operations locally using a secret key held in service worker memory — no Temple or Beacon SDK required.
 
 ## Interface
 
-`LocalSignerClient` implements [`ITezosWalletClient`](../../../packages/relayer/src/wallet-client.ts):
+`LocalSignerClient` implements [`ITezosWalletClient`](https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer/-/blob/main/packages/relayer/src/wallet-client.ts):
 
 ```ts
 interface ITezosWalletClient {

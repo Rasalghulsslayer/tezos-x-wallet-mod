@@ -6,7 +6,7 @@ sidebar_label: Keyring & Vault
 
 # Keyring & Vault
 
-The `Keyring` class ([`packages/wallet/src/background/keyring.ts`](../../packages/wallet/src/background/keyring.ts)) manages the full lifecycle of a Tezos identity: creation, encrypted persistence, unlocking, and export.
+The `Keyring` class ([`packages/wallet/src/background/keyring.ts`](https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer/-/blob/main/packages/wallet/src/background/keyring.ts)) manages the full lifecycle of a Tezos identity: creation, encrypted persistence, unlocking, and export.
 
 ## Storage model
 

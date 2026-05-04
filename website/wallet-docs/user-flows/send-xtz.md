@@ -86,5 +86,5 @@ On success, the wallet shows a synthetic transaction hash (32-byte hex prefixed 
 Click **Back to home** to return to the balance view.
 
 :::info Receipt resolution
-The hash shown is a synthetic hash. The real kernel-synthesized EVM transaction hash may differ. See the [Relayer architecture](../../docs/architecture/overview) for details on hash resolution.
+The hash shown is a synthetic hash. The real kernel-synthesized EVM transaction hash may differ. See the [Relayer architecture](/docs/architecture/overview) for details on hash resolution.
 :::
