@@ -46,8 +46,12 @@ function newRequestId(): string {
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 class TezosXWalletProvider {
-  readonly isMetaMask    = false;
-  readonly isTezosXWallet = true;
+  readonly isMetaMask     = false;
+  readonly isTezosXWallet  = true;
+  /** Signals that the provider routes EVM calls through the Tezos X NAC
+   *  gateway (CRAC). dApps use this to skip "no XTZ on L2" gas checks
+   *  since fees are paid on Michelson L1, not on the EVM runtime. */
+  readonly isTezosXRelayer = true;
 
   private readonly listeners = new Map<string, Set<Listener>>();
 
