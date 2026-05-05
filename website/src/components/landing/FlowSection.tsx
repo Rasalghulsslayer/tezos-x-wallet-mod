@@ -1,16 +1,17 @@
 import { useRef } from 'react';
 import { motion, useInView } from 'framer-motion';
-
-const FLOW = [
-  { logo: '/img/temple.png',         label: 'Temple',    sub: 'Beacon · tz1' },
-  { logo: '/img/relayer-logo.png',   label: 'Relayer',   sub: 'EIP-1193' },
-  { logo: '/img/tezos-logo.png', label: 'NAC',       sub: 'Gateway' },
-  { logo: '/img/etherlink.png',      label: 'Etherlink', sub: 'EVM dApps' },
-];
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 
 export function FlowSection() {
   const ref = useRef(null);
   const inView = useInView(ref, { once: true, margin: '-40px' });
+  const { siteConfig: { baseUrl } } = useDocusaurusContext();
+  const flow = [
+    { logo: `${baseUrl}img/temple.png`,       label: 'Temple',    sub: 'Beacon · tz1' },
+    { logo: `${baseUrl}img/relayer-logo.png`, label: 'Relayer',   sub: 'EIP-1193' },
+    { logo: `${baseUrl}img/tezos-logo.png`,   label: 'NAC',       sub: 'Gateway' },
+    { logo: `${baseUrl}img/etherlink.png`,    label: 'Etherlink', sub: 'EVM dApps' },
+  ];
 
   return (
     <section ref={ref} className="mb-20">
@@ -21,7 +22,7 @@ export function FlowSection() {
 
       {/* Desktop: horizontal */}
       <div className="hidden sm:flex items-center justify-center gap-0">
-        {FLOW.map((node, i) => (
+        {flow.map((node, i) => (
           <div key={node.label} className="flex items-center">
             {i > 0 && (
               <div className="relative mx-2 h-[2px] w-16 overflow-hidden rounded-full bg-[rgba(108,71,255,0.15)]">
@@ -52,7 +53,7 @@ export function FlowSection() {
 
       {/* Mobile: vertical */}
       <div className="flex sm:hidden flex-col items-center gap-0">
-        {FLOW.map((node, i) => (
+        {flow.map((node, i) => (
           <div key={node.label} className="flex flex-col items-center">
             {i > 0 && (
               <div className="relative my-1 h-8 w-[2px] overflow-hidden rounded-full bg-[rgba(108,71,255,0.15)]">
