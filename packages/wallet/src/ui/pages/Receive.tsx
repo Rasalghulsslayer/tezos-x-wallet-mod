@@ -26,7 +26,7 @@ export function Receive({ state }: { state: VaultState }) {
       <div className="tx-page-scroll" style={{ padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <div className="tx-runtime-toggle" style={{ marginBottom: 18 }}>
           <button className={`l1 ${runtime === 'l1' ? 'on' : ''}`} onClick={() => setRuntime('l1')}>Tezos L1</button>
-          <button className={`l2 ${runtime === 'l2' ? 'on' : ''}`} onClick={() => setRuntime('l2')}>Etherlink L2</button>
+          <button className={`l2 ${runtime === 'l2' ? 'on' : ''}`} onClick={() => setRuntime('l2')}>Tezos L2</button>
         </div>
 
         <QrCode value={addr} />
@@ -56,7 +56,7 @@ export function Receive({ state }: { state: VaultState }) {
         </div>
 
         <div style={{ fontSize: 11, color: 'var(--tx-fg-subtle)', textAlign: 'center', marginTop: 16, lineHeight: 1.55 }}>
-          Only send {runtime === 'l1' ? 'Tezos-native assets' : 'Etherlink L2 assets'} to this address.
+          Only send {runtime === 'l1' ? 'Tezos-native assets' : 'EVM-side assets'} to this address.
           <br />Cross-chain transfers need a bridge.
         </div>
       </div>

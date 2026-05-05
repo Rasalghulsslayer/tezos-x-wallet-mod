@@ -59,7 +59,7 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
         <LinkRow
           icon="globe"
           t="Blockscout (EVM)"
-          sub="Etherlink L2 explorer"
+          sub="EVM explorer (Blockscout)"
           onClick={() => { window.open(`${EVM_EXPLORER}/address/${state.evmAlias}`, '_blank'); }}
         />
         <LinkRow
@@ -74,7 +74,7 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
         <LinkRow icon="lock" t="Lock wallet" onClick={lock} />
 
         <div className="tx-section-head"><span className="t">About</span></div>
-        <LinkRow icon="info" t="Version" sub="Wallet v0.3.1 · Relayer v0.4.0" />
+        <LinkRow icon="info" t="Version" sub="Wallet v0.4.0 · Relayer v0.4.0" />
         <LinkRow icon="info" t="Network" sub="Tezos X Previewnet" />
 
         <div style={{ height: 16 }} />

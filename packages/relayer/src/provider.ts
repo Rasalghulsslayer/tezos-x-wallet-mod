@@ -247,6 +247,21 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
   }
 
   /**
+   * Public façade over `resolveRealHash`. Awaits the kernel-synthesized EVM
+   * hash that matches a synthetic NAC hash; returns null if the resolver
+   * times out. Used by wallet UIs that want to render the real hash before
+   * showing "Done" instead of a synthetic placeholder.
+   */
+  async resolveSyntheticHash(syntheticHash: string): Promise<string | null> {
+    return this.resolveRealHash(syntheticHash);
+  }
+
+  /** Returns the underlying L1 op hash for a synthetic NAC hash, if any. */
+  getPendingL1Hash(syntheticHash: string): string | null {
+    return this.pendingOps.get(syntheticHash)?.l1OpHash ?? null;
+  }
+
+  /**
    * Resolve the real kernel-synthesized EVM tx hash for a given synthetic
    * hash. Caches the result on the pending op and deduplicates concurrent
    * callers via a per-hash in-flight promise.

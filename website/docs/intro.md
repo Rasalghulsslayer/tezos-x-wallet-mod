@@ -40,6 +40,6 @@ The **Tezos X Relayer** implements [EIP-1193](https://eips.ethereum.org/EIPS/eip
 
 ## Links
 
-- [GitLab Repository](https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer)
+- [GitLab Repository](https://github.com/trilitech/tezos-x-wallet)
 - [Etherlink Documentation](https://docs.etherlink.com)
 - [Tezos X Overview](https://tezos.com)

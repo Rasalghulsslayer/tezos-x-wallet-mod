@@ -161,7 +161,7 @@ export function Hero() {
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
           <Link
-            href="https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer"
+            href="https://github.com/trilitech/tezos-x-wallet"
             className="inline-flex items-center rounded-xl px-6 py-3 text-sm font-semibold transition-all hover:-translate-y-0.5 no-underline hover:no-underline"
             style={{ color: 'var(--ifm-color-emphasis-600)' }}
           >

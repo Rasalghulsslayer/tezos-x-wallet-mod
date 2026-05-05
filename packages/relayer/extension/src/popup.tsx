@@ -141,7 +141,7 @@ function Onboarding({ onDismiss }: { onDismiss: () => void }) {
       <div className="steps">
         <Step n={1} text="Install Temple Wallet" />
         <Step n={2} text="Add Tezos X Testnet network" />
-        <Step n={3} text="Visit any Etherlink dApp" />
+        <Step n={3} text="Visit any Tezos X EVM dApp" />
       </div>
 
       <button className="btn-primary" onClick={onDismiss}>

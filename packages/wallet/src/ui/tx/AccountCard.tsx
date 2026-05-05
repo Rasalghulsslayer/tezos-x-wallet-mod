@@ -63,7 +63,7 @@ export function AccountCard({
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 500 }}>Account</div>
             <div style={{ fontSize: 11, color: 'var(--tx-fg-muted)' }}>
-              {runtime === 'l1' ? 'Tezos L1 runtime' : 'Etherlink L2 runtime'}
+              {runtime === 'l1' ? 'Michelson runtime' : 'EVM runtime'}
             </div>
           </div>
           <div className="tx-runtime-toggle">
@@ -104,7 +104,7 @@ export function AccountCard({
         </div>
       </div>
       <div className="tx-account-side l2" onClick={copy(eth, 'EVM')}>
-        <div className="label"><span className="dot" />Etherlink L2</div>
+        <div className="label"><span className="dot" />Tezos L2</div>
         <div className="addr">
           {truncAddr(eth, addrLen)}
           <Icon name="copy" size={11} color="var(--tx-fg-subtle)" />

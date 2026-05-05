@@ -6,8 +6,8 @@ const config: Config = {
   title: 'TezosX',
   tagline: `Relayer & Wallet for Tezos X / Etherlink`,
   favicon: 'img/tezos-logo.png',
-  url: 'https://tezosx-relayer-9c5cf1.gitlab.io',
-  baseUrl: process.env.BASE_URL ?? '/',
+  url: 'https://trilitech.github.io',
+  baseUrl: process.env.BASE_URL ?? '/tezos-x-wallet/',
   onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
 
@@ -85,8 +85,8 @@ const config: Config = {
           position: 'right',
         },
         {
-          href: 'https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer',
-          label: 'GitLab',
+          href: 'https://github.com/trilitech/tezos-x-wallet',
+          label: 'GitHub',
           position: 'right',
         },
       ],
@@ -107,7 +107,7 @@ const config: Config = {
         {
           title: 'Links',
           items: [
-            { label: 'GitLab', href: 'https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer' },
+            { label: 'GitHub', href: 'https://github.com/trilitech/tezos-x-wallet' },
             { label: 'Etherlink', href: 'https://etherlink.com' },
             { label: 'Tezos', href: 'https://tezos.com' },
           ],

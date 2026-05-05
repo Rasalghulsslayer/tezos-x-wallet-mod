@@ -5,6 +5,7 @@ import { Keyring } from './keyring';
 import { LocalSignerClient } from './signer';
 import { ApprovalQueue } from './approval-queue';
 import { sessionStore } from '../lib/storage';
+import { detectRuntime } from '../lib/address';
 import type {
   ApproveRequest,
   ContentPush,
@@ -19,8 +20,9 @@ import type {
 
 const keyring  = new Keyring();
 const queue    = new ApprovalQueue();
-let   provider: RelayerProvider | null = null;
-let   evmAlias: string | null          = null;
+let   signer:   LocalSignerClient | null = null;
+let   provider: RelayerProvider | null   = null;
+let   evmAlias: string | null            = null;
 
 // ── Derived helpers ───────────────────────────────────────────────────────────
 
@@ -39,11 +41,12 @@ async function currentVaultState(): Promise<VaultState> {
 function rebuildProviderForUnlockedKey(): void {
   const unlocked = keyring.getUnlocked();
   if (unlocked == null) {
+    signer   = null;
     provider = null;
     evmAlias = null;
     return;
   }
-  const signer = new LocalSignerClient(
+  signer = new LocalSignerClient(
     unlocked.secretKey,
     unlocked.publicKey,
     unlocked.tz1,
@@ -117,6 +120,7 @@ async function handlePopupRequest(msg: PopupRequest): Promise<WalletResponse> {
 
       case 'LOCK': {
         keyring.lock();
+        signer   = null;
         provider = null;
         evmAlias = null;
         queue.rejectAll('wallet locked');
@@ -139,19 +143,42 @@ async function handlePopupRequest(msg: PopupRequest): Promise<WalletResponse> {
         return { ok: true };
 
       case 'SEND_TX': {
-        if (provider == null) {
+        if (signer == null || provider == null) {
           return { ok: false, code: 4100, message: 'Wallet is locked' };
         }
-        // Native XTZ send via the NAC gateway's `default` entrypoint.
-        const hash = await provider.request({
+
+        const dest = detectRuntime(msg.to);
+
+        // Same-runtime XTZ → native Tezos L1 transfer, no NAC gateway.
+        if (msg.asset === 'XTZ' && dest === 'l1') {
+          const mutez = (BigInt(msg.amount) / 10n ** 12n).toString();
+          const opHash = await signer.sendNativeTransfer(msg.to, mutez);
+          return { ok: true, data: { runtime: 'l1', hash: opHash } };
+        }
+
+        // Cross-runtime XTZ (tz1 → 0x) or USDC → NAC gateway. Returns the
+        // synthetic NAC hash; the popup will then poll RESOLVE_TX to get the
+        // real kernel-synthesized EVM hash before showing "Done".
+        const synthetic = await provider.request({
           method: 'eth_sendTransaction',
           params: [{
             to:    msg.to,
             value: msg.amount,       // 0x-prefixed hex wei
             data:  msg.asset === 'XTZ' ? '0x' : msg.amount,
           }],
-        });
-        return { ok: true, data: hash };
+        }) as string;
+        return { ok: true, data: { runtime: 'l2', hash: synthetic } };
+      }
+
+      case 'RESOLVE_TX': {
+        if (provider == null) {
+          return { ok: false, code: 4100, message: 'Wallet is locked' };
+        }
+        const real = await provider.resolveSyntheticHash(msg.syntheticHash);
+        if (real != null) {
+          return { ok: true, data: { resolved: true, hash: real } };
+        }
+        return { ok: true, data: { resolved: false } };
       }
 
       default:
@@ -271,7 +298,7 @@ chrome.runtime.onMessage.addListener(
 );
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.info('[TezosX Wallet] service worker installed, v0.3.1');
+  console.info('[TezosX Wallet] service worker installed, v0.4.0');
 });
 
 console.info('[TezosX Wallet] service worker booted');

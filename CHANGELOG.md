@@ -9,9 +9,19 @@ This file is an index of releases. For details (added / changed / fixed / compat
 
 ---
 
+## 2026-05-05
+
+- **`@tezosx/relayer` 0.4.1** — public hash-resolution APIs: `resolveSyntheticHash` and `getPendingL1Hash` on `RelayerProvider`, so wallet UIs can wait for the kernel-synthesized real EVM hash before showing transaction results. Additive, no breaking change. → [details](packages/relayer/CHANGELOG.md#041--2026-05-05)
+- **`@tezosx/wallet` 0.4.0** — two things in one release:
+  1. **Same-runtime XTZ transfers skip the NAC gateway** — `tz1 → tz1 / KT1` now emits a native Tezos L1 transfer via Taquito, saving the unnecessary CRAC round-trip.
+  2. **Real EVM hash on cross-runtime sends** — the Send "Done" stage no longer shows a synthetic placeholder. After broadcasting the L1 op, the popup waits in a `resolving` stage until the kernel-synthesized real hash is mined, then renders the hash as a clickable link to the right explorer (tzkt for L1, Blockscout for L2). Falls back to the L1 op hash with an "EVM tx pending" hint on resolver timeout.
+  3. USDC contract bumped to the Previewnet deployment `0xd77420F73B4612a7A99DBA8c2AFd30a1886b0344`. → [details](packages/wallet/CHANGELOG.md#040--2026-05-05)
+
+---
+
 ## 2026-05-04
 
-- **`@tezosx/wallet` 0.3.1** — Send page makes the cross-runtime semantics explicit: a `RoutingCard` reacts to the recipient address in real time (same-runtime `tz1 → tz1` vs cross-runtime `tz1 → 0x` via NAC gateway), Review stage shows a Routing row and a gradient arrow when the call crosses runtimes, asset cards no longer claim a fixed runtime for XTZ. New `lib/address.ts` helper for recipient parsing. UI-only, no wire-protocol change. Upcoming 0.4.0 will skip the NAC gateway for same-runtime `tz1 → tz1` transfers (native Michelson op directly). → [details](packages/wallet/CHANGELOG.md#031--2026-05-04)
+- **`@tezosx/wallet` 0.3.1** — Send page makes the cross-runtime semantics explicit: a `RoutingCard` reacts to the recipient address in real time (same-runtime `tz1 → tz1` vs cross-runtime `tz1 → 0x` via NAC gateway), Review stage shows a Routing row and a gradient arrow when the call crosses runtimes, asset cards no longer claim a fixed runtime for XTZ. New `lib/address.ts` helper for recipient parsing. UI-only, no wire-protocol change. → [details](packages/wallet/CHANGELOG.md#031--2026-05-04)
 - **`@tezosx/relayer` 0.4.0** — **breaking, default network**: migration from the legacy `demo.txpark` testnet to **Tezos X Previewnet** (`evm.previewnet.tezosx.nomadic-labs.com` + `michelson.previewnet.tezosx.nomadic-labs.com`). Extension `host_permissions` and chain-name table updated to chain ID `128064`. → [details](packages/relayer/CHANGELOG.md#040--2026-05-04)
 - **`@tezosx/wallet` 0.3.0** — inherits the Previewnet endpoints from relayer 0.4.0; explorer URLs (`blockscout.previewnet…` + `previewnet.tezosx.tzkt.io`) updated; Settings → Network reads Tezos X Previewnet; Home XTZ balance now capped at 2 decimal places. → [details](packages/wallet/CHANGELOG.md#030--2026-05-04)
 

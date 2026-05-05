@@ -15,7 +15,7 @@ sidebar_position: 1
 ## Clone and install
 
 ```bash
-git clone https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer.git
+git clone https://github.com/trilitech/tezos-x-wallet.git
 cd Tezosx-relayer
 npm install
 ```
