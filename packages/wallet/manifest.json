@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "TezosX Wallet",
   "version": "0.4.0",
-  "description": "Standalone Tezos wallet with built-in TezosX relayer for Etherlink dApps",
+  "description": "Standalone Tezos wallet with built-in TezosX relayer for Tezos X EVM dApps",
 
   "permissions": ["storage", "tabs"],
 

@@ -51,7 +51,7 @@ XTZ = mutez / 10^6
 
 The Home dashboard caps the displayed value at 2 decimal places to keep large balances readable.
 
-### USDC balance (Etherlink L2)
+### USDC balance (Tezos L2)
 
 The wallet calls `balanceOf(address)` on the USDC contract via `eth_call`, using the **EVM alias** as the holder:
 

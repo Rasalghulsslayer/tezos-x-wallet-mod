@@ -70,4 +70,4 @@ The encrypted vault in `chrome.storage.local` and all `StoredSession` records ar
 
 ## Testnet disclaimer
 
-This wallet targets the **Tezos X Previewnet** exclusively. The UI shows a persistent testnet badge. RPC endpoints, contract addresses, and chain IDs are hardcoded to testnet values in `packages/wallet/src/lib/constants.ts`. Do not attempt to use this wallet on Tezos mainnet or Etherlink mainnet.
+This wallet targets the **Tezos X Previewnet** exclusively. The UI shows a persistent testnet badge. RPC endpoints, contract addresses, and chain IDs are hardcoded to Previewnet values in `packages/wallet/src/lib/constants.ts`. Do not attempt to use this wallet on any production network.

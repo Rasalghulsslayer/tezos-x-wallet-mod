@@ -10,7 +10,7 @@ sidebar_position: 4
 
 | dApp | Status | Wallet mechanism | Notes |
 |---|---|---|---|
-| Etherlink Faucet (shadownet) | ✅ Working | `window.ethereum` + EIP-6963 | Fully functional |
+| Tezos X EVM Faucet (legacy shadownet) | ✅ Working | `window.ethereum` + EIP-6963 | Fully functional |
 | IguanaDEX | ✅ Working | `window.ethereum` | Requires testnet mode enabled in IguanaDEX settings |
 | Hanji | ❌ Not connecting | Privy (EIP-6963) | Wallet detected via EIP-6963, but connection fails — investigation ongoing |
 | Superlend | ✅ Working | wagmi | EIP-6963 |

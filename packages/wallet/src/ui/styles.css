@@ -300,7 +300,6 @@ html, body {
 }
 .tx-asset.xtz   { background: linear-gradient(135deg, #7C5CFF, #4A2FB3); }
 .tx-asset.usdc  { background: #2775CA; }
-.tx-asset.etherlink { background: linear-gradient(135deg, #00C2FF, #0070A3); }
 .tx-asset.sm    { width: 28px; height: 28px; font-size: 11px; }
 .tx-asset.lg    { width: 56px; height: 56px; font-size: 20px; }
 

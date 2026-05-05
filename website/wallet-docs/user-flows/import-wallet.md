@@ -42,9 +42,9 @@ After import you will see two addresses on the [Home](./view-balances) screen:
 | Address | Format | Purpose |
 |---|---|---|
 | **tz1…** | Base58Check, 36 chars | Tezos L1 — used for signing operations |
-| **EVM alias** | `0x…` hex, 42 chars | Etherlink — shown to dApps as `eth_accounts` |
+| **EVM alias** | `0x…` hex, 42 chars | Tezos X EVM runtime — shown to dApps as `eth_accounts` |
 
-The EVM alias is derived deterministically from your tz1 address via the Tezlink `tez_getTezosEthereumAddress` RPC call. It is not a separate key — it is a representation of the same underlying ed25519 key pair on the Etherlink side.
+The EVM alias is derived deterministically from your tz1 address via the Tezlink `tez_getTezosEthereumAddress` RPC call. It is not a separate key — it is a representation of the same underlying ed25519 key pair on the EVM runtime side.
 
 ## Password scope
 

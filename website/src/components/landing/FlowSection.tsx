@@ -10,7 +10,7 @@ export function FlowSection() {
     { logo: `${baseUrl}img/temple.png`,       label: 'Temple',    sub: 'Beacon · tz1' },
     { logo: `${baseUrl}img/relayer-logo.png`, label: 'Relayer',   sub: 'EIP-1193' },
     { logo: `${baseUrl}img/tezos-logo.png`,   label: 'NAC',       sub: 'Gateway' },
-    { logo: `${baseUrl}img/etherlink.png`,    label: 'Etherlink', sub: 'EVM dApps' },
+    { logo: `${baseUrl}img/evm.png`,          label: 'EVM runtime', sub: 'EVM dApps' },
   ];
 
   return (

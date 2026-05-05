@@ -6,7 +6,7 @@ sidebar_position: 1
 
 # Architecture Overview
 
-The relayer sits between Etherlink dApps and the Tezos L1, acting as a translation layer that maps EVM calls to Tezos operations.
+The relayer sits between Tezos X EVM dApps and the Tezos L1, acting as a translation layer that maps EVM calls to Tezos operations.
 
 ## Flow diagram
 

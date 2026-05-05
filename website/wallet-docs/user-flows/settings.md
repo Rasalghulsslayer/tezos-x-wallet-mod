@@ -39,7 +39,7 @@ Two deep-link rows let you open your addresses in external block explorers:
 
 | Explorer | Address used | What it shows |
 |---|---|---|
-| **Blockscout** (EVM) | EVM alias (`0x…`) | Etherlink transactions, token balances |
+| **Blockscout** (EVM) | EVM alias (`0x…`) | Tezos L2 transactions, token balances |
 | **tzkt** (Tezos L1) | tz1 address | Tezos L1 operations, delegation, balance |
 
 Both links open in a new browser tab.

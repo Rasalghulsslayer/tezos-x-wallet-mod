@@ -130,9 +130,9 @@ export function Hero() {
           className="mx-auto mt-4 max-w-xl text-base sm:text-lg leading-relaxed"
           style={{ color: 'var(--ifm-color-emphasis-700)' }}
         >
-          Relayer & Wallet for <strong>Tezos X / Etherlink</strong>.
+          Relayer & Wallet for <strong>Tezos X</strong>.
           <br />
-          Use any Etherlink dApp with just a{' '}
+          Use any Tezos X EVM dApp with just a{' '}
           <code className="rounded-md bg-[rgba(108,71,255,0.1)] px-1.5 py-0.5 font-mono text-sm text-[#a890ff]">
             tz1
           </code>{' '}

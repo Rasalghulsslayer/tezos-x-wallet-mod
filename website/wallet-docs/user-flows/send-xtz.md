@@ -6,7 +6,7 @@ sidebar_label: Send XTZ
 
 # Send XTZ
 
-The Send screen lets you transfer XTZ to any Tezos or Etherlink address. The wallet auto-detects the destination runtime and picks the cheapest valid routing path under the hood.
+The Send screen lets you transfer XTZ to any Tezos (`tz1 / tz2 / tz3 / KT1`) or EVM (`0x…`) address. The wallet auto-detects the destination runtime and picks the cheapest valid routing path under the hood.
 
 ## Steps
 

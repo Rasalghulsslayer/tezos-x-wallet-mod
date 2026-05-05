@@ -20,14 +20,14 @@ sidebar_position: 1
 
 ## Relayer — how it works
 
-The **Tezos X Relayer** implements [EIP-1193](https://eips.ethereum.org/EIPS/eip-1193) and [EIP-6963](https://eips.ethereum.org/EIPS/eip-6963), enabling Tezos users to interact with Etherlink dApps **without an EVM account**.
+The **Tezos X Relayer** implements [EIP-1193](https://eips.ethereum.org/EIPS/eip-1193) and [EIP-6963](https://eips.ethereum.org/EIPS/eip-6963), enabling Tezos users to interact with **Tezos X EVM dApps** without an EVM account.
 
-> Connect to Hanji, Superlend, or any Etherlink dApp using only your Temple wallet and a tz1 address.
+> Connect to any Tezos X EVM dApp using only your Temple wallet and a tz1 address.
 
 1. The relayer injects `window.ethereum` into any web page
 2. When a dApp calls `eth_requestAccounts`, it opens Temple via the Beacon protocol
 3. Your tz1 address is deterministically mapped to an EVM alias (`0x...`)
-4. Transactions are routed through the **NAC gateway** on Tezos L1, forwarded atomically to the Etherlink kernel
+4. Transactions are routed through the **NAC gateway** on Tezos L1, forwarded atomically to the Tezos X kernel and executed on the EVM runtime
 
 ## Status
 
@@ -40,6 +40,5 @@ The **Tezos X Relayer** implements [EIP-1193](https://eips.ethereum.org/EIPS/eip
 
 ## Links
 
-- [GitLab Repository](https://github.com/trilitech/tezos-x-wallet)
-- [Etherlink Documentation](https://docs.etherlink.com)
+- [GitHub Repository](https://github.com/trilitech/tezos-x-wallet)
 - [Tezos X Overview](https://tezos.com)

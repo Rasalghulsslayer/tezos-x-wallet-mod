@@ -196,7 +196,7 @@ export function Features() {
       {/* Products */}
       <span className="mb-3 block text-xs font-bold uppercase tracking-widest text-[#7c5cff]">Products</span>
       <h2 className="mb-8 text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: 'var(--ifm-heading-color)' }}>
-        Two ways to connect Tezos to Etherlink dApps.
+        Two ways to connect Tezos to EVM dApps.
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-16">
         {PRODUCTS.map((p, i) => (

@@ -6,7 +6,7 @@ sidebar_position: 3
 
 # Smart Contract Call Flow
 
-Call a Michelson smart contract from an Etherlink dApp via the NAC gateway.
+Call a Michelson smart contract from a Tezos X EVM dApp via the NAC gateway.
 
 ## Example: Counter contract
 

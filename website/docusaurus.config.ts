@@ -4,7 +4,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
   title: 'TezosX',
-  tagline: `Relayer & Wallet for Tezos X / Etherlink`,
+  tagline: `Relayer & Wallet for Tezos X`,
   favicon: 'img/tezos-logo.png',
   url: 'https://trilitech.github.io',
   baseUrl: process.env.BASE_URL ?? '/tezos-x-wallet/',
@@ -108,7 +108,6 @@ const config: Config = {
           title: 'Links',
           items: [
             { label: 'GitHub', href: 'https://github.com/trilitech/tezos-x-wallet' },
-            { label: 'Etherlink', href: 'https://etherlink.com' },
             { label: 'Tezos', href: 'https://tezos.com' },
           ],
         },
