@@ -5,7 +5,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 const config: Config = {
   title: 'TezosX',
   tagline: `Relayer & Wallet for Tezos X`,
-  favicon: 'img/tezos-logo.png',
+  favicon: 'img/tezos-logo.svg',
   url: 'https://trilitech.github.io',
   baseUrl: process.env.BASE_URL ?? '/tezos-x-wallet/',
   onBrokenLinks: 'warn',
@@ -56,12 +56,12 @@ const config: Config = {
       disableSwitch: true,
       respectPrefersColorScheme: false,
     },
-    image: 'img/tezos-logo.png',
+    image: 'img/tezos-logo.svg',
     navbar: {
       title: 'TezosX',
       logo: {
         alt: 'Tezos X Logo',
-        src: 'img/tezos-logo.png',
+        src: 'img/tezos-logo.svg',
       },
       items: [
         {

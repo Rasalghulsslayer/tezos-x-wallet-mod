@@ -109,7 +109,7 @@ export function Hero() {
               animation: 'shimmer 4s linear infinite',
             }}
           >
-            TezosX
+            Tezos X
           </span>
         </motion.h1>
 
@@ -165,7 +165,7 @@ export function Hero() {
             className="inline-flex items-center rounded-xl px-6 py-3 text-sm font-semibold transition-all hover:-translate-y-0.5 no-underline hover:no-underline"
             style={{ color: 'var(--ifm-color-emphasis-600)' }}
           >
-            GitLab&nbsp;→
+            GitHub&nbsp;→
           </Link>
         </motion.div>
       </div>

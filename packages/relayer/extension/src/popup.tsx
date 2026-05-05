@@ -111,7 +111,7 @@ function SessionCard({
 
       <div className="card-body">
         <AddressRow label="EVM"   logo="icons/evm.png"        address={session.evmAlias} />
-        <AddressRow label="Tezos" logo="icons/tezos-logo.png" address={session.tz1Address} />
+        <AddressRow label="Tezos" logo="icons/tezos-logo.svg" address={session.tz1Address} />
       </div>
 
       <div className="card-footer">

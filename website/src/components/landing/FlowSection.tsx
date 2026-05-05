@@ -9,7 +9,7 @@ export function FlowSection() {
   const flow = [
     { logo: `${baseUrl}img/temple.png`,       label: 'Temple',    sub: 'Beacon · tz1' },
     { logo: `${baseUrl}img/relayer-logo.png`, label: 'Relayer',   sub: 'EIP-1193' },
-    { logo: `${baseUrl}img/tezos-logo.png`,   label: 'NAC',       sub: 'Gateway' },
+    { logo: `${baseUrl}img/tezos-logo.svg`,   label: 'NAC',       sub: 'Gateway' },
     { logo: `${baseUrl}img/evm.png`,          label: 'EVM runtime', sub: 'EVM dApps' },
   ];
 
