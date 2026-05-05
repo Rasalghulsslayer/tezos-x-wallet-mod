@@ -1,5 +1,5 @@
 /** USDC deployed on Tezos X Previewnet. */
-export const USDC_CONTRACT = '0xdcd349f9c09085ba51ab0d317238664aa5d8a134';
+export const USDC_CONTRACT = '0xd77420F73B4612a7A99DBA8c2AFd30a1886b0344';
 
 /** Faucet URL for users who need funds. */
 export const FAUCET_URL = 'https://tezosx-evm-usdc-airdrop.vercel.app/';

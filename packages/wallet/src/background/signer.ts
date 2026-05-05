@@ -53,6 +53,24 @@ export class LocalSignerClient implements ITezosWalletClient {
     }
   }
 
+  /** Native L1 transfer (no NAC, no CRAC). Used for same-runtime XTZ sends. */
+  async sendNativeTransfer(to: string, mutezAmount: string): Promise<string> {
+    try {
+      const op = await this.toolkit.contract.transfer({
+        to,
+        amount: Number(mutezAmount),
+        mutez:  true,
+      });
+      console.info('[TezosX Wallet] L1 native opHash:', op.hash);
+      return op.hash;
+    } catch (err) {
+      const e = err as { errors?: unknown[]; message?: string; name?: string };
+      console.error('[TezosX Wallet] Taquito native transfer failed',
+        { name: e.name, message: e.message, errors: e.errors, raw: err });
+      throw err;
+    }
+  }
+
   async disconnect(): Promise<void> {
     // The keyring handles lock/clear; the signer is one-shot per unlock.
   }

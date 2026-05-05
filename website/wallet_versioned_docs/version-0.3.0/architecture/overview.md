@@ -40,7 +40,7 @@ graph TD
 
 ### Injected Provider — MAIN world
 
-**File**: [`packages/wallet/src/injected/provider.ts`](https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer/-/blob/main/packages/wallet/src/injected/provider.ts)
+**File**: [`packages/wallet/src/injected/provider.ts`](https://github.com/trilitech/tezos-x-wallet/blob/main/packages/wallet/src/injected/provider.ts)
 
 Runs in the same JavaScript context as the web page. Exposes `window.ethereum` as a minimal EIP-1193 provider. Has **no access to `chrome.*` APIs** — it communicates exclusively via `window.postMessage`.
 
@@ -48,7 +48,7 @@ Every call to `provider.request()` is assigned a unique `requestId`, forwarded t
 
 ### Content Bridge — ISOLATED world
 
-**File**: [`packages/wallet/src/content/bridge.ts`](https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer/-/blob/main/packages/wallet/src/content/bridge.ts)
+**File**: [`packages/wallet/src/content/bridge.ts`](https://github.com/trilitech/tezos-x-wallet/blob/main/packages/wallet/src/content/bridge.ts)
 
 Runs in the extension's isolated world — it can see the page DOM but cannot access page globals. Bridges two channels:
 
@@ -57,7 +57,7 @@ Runs in the extension's isolated world — it can see the page DOM but cannot ac
 
 ### Service Worker
 
-**File**: [`packages/wallet/src/background/service-worker.ts`](https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer/-/blob/main/packages/wallet/src/background/service-worker.ts)
+**File**: [`packages/wallet/src/background/service-worker.ts`](https://github.com/trilitech/tezos-x-wallet/blob/main/packages/wallet/src/background/service-worker.ts)
 
 The extension's backend. Holds all state that must persist across popup opens:
 
@@ -72,7 +72,7 @@ Handles three message categories:
 
 ### Popup UI
 
-**File**: [`packages/wallet/src/ui/`](https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer/-/blob/main/packages/wallet/src/ui/)
+**File**: [`packages/wallet/src/ui/`](https://github.com/trilitech/tezos-x-wallet/blob/main/packages/wallet/src/ui/)
 
 A React + React Router app rendered in `popup.html`. Reads and mutates state exclusively via `chrome.runtime.sendMessage` to the service worker. Never touches the keyring or signer directly.
 

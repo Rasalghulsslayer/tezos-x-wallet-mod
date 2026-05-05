@@ -34,7 +34,7 @@ export function Welcome({ onDone: _onDone }: { onDone: () => void }) {
               One wallet.<br />Two runtimes.
             </div>
             <div style={{ fontSize: 13, color: 'var(--tx-fg-muted)', marginTop: 10, maxWidth: 280 }}>
-              Hold and move assets across Tezos L1 and Etherlink L2 from a single account.
+              Hold and move assets across Tezos X (Michelson + EVM runtimes) from a single account.
             </div>
           </div>
         </div>

@@ -5,12 +5,12 @@ import { Icon } from './Icon';
 type Asset = 'XTZ' | 'USDC';
 
 export function RoutingCard({ asset, dest }: { asset: Asset; dest: DestRuntime }) {
-  // USDC only exists on Etherlink L2 — block any non-0x destination.
+  // USDC only exists on the EVM runtime — block any non-0x destination.
   if (asset === 'USDC' && dest === 'l1') {
     return (
       <Frame tone="warning">
         <Icon name="alert" size={14} color="var(--tx-warning)" />
-        <span>USDC only exists on Etherlink L2 — enter a 0x address.</span>
+        <span>USDC only exists on Tezos L2 — enter a 0x address.</span>
       </Frame>
     );
   }

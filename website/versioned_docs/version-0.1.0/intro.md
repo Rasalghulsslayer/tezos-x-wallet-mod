@@ -28,6 +28,6 @@ The **Tezos X Relayer** is an injectable TypeScript script that implements [EIP-
 
 ## Links
 
-- [GitLab Repository](https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer)
+- [GitLab Repository](https://github.com/trilitech/tezos-x-wallet)
 - [Etherlink Documentation](https://docs.etherlink.com)
 - [Tezos X Overview](https://tezos.com)

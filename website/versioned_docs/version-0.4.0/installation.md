@@ -27,7 +27,7 @@ The Chrome/Brave/Firefox MV3 extension is the easiest way to use the relayer. It
 ### Build the extension
 
 ```bash
-git clone https://gitlab.com/tezos-infra/techrel/support-xdev-qa/tezosx-relayer.git
+git clone https://github.com/trilitech/tezos-x-wallet.git
 cd tezosx-relayer
 npm install
 npm run build:ext    # → extension/dist/

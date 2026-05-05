@@ -6,6 +6,37 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.4.0] — 2026-05-05
+
+### Changed
+- **Removed "Etherlink L2" branding throughout the UI.** Tezos X is one ledger with two runtimes (Michelson + EVM), not a two-chain bridge. Replaced "Etherlink L2" → "Tezos L2" / "EVM runtime" / "EVM-side" depending on context. Aligns with the Tezos X narrative. The internal `chain: 'l1' | 'l2'` semantics and the purple/cyan token system are unchanged — only the visible labels.
+- **Same-runtime XTZ transfers now skip the NAC gateway.** When the recipient is a Tezos address (`tz1 / tz2 / tz3 / KT1`), the wallet emits a **native Tezos L1 transfer** via Taquito (`toolkit.contract.transfer({ to, amount, mutez: true })`) instead of routing through the `KT18oDJJ…` gateway with a `default` entrypoint that forwarded the value back to the same recipient. Saves the round-trip CRAC, the synthetic-EVM-hash plumbing, and the associated fees / latency.
+- The cross-runtime path (`tz1 → 0x`) is unchanged: still routes through the NAC gateway because the kernel needs to materialise the value on the EVM runtime.
+- USDC sends are unchanged: still go through the gateway's `call_evm` (USDC is an ERC-20 on L2, no native L1 path possible).
+- Popup-side dApp calls (`eth_sendTransaction` from `handleEthereumRequest`) are unchanged: a dApp signing through the wallet always targets EVM state, so cross-runtime by construction.
+- **Send "Done" stage now shows the real EVM hash on cross-runtime transfers**, not the synthetic NAC placeholder. After broadcasting the L1 op, the popup transitions to a new `resolving` stage ("Confirming on Etherlink L2…") and polls the SW until the kernel-synthesized real hash is mined (up to 60 s). Only then does it transition to "Done". If the resolver times out, the UI falls back to showing the underlying L1 op hash with an explicit "EVM tx pending" hint — at no point is the synthetic hash shown to the user.
+- **The hash on the "Done" stage is now a clickable link** that opens the right explorer for the runtime:
+  - `tz1 → tz1 / KT1` → tzkt (`previewnet.tezosx.tzkt.io/{opHash}`)
+  - `tz1 → 0x` resolved → Blockscout (`blockscout.previewnet.tezosx.nomadic-labs.com/tx/{realEvmHash}`)
+  - `tz1 → 0x` unresolved (timeout fallback) → tzkt on the L1 op hash
+- **`USDC_CONTRACT` updated** to the Previewnet deployment `0xd77420F73B4612a7A99DBA8c2AFd30a1886b0344`.
+
+### Added
+- `LocalSignerClient.sendNativeTransfer(to, mutezAmount)` — wallet-internal method that emits a plain Tezos L1 transfer with no contract call. Sits next to `sendContractCall`; the relayer's `ITezosWalletClient` interface is unchanged (this is a wallet-only concern).
+- Service worker keeps the `LocalSignerClient` reachable at module scope so the popup `SEND_TX` handler can pick the right path (native vs gateway) without rebuilding the toolkit.
+- New `RESOLVE_TX { syntheticHash }` envelope between popup and SW — the popup polls it during the `resolving` stage; the SW delegates to the relayer's new `resolveSyntheticHash` API.
+- New `SendTxResult` and `ResolveTxResult` types in `lib/messages.ts` so the popup knows the runtime / status of the result and picks the right explorer.
+
+### Internals
+- `case 'SEND_TX'` in `service-worker.ts` now branches on `detectRuntime(msg.to)` — same-runtime XTZ takes the native fast path, everything else (cross-runtime XTZ, USDC) falls through to the existing `provider.request('eth_sendTransaction', …)` flow and returns the synthetic hash for the popup to resolve asynchronously.
+- New `case 'RESOLVE_TX'` calls `provider.resolveSyntheticHash(syntheticHash)` and returns `{ resolved, hash? }`.
+
+### Compatibility
+- Requires `@tezosx/relayer` 0.4.1 (new public `resolveSyntheticHash` / `getPendingL1Hash` APIs).
+- No change to the EIP-1193 surface exposed to dApps — they keep receiving the synthetic hash from `eth_sendTransaction` and the real hash via `eth_getTransactionByHash` / `Receipt`. The new flow is wallet-popup-internal.
+
+---
+
 ## [0.3.1] — 2026-05-04
 
 ### Changed
@@ -23,9 +54,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ### Compatibility
 - No wire-protocol change. The popup → service worker `SEND_TX` envelope is unchanged; the relayer's NAC gateway already routes correctly based on the address format. This release is strictly UI clarity.
-
-### Upcoming (planned 0.4.0)
-- **Skip the NAC gateway for same-runtime transfers.** Today every transfer routes through the gateway, including `tz1 → tz1` which is a plain Tezos L1 operation. The wallet will detect that case and emit a native Michelson transfer directly via Taquito, saving the unnecessary CRAC round-trip and the associated fees / latency. The cross-runtime path (`tz1 → 0x`) keeps the gateway, that's where it belongs.
 
 ---
 

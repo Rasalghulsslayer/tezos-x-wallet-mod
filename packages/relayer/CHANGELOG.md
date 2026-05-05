@@ -6,6 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.4.1] — 2026-05-05
+
+### Added
+- **Public hash resolution APIs** on `RelayerProvider` so wallet UIs can wait for the kernel-synthesized real EVM hash before showing transaction results, instead of displaying a synthetic placeholder.
+  - `resolveSyntheticHash(syntheticHash): Promise<string | null>` — public façade over the internal `resolveRealHash`. Returns the real EVM hash, or `null` on resolver timeout.
+  - `getPendingL1Hash(syntheticHash): string | null` — read-only access to the underlying L1 op hash for a synthetic NAC hash.
+
+### Compatibility
+- No breaking change. The previous behaviour (synthetic hash returned by `eth_sendTransaction`, real hash transparently swapped during `eth_getTransactionByHash` / `Receipt`) is unchanged. The new methods are additive and only consumed by the wallet's `SEND_TX` flow today.
+
+---
+
 ## [0.4.0] — 2026-05-04
 
 ### Changed (breaking — default network)

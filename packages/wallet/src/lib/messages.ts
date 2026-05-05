@@ -45,6 +45,7 @@ export type PopupRequest =
   | { type: 'LOCK' }
   | { type: 'EXPORT_SEED';   password: string }
   | { type: 'SEND_TX';       to: string; amount: string; asset: 'XTZ' | 'USDC' }
+  | { type: 'RESOLVE_TX';    syntheticHash: string }
   | { type: 'LIST_PENDING' }
   | { type: 'LIST_SESSIONS' }
   | { type: 'DISCONNECT';    origin: string };
@@ -79,6 +80,23 @@ export type ContentPush =
 export type WalletResponse<T = unknown> =
   | { ok: true;  data?: T }
   | { ok: false; code: number; message: string };
+
+/**
+ * Result of a SEND_TX.
+ *
+ * - `l1` — native Tezos L1 transfer. `hash` is the final L1 op hash.
+ * - `l2` — cross-runtime via the NAC gateway. `hash` is the synthetic NAC
+ *   hash; the popup must then poll `RESOLVE_TX` to swap it for the
+ *   kernel-synthesized real EVM hash before showing "Done".
+ */
+export type SendTxResult =
+  | { runtime: 'l1'; hash: string }
+  | { runtime: 'l2'; hash: string };
+
+/** Result of a RESOLVE_TX call. */
+export type ResolveTxResult =
+  | { resolved: true;  hash: string }
+  | { resolved: false };
 
 // ── Stored session (persisted in chrome.storage.local) ────────────────────────
 

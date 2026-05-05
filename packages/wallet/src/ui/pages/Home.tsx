@@ -16,8 +16,8 @@ import { Badge } from '../tx/Badge';
 import { toast } from '../tx/Toast';
 
 interface Balances {
-  xtz:  string;
-  usdc: string;
+  xtz:  string;   // tz1 balance via Tezos L1 RPC (the only XTZ balance that exists)
+  usdc: string;   // ERC-20 balance on the EVM-alias
 }
 
 export function Home({ state, onChanged }: { state: VaultState; onChanged: () => void }) {
@@ -31,14 +31,26 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
     setLd(true);
     setErr(null);
     try {
+      // NOTE: we deliberately do NOT fetch eth_getBalance on the EVM alias.
+      // Tezos X kernel's AliasForwarder routes any XTZ sent to a 0x alias back
+      // to its native tz1, so the L2 alias balance is structurally always 0.
+      // Showing it would be misleading. See packages/wallet/CHANGELOG.md 0.4.0.
       const [xtzRes, usdcRes] = await Promise.allSettled([
         fetchL1XtzBalance(state.tz1),
         fetchErc20Balance(USDC_CONTRACT, state.evmAlias),
       ]);
-      const xtz  = xtzRes.status  === 'fulfilled' ? mutezToXtz(xtzRes.value)  : '—';
-      const usdc = usdcRes.status === 'fulfilled' ? formatUsdc(usdcRes.value) : '0.00';
+      if (xtzRes.status  === 'rejected') console.error('[Home] L1 XTZ fetch failed', xtzRes.reason);
+      if (usdcRes.status === 'rejected') console.error('[Home] USDC fetch failed',  usdcRes.reason);
+
+      const xtz  = xtzRes.status  === 'fulfilled' ? mutezToXtz(xtzRes.value)   : '—';
+      const usdc = usdcRes.status === 'fulfilled' ? formatUsdc(usdcRes.value)  : '0.00';
       setBal({ xtz, usdc });
-      if (xtzRes.status === 'rejected') setErr((xtzRes.reason as Error).message);
+
+      const firstError =
+        xtzRes.status  === 'rejected' ? (xtzRes.reason as Error).message :
+        usdcRes.status === 'rejected' ? `USDC: ${(usdcRes.reason as Error).message}` :
+        null;
+      if (firstError) setErr(firstError);
     } finally {
       setLd(false);
     }
@@ -54,8 +66,9 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
 
   if (state.status !== 'unlocked') return null;
 
-  const xtzNumeric = bal ? parseFloat(bal.xtz) || 0 : 0;
-  const usdcNumeric = bal ? parseFloat(bal.usdc) || 0 : 0;
+  const xtzNum  = bal ? parseFloat(bal.xtz)  || 0 : 0;
+  const usdcNum = bal ? parseFloat(bal.usdc) || 0 : 0;
+  const fmt2    = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <div className="tx-page">
@@ -99,7 +112,7 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
               fontVariantNumeric: 'tabular-nums',
             }}
           >
-            <span>{bal ? xtzNumeric.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</span>
+            <span>{bal ? fmt2(xtzNum) : '—'}</span>
             <span style={{ color: 'var(--tx-fg-muted)', fontWeight: 400, marginLeft: 6 }}>XTZ</span>
           </div>
           {error && (
@@ -140,7 +153,7 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
               </div>
             </div>
             <div className="tx-row-right">
-              <div className="amt">{bal ? xtzNumeric.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</div>
+              <div className="amt">{bal ? fmt2(xtzNum) : '—'}</div>
             </div>
           </div>
           <div className="tx-row">
@@ -152,7 +165,7 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
               </div>
             </div>
             <div className="tx-row-right">
-              <div className="amt">{bal ? usdcNumeric.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</div>
+              <div className="amt">{bal ? fmt2(usdcNum) : '—'}</div>
             </div>
           </div>
         </div>

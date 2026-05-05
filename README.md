@@ -1,8 +1,21 @@
-# Tezos X Relayer
+# Tezos X — Relayer & Wallet
 
-Injectable EIP-1193 provider that exposes `window.ethereum` to Etherlink dApps, routing all transactions through Temple Wallet and the Tezos X NAC cross-runtime gateway.
+Monorepo containing two products that bridge Ethereum-compatible dApps to **Tezos X**:
 
-Full architecture, API reference and user flows are documented on the [documentation site](https://tezosx-relayer-9c5cf1.gitlab.io/).
+- **[`@tezosx/relayer`](packages/relayer)** — Injectable EIP-1193 provider that exposes `window.ethereum` to dApps and routes transactions through **Temple Wallet** and the Tezos X NAC cross-runtime gateway.
+- **[`@tezosx/wallet`](packages/wallet)** — Standalone Chrome MV3 wallet that signs transactions locally with a built-in `LocalSignerClient` (no Temple required) and embeds the relayer for dApp connectivity.
+
+Full architecture, API reference and user flows are documented on the **[documentation site](https://trilitech.github.io/tezos-x-wallet/)**.
+
+## Repository layout
+
+```
+packages/
+├── relayer/       # @tezosx/relayer — IIFE bundle + MV3 extension (Temple-backed)
+└── wallet/        # @tezosx/wallet — standalone MV3 wallet
+website/           # Docusaurus site (two doc instances, versioned independently)
+playground/        # Next.js demo dApp for manual testing
+```
 
 ## Quick start
 
@@ -10,76 +23,57 @@ Full architecture, API reference and user flows are documented on the [documenta
 npm install
 ```
 
-### Run the relayer locally (script-tag / Tampermonkey)
+### Build the relayer
 
 ```bash
-npm run build       # produces dist/relayer.iife.js
-npm run serve       # serves the bundle at http://localhost:8080
+npm run build         # IIFE bundle → packages/relayer/dist/
+npm run build:ext     # Chrome MV3 extension → packages/relayer/extension/dist/
 ```
 
-See the [injection methods](https://tezosx-relayer-9c5cf1.gitlab.io/docs/technical/injection) doc for how to inject the IIFE bundle into a dApp page.
-
-### Run the Chrome extension (recommended)
-
-MV3 extension for Chrome / Brave / Firefox. Injects `window.ethereum` automatically on every page — no manual setup.
+### Build the wallet
 
 ```bash
-npm run build:ext   # produces extension/dist/
-npm run dev:ext     # launches Chromium with the extension loaded
+npm run wallet:build  # Chrome MV3 extension → packages/wallet/dist/
+npm run wallet:dev    # Vite dev server with HMR (load packages/wallet/dist/ unpacked)
 ```
 
-Or load it manually: `chrome://extensions` → **Developer mode** → **Load unpacked** → select the `extension/` folder.
-
-See the [installation guide](https://tezosx-relayer-9c5cf1.gitlab.io/docs/installation) for details.
-
-### Run the documentation site locally
+### Run the docs locally
 
 ```bash
-cd website
-npm install
-npm run start       # → http://localhost:3000
+cd website && npm install && npm run start
 ```
 
-### Run the playground locally
+## Loading either extension in Chrome
 
-A Next.js app for manual testing (connect, transfer, Counter interactions).
+1. `chrome://extensions` → **Developer mode** ON
+2. **Load unpacked** → select `packages/relayer/extension/dist/` *or* `packages/wallet/dist/`
 
-```bash
-cd playground
-npm install
-npm run dev         # → http://localhost:3000
-```
+For the relayer, you also need **Temple Wallet** installed and connected to Tezos X Previewnet. The wallet is self-contained — no Temple needed.
 
-## Syncing the extension with the latest relayer code
+## Network — Tezos X Previewnet
 
-The extension bundles the relayer source directly from `src/` — there is no
-separate copy. After pulling new relayer changes, rebuild the extension:
+| | Value |
+|---|---|
+| EVM RPC | `https://evm.previewnet.tezosx.nomadic-labs.com` |
+| Michelson RPC | `https://michelson.previewnet.tezosx.nomadic-labs.com` |
+| Chain ID | `0x1f440` (128064) |
+| EVM explorer | [Blockscout](https://blockscout.previewnet.tezosx.nomadic-labs.com) |
+| L1 explorer | [tzkt](https://previewnet.tezosx.tzkt.io) |
+| NAC gateway | `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw` |
 
-```bash
-git pull
-npm install          # in case dependencies changed
-npm run build:ext    # rebuilds extension/dist/ with the latest src/
-```
+## Releases
 
-Then reload it in the browser:
+The two packages are versioned **independently**. See:
+- [packages/relayer/CHANGELOG.md](packages/relayer/CHANGELOG.md)
+- [packages/wallet/CHANGELOG.md](packages/wallet/CHANGELOG.md)
+- [Root release index](CHANGELOG.md)
 
-- **Chrome / Brave**: `chrome://extensions` → find *TezosX Relayer* → click the
-  **⟳ reload** icon on the card.
-- **Firefox**: `about:debugging` → *This Firefox* → click **Reload** next to
-  the extension.
+Tags follow the npm-style scoped format: `@tezosx/relayer@X.Y.Z`, `@tezosx/wallet@X.Y.Z`.
 
-If you are running `npm run dev:ext`, the extension is reloaded automatically
-on every `build:ext`.
+## Contributing
 
-Bump the version if the change is user-visible:
+See [CONTRIBUTING.md](CONTRIBUTING.md). Lint + typechecks run automatically on every PR via [GitHub Actions](.github/workflows/ci.yml); the documentation site is deployed to GitHub Pages on every push to `main`.
 
-1. Update `"version"` in both `package.json` and `extension/manifest.json`.
-2. Add an entry to [CHANGELOG.md](./CHANGELOG.md).
-3. Snapshot the docs: `cd website && npx docusaurus docs:version <new>`.
-4. Tag the release: `git tag v<new>` on the merge commit.
+## License
 
-## Prerequisite: Temple Wallet
-
-1. Open Temple extension → **Settings** → **Networks** → **Add network**
-2. Name: `Tezos X Testnet` — RPC URL: `https://demo.txpark.nomadic-labs.com/rpc/tezlink`
-3. Switch to this network before interacting with any dApp
+MIT — see [LICENSE](LICENSE).
