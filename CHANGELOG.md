@@ -11,7 +11,8 @@ This file is an index of releases. For details (added / changed / fixed / compat
 
 ## 2026-05-06
 
-- **`@tezosx/wallet` 0.4.1** — patch release: fixes `evm_node.dev.insufficient_fees` Previewnet rejections by pre-estimating fees and applying a safety buffer in `LocalSignerClient`. Ships the UI/docs rebrand to align with the Tezos X narrative ("Tezos L1" → "Michelson runtime", "Tezos L2" → "EVM runtime"; internal identifiers untouched). New Tezos SVG brand logos. → [details](packages/wallet/CHANGELOG.md#041--2026-05-06)
+- **`@tezosx/wallet` 0.4.2** — patch release: solves the residual `evm_node.dev.insufficient_fees` rejections that the 0.4.1 buffer didn't catch. Root cause was that Taquito's fee formula is hardcoded against Tezos mainnet constants (`MINIMAL_FEE_PER_GAS_MUTEZ = 0.1`, `MINIMAL_FEE_PER_BYTE_MUTEZ = 1`) while the TezosX kernel uses a different schedule (cheaper gas, more expensive bytes) — no multiplier on the wrong base formula could yield the kernel's exact value. `LocalSignerClient` now reads live constants from `chains/main/mempool/filter` and computes the kernel-exact fee; same approach as `octez-client` post-MRs !21028/21050/21155/21199. → [details](packages/wallet/CHANGELOG.md#042--2026-05-06)
+- **`@tezosx/wallet` 0.4.1** — patch release: first attempt at fixing `evm_node.dev.insufficient_fees` rejections via a Taquito pre-estimate + flat `× 1.2` safety buffer (superseded by 0.4.2). Ships the UI/docs rebrand to align with the Tezos X narrative ("Tezos L1" → "Michelson runtime", "Tezos L2" → "EVM runtime"; internal identifiers untouched). New Tezos SVG brand logos. → [details](packages/wallet/CHANGELOG.md#041--2026-05-06)
 
 ---
 

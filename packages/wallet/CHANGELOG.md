@@ -6,6 +6,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.4.2] — 2026-05-06
+
+### Fixed
+- **`evm_node.dev.insufficient_fees` rejections — now solved at the root.** The 0.4.1 fix used a flat `× 1.2` buffer on Taquito's auto-estimate, but Previewnet kept rejecting a residual fraction of operations (e.g. `current: 0.001322 / required: 0.001411`, `current: 0.000753 / required: 0.000880`). Root cause: Taquito's fee formula is hardcoded against Tezos mainnet constants (`MINIMAL_FEE_PER_GAS_MUTEZ = 0.1 mutez/gas`, `MINIMAL_FEE_PER_BYTE_MUTEZ = 1 mutez/byte`), but the TezosX kernel uses a different schedule (cheaper gas, more expensive bytes). No multiplier on the wrong base formula can produce the kernel's exact value.
+- **Replaced the buffer with a kernel-aware fee computation.** `LocalSignerClient.transferWithKernelAwareFees` now reads the live constants from the kernel's `chains/main/mempool/filter` RPC (`minimal_fees`, `minimal_nanotez_per_gas_unit`, `minimal_nanotez_per_byte`, returned as Q-rationals), caches them for 30 s, and computes the fee with the kernel's exact formula: `minimal_fees + ⌈gas × per_gas / 1000⌉ + ⌈opSize × per_byte / 1000⌉` (mutez, BigInt arithmetic). Operations are accepted on the first try; no buffer, no over-payment.
+- **Retry-on-error kept as a last-resort fallback.** If a residual `insufficient_fees` slips through (rare — e.g. opSize shifts by a few bytes after fee/gas override), the error's `required` field is parsed and the op is resubmitted once with that exact value. Belt-and-braces; expected to almost never fire in practice.
+
+### Compatibility
+- No wire-protocol change. No breaking change vs. 0.4.1.
+- Same approach as `octez-client` post-MRs !21028 / !21050 / !21155 / !21199 (live constants from the node, not hardcoded).
+
+---
+
 ## [0.4.1] — 2026-05-06
 
 ### Fixed
