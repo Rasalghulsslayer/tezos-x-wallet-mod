@@ -11,7 +11,7 @@ function makeRpcError(code: number, message: string, data?: unknown): ProviderRp
 
 /**
  * Generic JSON-RPC 2.0 fetch helper.
- * Works for both the EVM endpoint (TEZLINK_EVM_RPC) and the Tezos L1 endpoint (TEZOS_L1_RPC) —
+ * Works for both the EVM endpoint (TEZLINK_EVM_RPC) and the Michelson runtime endpoint (TEZOS_L1_RPC) —
  * both use the same JSON-RPC 2.0 wire format.
  */
 export async function jsonRpc<T>(

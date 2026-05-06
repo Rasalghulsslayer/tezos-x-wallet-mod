@@ -6,7 +6,7 @@ sidebar_position: 1
 
 # Architecture Overview
 
-The relayer sits between Tezos X EVM dApps and the Tezos L1, acting as a translation layer that maps EVM calls to Tezos operations.
+The relayer sits between Tezos X EVM dApps and the Michelson runtime, acting as a translation layer that maps EVM calls to Tezos operations.
 
 ## Flow diagram
 
@@ -18,7 +18,7 @@ The relayer sits between Tezos X EVM dApps and the Tezos L1, acting as a transla
 |---|---|
 | **RelayerProvider** | Implements `EIP1193Provider`, handles all `window.ethereum` calls |
 | **BeaconClient** | Connects to Temple wallet via Beacon SDK |
-| **TezlinkClient** | Sends operations to Tezos L1 via Tezlink RPC |
+| **TezlinkClient** | Sends operations to the Michelson runtime via Tezlink RPC |
 | **GatewayBuilder** | Builds Micheline calldata for the NAC gateway |
 | **EIP-6963 announcer** | Broadcasts provider info for modern dApp wallet pickers |
 

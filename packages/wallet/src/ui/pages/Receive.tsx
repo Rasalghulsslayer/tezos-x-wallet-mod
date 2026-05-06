@@ -25,8 +25,8 @@ export function Receive({ state }: { state: VaultState }) {
       <TopBar title="Receive" onBack={() => navigate(-1)} />
       <div className="tx-page-scroll" style={{ padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <div className="tx-runtime-toggle" style={{ marginBottom: 18 }}>
-          <button className={`l1 ${runtime === 'l1' ? 'on' : ''}`} onClick={() => setRuntime('l1')}>Tezos L1</button>
-          <button className={`l2 ${runtime === 'l2' ? 'on' : ''}`} onClick={() => setRuntime('l2')}>Tezos L2</button>
+          <button className={`l1 ${runtime === 'l1' ? 'on' : ''}`} onClick={() => setRuntime('l1')}>Michelson runtime</button>
+          <button className={`l2 ${runtime === 'l2' ? 'on' : ''}`} onClick={() => setRuntime('l2')}>EVM runtime</button>
         </div>
 
         <QrCode value={addr} />

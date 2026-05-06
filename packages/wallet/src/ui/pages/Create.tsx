@@ -78,7 +78,7 @@ export function Create({ onDone }: { onDone: () => void }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer' }}>
                 <input type="checkbox" checked={ack1} onChange={(e) => setAck1(e.target.checked)} style={{ marginTop: 2, accentColor: 'var(--tx-purple)' }} />
-                <span style={{ fontSize: 13 }}>I'll write the phrase down offline. TezosX can't restore it for me.</span>
+                <span style={{ fontSize: 13 }}>I'll write the phrase down offline. Tezos X can't restore it for me.</span>
               </label>
               <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer' }}>
                 <input type="checkbox" checked={ack2} onChange={(e) => setAck2(e.target.checked)} style={{ marginTop: 2, accentColor: 'var(--tx-purple)' }} />

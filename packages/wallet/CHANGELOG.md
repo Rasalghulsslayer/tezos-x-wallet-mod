@@ -6,10 +6,30 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.4.1] — 2026-05-06
+
+### Fixed
+- **`evm_node.dev.insufficient_fees` rejections on Previewnet.** `LocalSignerClient` no longer relies solely on Taquito's auto-fee estimate, which under-shoots the kernel's requirement by ~10–20% (e.g. `current: 0.001086 / required: 0.001283`). `sendContractCall` and `sendNativeTransfer` now go through a new `transferWithBufferedFees`: pre-estimate via `toolkit.estimate.transfer`, then submit with `fee × 1.2`, `gasLimit × 1.2` and `storageLimit × 1.5 + 1`.
+
+### Changed
+- **UI / docs rebrand to align with the Tezos X narrative** (one ledger, two runtimes — not a two-chain bridge):
+  - "Tezos L1" → **"Michelson runtime"** in every user-visible label and prose (ChainPill, AccountCard, RoutingCard, Send, Settings, Receive, Home, etc.). Code comments aligned too.
+  - "Tezos L2" → **"EVM runtime"** in every user-visible label and prose.
+  - Internal identifiers untouched: `chain: 'l1' | 'l2'`, `TEZOS_L1_RPC`, `fetchL1XtzBalance`, the wire-protocol field `runtime: 'l1' | 'l2'`, and the purple/cyan tokens are all preserved.
+- New Tezos brand SVG logos in white + blue. Replaces the legacy `tezos-logo.png` in the website navbar/favicon, the FlowSection landing diagram, and the relayer extension popup. Old PNGs deleted.
+- **Asset rows now show real brand logos** Files live in `packages/wallet/icons/{tezos-logo.svg,circle-usdc.png}` and are bundled by Vite imports.
+- **Faucet URL** updated to the canonical Previewnet endpoint `https://faucet.previewnet.tezosx.nomadic-labs.com/` (was the Vercel airdrop demo).
+- **Assets section header is now a runtime filter.** Click "All chains" to cycle through `All chains → Michelson runtime → EVM runtime → All chains` and hide rows that don't match. Pure UI state, no balance refetch.
+
+### Compatibility
+- No wire-protocol change. No breaking change vs. 0.4.0.
+
+---
+
 ## [0.4.0] — 2026-05-05
 
 ### Changed
-- **Removed "Etherlink L2" branding throughout the UI.** Tezos X is one ledger with two runtimes (Michelson + EVM), not a two-chain bridge. Replaced "Etherlink L2" → "Tezos L2" / "EVM runtime" / "EVM-side" depending on context. Aligns with the Tezos X narrative. The internal `chain: 'l1' | 'l2'` semantics and the purple/cyan token system are unchanged — only the visible labels.
+- **Removed "Etherlink L2" branding throughout the UI.** Aligns with the Tezos X narrative. The internal `chain: 'l1' | 'l2'` semantics and the purple/cyan token system are unchanged — only the visible labels.
 - **Same-runtime XTZ transfers now skip the NAC gateway.** When the recipient is a Tezos address (`tz1 / tz2 / tz3 / KT1`), the wallet emits a **native Tezos L1 transfer** via Taquito (`toolkit.contract.transfer({ to, amount, mutez: true })`) instead of routing through the `KT18oDJJ…` gateway with a `default` entrypoint that forwarded the value back to the same recipient. Saves the round-trip CRAC, the synthetic-EVM-hash plumbing, and the associated fees / latency.
 - The cross-runtime path (`tz1 → 0x`) is unchanged: still routes through the NAC gateway because the kernel needs to materialise the value on the EVM runtime.
 - USDC sends are unchanged: still go through the gateway's `call_evm` (USDC is an ERC-20 on L2, no native L1 path possible).

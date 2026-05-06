@@ -1,7 +1,7 @@
 import { keccak256, toBytes } from 'viem';
 import type { EthTransactionReceipt } from '../types.js';
 
-/** Derive a stable 32-byte EVM-style hash from a Tezos L1 opHash. */
+/** Derive a stable 32-byte EVM-style hash from a Michelson runtime opHash. */
 export function l1OpHashToEvmHash(l1OpHash: string): string {
   return keccak256(toBytes(l1OpHash));
 }

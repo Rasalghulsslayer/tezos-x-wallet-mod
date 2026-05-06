@@ -135,7 +135,7 @@ function Onboarding({ onDismiss }: { onDismiss: () => void }) {
       <div className="onboarding-icon">
         <Wallet size={28} />
       </div>
-      <h2>Welcome to TezosX</h2>
+      <h2>Welcome to Tezos X</h2>
       <p className="onboarding-sub">Get started in 3 steps</p>
 
       <div className="steps">
@@ -227,7 +227,7 @@ function App() {
         <div className="header-left">
           <img src="icons/logo.svg" className="logo" alt="" />
           <div>
-            <h1>TezosX Relayer</h1>
+            <h1>Tezos X Relayer</h1>
             <span className="header-version">v{version}</span>
           </div>
         </div>

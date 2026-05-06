@@ -36,14 +36,14 @@ function xtzToHexWei(xtz: string): string {
 }
 
 function routingLabel(dest: DestRuntime): string {
-  if (dest === 'l1') return 'Same-runtime · Tezos L1';
+  if (dest === 'l1') return 'Same-runtime';
   if (dest === 'l2') return 'Cross-runtime · L1 → L2 via NAC gateway';
   return '—';
 }
 
 function settlingSuffix(dest: DestRuntime): string {
   if (dest === 'l2') return 'via NAC gateway';
-  if (dest === 'l1') return 'on Tezos L1';
+  if (dest === 'l1') return 'on the Michelson runtime';
   return '';
 }
 
@@ -177,7 +177,7 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
         <div className="tx-page-scroll" style={{ padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 20 }}>
           <div className="tx-sending" />
           <div>
-            <div style={{ fontSize: 18, fontWeight: 500 }}>Confirming on Tezos L2…</div>
+            <div style={{ fontSize: 18, fontWeight: 500 }}>Confirming on the EVM runtime…</div>
             <div style={{ fontSize: 13, color: 'var(--tx-fg-muted)', marginTop: 6 }}>
               L1 op signed. Waiting for the kernel-synthesized EVM transaction.
             </div>
@@ -333,7 +333,7 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
             <AssetMark asset="usdc" size="sm" />
             <div style={{ textAlign: 'left', marginLeft: 4 }}>
               <div style={{ fontSize: 13 }}>USDC</div>
-              <div style={{ fontSize: 11, color: 'var(--tx-fg-muted)', fontWeight: 400 }}>Tezos L2 · ERC-20</div>
+              <div style={{ fontSize: 11, color: 'var(--tx-fg-muted)', fontWeight: 400 }}>ERC-20 · EVM runtime</div>
             </div>
           </button>
         </div>

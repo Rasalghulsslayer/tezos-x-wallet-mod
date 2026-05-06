@@ -76,4 +76,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Lint + typechecks run automatically on e
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+AGPL-3.0 — see [LICENSE](LICENSE).
