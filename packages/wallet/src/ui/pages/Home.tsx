@@ -20,11 +20,14 @@ interface Balances {
   usdc: string;   // ERC-20 balance on the EVM-alias
 }
 
+type AssetFilter = 'all' | 'l1' | 'l2';
+
 export function Home({ state, onChanged }: { state: VaultState; onChanged: () => void }) {
   const navigate = useNavigate();
   const [bal, setBal]     = useState<Balances | null>(null);
   const [loading, setLd]  = useState(true);
   const [error,   setErr] = useState<string | null>(null);
+  const [assetFilter, setAssetFilter] = useState<AssetFilter>('all');
 
   const refresh = async () => {
     if (state.status !== 'unlocked') return;
@@ -69,6 +72,14 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
   const xtzNum  = bal ? parseFloat(bal.xtz)  || 0 : 0;
   const usdcNum = bal ? parseFloat(bal.usdc) || 0 : 0;
   const fmt2    = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const cycleFilter = () => {
+    setAssetFilter((f) => f === 'all' ? 'l1' : f === 'l1' ? 'l2' : 'all');
+  };
+  const filterLabel =
+    assetFilter === 'l1' ? 'Michelson runtime' :
+    assetFilter === 'l2' ? 'EVM runtime' :
+    'All chains';
 
   return (
     <div className="tx-page">
@@ -141,33 +152,39 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
 
         <div className="tx-section-head">
           <span className="t">Assets</span>
-          <span className="a">All chains</span>
+          <span className="a" onClick={cycleFilter} role="button" title="Filter by runtime — click to cycle">
+            {filterLabel}
+          </span>
         </div>
         <div style={{ padding: '0 8px' }}>
-          <div className="tx-row">
-            <AssetMark asset="xtz" />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="tx-row-primary">Tezos</div>
-              <div className="tx-row-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <ChainPill chain="l1" /> <span className="tx-subtle">XTZ</span>
+          {(assetFilter === 'all' || assetFilter === 'l1') && (
+            <div className="tx-row">
+              <AssetMark asset="xtz" />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="tx-row-primary">Tezos</div>
+                <div className="tx-row-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <ChainPill chain="l1" /> <span className="tx-subtle">XTZ</span>
+                </div>
+              </div>
+              <div className="tx-row-right">
+                <div className="amt">{bal ? fmt2(xtzNum) : '—'}</div>
               </div>
             </div>
-            <div className="tx-row-right">
-              <div className="amt">{bal ? fmt2(xtzNum) : '—'}</div>
-            </div>
-          </div>
-          <div className="tx-row">
-            <AssetMark asset="usdc" />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="tx-row-primary">USD Coin</div>
-              <div className="tx-row-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <ChainPill chain="l2" /> <span className="tx-subtle">USDC</span>
+          )}
+          {(assetFilter === 'all' || assetFilter === 'l2') && (
+            <div className="tx-row">
+              <AssetMark asset="usdc" />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="tx-row-primary">USD Coin</div>
+                <div className="tx-row-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <ChainPill chain="l2" /> <span className="tx-subtle">USDC</span>
+                </div>
+              </div>
+              <div className="tx-row-right">
+                <div className="amt">{bal ? fmt2(usdcNum) : '—'}</div>
               </div>
             </div>
-            <div className="tx-row-right">
-              <div className="amt">{bal ? fmt2(usdcNum) : '—'}</div>
-            </div>
-          </div>
+          )}
         </div>
 
         <div className="tx-section-head">

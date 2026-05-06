@@ -290,18 +290,20 @@ html, body {
 .tx-badge.neutral{ background: var(--tx-surface-2); color: var(--tx-fg-muted); }
 .tx-badge.testnet { background: var(--tx-warning-bg); color: var(--tx-warning); box-shadow: inset 0 0 0 1px rgba(255,184,76,0.35); }
 
-/* Asset marks */
+/* Asset marks — actual brand logos */
 .tx-asset {
   width: 40px; height: 40px;
   border-radius: var(--tx-r-pill);
   display: grid; place-items: center; flex-shrink: 0;
-  font-family: var(--tx-font-sans); font-weight: 600; font-size: 14px; letter-spacing: -0.01em;
-  color: #FFFFFF; position: relative; overflow: hidden;
+  position: relative; overflow: hidden;
 }
-.tx-asset.xtz   { background: linear-gradient(135deg, #7C5CFF, #4A2FB3); }
-.tx-asset.usdc  { background: #2775CA; }
-.tx-asset.sm    { width: 28px; height: 28px; font-size: 11px; }
-.tx-asset.lg    { width: 56px; height: 56px; font-size: 20px; }
+.tx-asset.xtz  { background: linear-gradient(135deg, #7C5CFF, #4A2FB3); }
+.tx-asset.usdc { background: transparent; }
+.tx-asset.sm   { width: 28px; height: 28px; }
+.tx-asset.lg   { width: 56px; height: 56px; }
+
+.tx-asset-img        { width: 60%;  height: 60%;  object-fit: contain; display: block; }
+.tx-asset.usdc .tx-asset-img { width: 100%; height: 100%; }
 
 /* Account cards */
 .tx-account-card {

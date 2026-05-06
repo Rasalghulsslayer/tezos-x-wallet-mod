@@ -1,6 +1,17 @@
+import xtzLogo  from '../../../icons/tezos-logo.svg';
+import usdcLogo from '../../../icons/circle-usdc.png';
+
 type Asset = 'xtz' | 'usdc';
 
+const ICON: Record<Asset, string> = {
+  xtz:  xtzLogo,
+  usdc: usdcLogo,
+};
+
 export function AssetMark({ asset, size }: { asset: Asset; size?: 'sm' | 'lg' }) {
-  const letter = { xtz: 'ꜩ', usdc: '$' }[asset];
-  return <span className={['tx-asset', asset, size].filter(Boolean).join(' ')}>{letter}</span>;
+  return (
+    <span className={['tx-asset', asset, size].filter(Boolean).join(' ')}>
+      <img src={ICON[asset]} alt={asset} className="tx-asset-img" />
+    </span>
+  );
 }
