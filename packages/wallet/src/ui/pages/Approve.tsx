@@ -9,7 +9,16 @@ import { truncAddr } from '../tx/utils';
 
 type Stage = 'request' | 'signing' | 'done' | 'error';
 
+/* eslint-disable react-hooks/rules-of-hooks -- */
 export function Approve() {
+  if (window.top !== window) {
+    return (
+      <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--tx-danger)' }}>
+        This window cannot be embedded in another page.
+      </div>
+    );
+  }
+
   const [pending, setPending] = useState<PendingRequest | null>(null);
   const [stage,   setStage]   = useState<Stage>('request');
   const [error,   setError]   = useState<string | null>(null);

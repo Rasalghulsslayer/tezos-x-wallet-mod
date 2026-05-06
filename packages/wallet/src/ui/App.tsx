@@ -13,10 +13,12 @@ import { Connections } from './pages/Connections';
 import { Settings }    from './pages/Settings';
 import { Receive }     from './pages/Receive';
 import { ToastHost }   from './tx/Toast';
+import { ExperimentalBanner } from './tx/ExperimentalBanner';
 
 export function App() {
   return (
     <div className="tx-popup">
+      <ExperimentalBanner />
       <HashRouter>
         <Gate />
       </HashRouter>

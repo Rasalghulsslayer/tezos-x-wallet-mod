@@ -106,8 +106,8 @@ html, body {
 }
 .tx-approval {
   width: 100vw;
-  height: 100vh;
-  min-height: 600px;
+  flex: 1;
+  min-height: 0;
   background: var(--tx-bg);
   color: var(--tx-fg);
   display: flex;

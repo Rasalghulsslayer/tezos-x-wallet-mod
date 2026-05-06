@@ -1,10 +1,14 @@
 {
   "manifest_version": 3,
   "name": "TezosX Wallet",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Standalone Tezos wallet with built-in TezosX relayer for Tezos X EVM dApps",
 
   "permissions": ["storage", "tabs"],
+
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; frame-ancestors 'none'"
+  },
 
   "host_permissions": [
     "https://evm.previewnet.tezosx.nomadic-labs.com/*",
@@ -48,12 +52,5 @@
       "48":  "icons/icon48.png",
       "128": "icons/icon128.png"
     }
-  },
-
-  "web_accessible_resources": [
-    {
-      "resources": ["approve.html"],
-      "matches": ["<all_urls>"]
-    }
-  ]
+  }
 }
