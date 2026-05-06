@@ -9,6 +9,12 @@ This file is an index of releases. For details (added / changed / fixed / compat
 
 ---
 
+## 2026-05-06
+
+- **`@tezosx/wallet` 0.4.1** — patch release: fixes `evm_node.dev.insufficient_fees` Previewnet rejections by pre-estimating fees and applying a safety buffer in `LocalSignerClient`. Ships the UI/docs rebrand to align with the Tezos X narrative ("Tezos L1" → "Michelson runtime", "Tezos L2" → "EVM runtime"; internal identifiers untouched). New Tezos SVG brand logos. → [details](packages/wallet/CHANGELOG.md#041--2026-05-06)
+
+---
+
 ## 2026-05-05
 
 - **`@tezosx/relayer` 0.4.1** — public hash-resolution APIs: `resolveSyntheticHash` and `getPendingL1Hash` on `RelayerProvider`, so wallet UIs can wait for the kernel-synthesized real EVM hash before showing transaction results. Additive, no breaking change. → [details](packages/relayer/CHANGELOG.md#041--2026-05-05)

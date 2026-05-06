@@ -84,7 +84,7 @@ export type WalletResponse<T = unknown> =
 /**
  * Result of a SEND_TX.
  *
- * - `l1` — native Tezos L1 transfer. `hash` is the final L1 op hash.
+ * - `l1` — native Michelson runtime transfer. `hash` is the final L1 op hash.
  * - `l2` — cross-runtime via the NAC gateway. `hash` is the synthetic NAC
  *   hash; the popup must then poll `RESOLVE_TX` to swap it for the
  *   kernel-synthesized real EVM hash before showing "Done".

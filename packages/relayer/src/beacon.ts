@@ -82,7 +82,7 @@ export class BeaconClient implements ITezosWalletClient {
 
   /**
    * Submit a TRANSACTION operation to the NAC gateway via Temple.
-   * Returns the Tezos L1 operation hash (Base58Check).
+   * Returns the Michelson runtime operation hash (Base58Check).
    *
    * @param michelineArg  Micheline JSON value for the entrypoint parameters
    */
@@ -108,7 +108,7 @@ export class BeaconClient implements ITezosWalletClient {
           },
         ],
       });
-      // result.transactionHash is the Tezos L1 opHash
+      // result.transactionHash is the Michelson runtime opHash
       const l1OpHash = (result as { transactionHash: string }).transactionHash;
       console.info('[TezosX Relayer] L1 opHash (Tezos):', l1OpHash);
       return l1OpHash;

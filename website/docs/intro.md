@@ -27,7 +27,7 @@ The **Tezos X Relayer** implements [EIP-1193](https://eips.ethereum.org/EIPS/eip
 1. The relayer injects `window.ethereum` into any web page
 2. When a dApp calls `eth_requestAccounts`, it opens Temple via the Beacon protocol
 3. Your tz1 address is deterministically mapped to an EVM alias (`0x...`)
-4. Transactions are routed through the **NAC gateway** on Tezos L1, forwarded atomically to the Tezos X kernel and executed on the EVM runtime
+4. Transactions are routed through the **NAC gateway** on the Michelson runtime, forwarded atomically to the Tezos X kernel and executed on the EVM runtime
 
 ## Status
 

@@ -149,7 +149,7 @@ async function handlePopupRequest(msg: PopupRequest): Promise<WalletResponse> {
 
         const dest = detectRuntime(msg.to);
 
-        // Same-runtime XTZ → native Tezos L1 transfer, no NAC gateway.
+        // Same-runtime XTZ → native Michelson runtime transfer, no NAC gateway.
         if (msg.asset === 'XTZ' && dest === 'l1') {
           const mutez = (BigInt(msg.amount) / 10n ** 12n).toString();
           const opHash = await signer.sendNativeTransfer(msg.to, mutez);
@@ -298,7 +298,7 @@ chrome.runtime.onMessage.addListener(
 );
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.info('[TezosX Wallet] service worker installed, v0.4.0');
+  console.info('[TezosX Wallet] service worker installed, v0.4.1');
 });
 
 console.info('[TezosX Wallet] service worker booted');

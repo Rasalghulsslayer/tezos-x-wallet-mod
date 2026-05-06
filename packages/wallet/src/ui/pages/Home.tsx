@@ -16,7 +16,7 @@ import { Badge } from '../tx/Badge';
 import { toast } from '../tx/Toast';
 
 interface Balances {
-  xtz:  string;   // tz1 balance via Tezos L1 RPC (the only XTZ balance that exists)
+  xtz:  string;   // tz1 balance via the Michelson runtime RPC (the only XTZ balance that exists)
   usdc: string;   // ERC-20 balance on the EVM-alias
 }
 
@@ -76,7 +76,7 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
         center={
           <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <div className="tx-logo-mark" style={{ width: 18, height: 18, borderRadius: 4 }} />
-            <span style={{ fontSize: 13, fontWeight: 500 }}>TezosX</span>
+            <span style={{ fontSize: 13, fontWeight: 500 }}>Tezos X</span>
             <Badge variant="testnet">Testnet</Badge>
           </div>
         }

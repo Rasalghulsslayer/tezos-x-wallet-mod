@@ -12,7 +12,7 @@ const PRODUCTS = [
     desc: 'An injectable EIP-1193 provider that bridges Ethereum dApps to Tezos X. Delegates signing to Temple Wallet via the Beacon protocol.',
     bullets: [
       'Injects window.ethereum on every page',
-      'Converts EVM calls to Tezos L1 operations',
+      'Converts EVM calls to the Michelson runtime operations',
       'Works with wagmi, RainbowKit, ethers.js',
     ],
     cta: { label: 'Relayer docs', to: '/docs/intro' },

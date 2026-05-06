@@ -10,7 +10,7 @@ export function RoutingCard({ asset, dest }: { asset: Asset; dest: DestRuntime }
     return (
       <Frame tone="warning">
         <Icon name="alert" size={14} color="var(--tx-warning)" />
-        <span>USDC only exists on Tezos L2 — enter a 0x address.</span>
+        <span>USDC only exists on the EVM runtime — enter a 0x address.</span>
       </Frame>
     );
   }
@@ -38,7 +38,7 @@ export function RoutingCard({ asset, dest }: { asset: Asset; dest: DestRuntime }
     return (
       <Frame tone="purple">
         <ChainPill chain="l1" />
-        <span><strong>Same-runtime transfer</strong> · settles on Tezos L1 (Michelson).</span>
+        <span><strong>Same-runtime transfer</strong> · settles on the Michelson runtime.</span>
       </Frame>
     );
   }

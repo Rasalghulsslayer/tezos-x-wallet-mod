@@ -7,7 +7,7 @@ sidebar_position: 4
 # NAC Gateway
 
 **NAC** (Cross-Runtime Atomic Calls) is the Tezos X mechanism for routing
-execution between the Tezos L1 Michelson runtime and the Tezlink EVM runtime
+execution between the Michelson runtime Michelson runtime and the Tezlink EVM runtime
 within a single atomic operation.
 
 ## The two directions
@@ -17,13 +17,13 @@ NAC is bidirectional. Each direction uses a different surface:
 | Direction | Surface | Used by |
 |---|---|---|
 | **EVM → Michelson** | NAC precompile at `0xff00...0007`, called via the EVM selector `callMichelson(string,string,bytes)` | dApps running on Tezlink that want to invoke a Michelson contract |
-| **Michelson → EVM** | NAC gateway contract (KT1...) on Tezos L1, entrypoint `call_evm` | **The relayer** — wraps every user EVM transaction as a Tezos L1 op |
+| **Michelson → EVM** | NAC gateway contract (KT1...) on the Michelson runtime, entrypoint `call_evm` | **The relayer** — wraps every user EVM transaction as a Michelson op |
 
 ## What the relayer does
 
-The relayer uses the **Michelson → EVM** direction. Temple can only sign Tezos L1
+The relayer uses the **Michelson → EVM** direction. Temple can only sign Michelson runtime
 operations, so instead of submitting an EVM transaction directly, the relayer
-wraps the user's intent into a Tezos L1 op targeting the NAC gateway's
+wraps the user's intent into a Michelson op targeting the NAC gateway's
 `call_evm` entrypoint. The Tezos X kernel receives the op, synthesizes the
 corresponding EVM transaction, and executes it with `msg.sender` set to the
 user's EVM alias.
@@ -79,7 +79,7 @@ sequenceDiagram
     participant dApp
     participant Relayer as Relayer<br/>(window.ethereum)
     participant Temple
-    participant L1 as Tezos L1
+    participant L1 as Michelson runtime
     participant Gateway as NAC Gateway<br/>(KT1...)
     participant Kernel as Tezos X Kernel<br/>(EVM runtime)
 

@@ -97,14 +97,14 @@ export function AccountCard({
   return (
     <div className="tx-account-card">
       <div className="tx-account-side l1" onClick={copy(tz1, 'tz1')}>
-        <div className="label"><span className="dot" />Tezos L1</div>
+        <div className="label"><span className="dot" />Michelson runtime</div>
         <div className="addr">
           {truncAddr(tz1, addrLen)}
           <Icon name="copy" size={11} color="var(--tx-fg-subtle)" />
         </div>
       </div>
       <div className="tx-account-side l2" onClick={copy(eth, 'EVM')}>
-        <div className="label"><span className="dot" />Tezos L2</div>
+        <div className="label"><span className="dot" />EVM runtime</div>
         <div className="addr">
           {truncAddr(eth, addrLen)}
           <Icon name="copy" size={11} color="var(--tx-fg-subtle)" />
