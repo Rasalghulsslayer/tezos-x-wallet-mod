@@ -281,13 +281,17 @@ async function handleEthereumRequest(msg: EthereumRequest): Promise<WalletRespon
 // ── Message router ────────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener(
-  (msg: PopupRequest | ApproveRequest | EthereumRequest, _sender, sendResponse) => {
+  (msg: PopupRequest | ApproveRequest | EthereumRequest, sender, sendResponse) => {
     void (async () => {
       if ('type' in msg && (msg.type === 'ETHEREUM_REQUEST')) {
         sendResponse(await handleEthereumRequest(msg));
         return;
       }
       if ('type' in msg && (msg.type === 'GET_PENDING' || msg.type === 'RESOLVE_PENDING')) {
+        if (sender.id !== chrome.runtime.id) {
+          sendResponse({ ok: false, code: 4100, message: 'Forbidden sender' });
+          return;
+        }
         sendResponse(await handleApproveRequest(msg));
         return;
       }
@@ -298,7 +302,7 @@ chrome.runtime.onMessage.addListener(
 );
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.info('[TezosX Wallet] service worker installed, v0.4.1');
+  console.info('[TezosX Wallet] service worker installed, v0.4.3');
 });
 
 console.info('[TezosX Wallet] service worker booted');

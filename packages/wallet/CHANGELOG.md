@@ -6,6 +6,31 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.4.3] — 2026-05-06
+
+### Fixed
+- **Residual `insufficient_fees` after 0.4.2.** Taquito's `est.opSize` excludes the 64-byte signature; the kernel charges on the signed op → ≈216 mutez under-payment (matches `1137 → 1354`). Added a 96-byte margin to `opSize`.
+- **Retry-on-`required` parser** rewritten to handle the real error format (`"required":"0.001354"` — JSON, decimal tez), so the fallback finally fires when needed.
+
+### Security
+- **Fixed clickjacking vector on the approval popup.** `approve.html` was declared as `web_accessible_resources` with `matches: ["<all_urls>"]`, which let any website embed the approval page in an iframe and exploit a clickjacked approval flow against an unlocked wallet (a malicious page could trigger a legitimate `eth_sendTransaction` to obtain a valid `requestId`, then iframe `chrome-extension://<id>/approve.html?requestId=…` and trick the user into clicking "Approve" through opacity/positioning tricks). Three independent layers of defense, any one of which closes the attack:
+  1. Removed the `web_accessible_resources` declaration entirely from `manifest.json`. The service worker opens `approve.html` via `chrome.windows.create({ url: chrome.runtime.getURL('approve.html') })`, which works for any extension page regardless of web-accessibility — so this is a no-cost removal.
+  2. Added `Content-Security-Policy: frame-ancestors 'none'` as a `<meta http-equiv>` in `approve.html`. Defense-in-depth: even if the resource is later re-exposed by accident, the browser refuses to embed.
+  3. Added a runtime `if (window.top !== window) { window.close(); }` guard at the top of `approve-main.tsx`, *before* React even mounts. Stricter than an in-component guard would be, since the React tree never gets created in an iframe context.
+- **Explicit `sender.id === chrome.runtime.id` check** in the `GET_PENDING` / `RESOLVE_PENDING` branch of the SW message router. Implicit because `chrome.runtime.onMessage` already filters by extension id, but made explicit so the access boundary is visible at the call site.
+- Reported responsibly by **Eugene Yakovchuk** — thanks.
+
+### Added
+- **"Experimental" banner across the wallet UI.** A persistent, non-dismissible banner now sits at the top of every page (popup home + all routes, and the approval popup) reminding the user that this is a pre-release POC and not to use it with mainnet funds. New `tx/ExperimentalBanner.tsx` component; mounted in `App.tsx` and `approve-main.tsx`. Mirrors the same banner on the documentation site.
+
+### Internals
+- `.tx-approval` no longer hardcodes `height: 100vh` — uses `flex: 1; min-height: 0` instead so it shrinks naturally under the banner inside the approve-popup flex column.
+
+### Compatibility
+- No wire-protocol change. No breaking change vs. 0.4.2. **Security-relevant — upgrade recommended.**
+
+---
+
 ## [0.4.2] — 2026-05-06
 
 ### Fixed

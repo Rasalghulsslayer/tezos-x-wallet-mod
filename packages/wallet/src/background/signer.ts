@@ -14,6 +14,9 @@ type FeeConstants = {
 const CONSTANTS_TTL_MS = 30_000;
 let cachedConstants: { value: FeeConstants; at: number } | null = null;
 
+/** Bytes added to `est.opSize` to cover the 64-byte signature + zarith shift. */
+const OP_SIZE_MARGIN_BYTES = 96;
+
 /** Fetch live kernel fee constants from `mempool/filter` (cached 30s). */
 async function getFeeConstants(): Promise<FeeConstants> {
   const now = Date.now();
@@ -50,13 +53,15 @@ function computeKernelFee(gasLimit: number, opSize: number, c: FeeConstants): nu
   return Number(c.minimalFees + gasCost + byteCost);
 }
 
-/** Parse `required: N` mutez from an `evm_node.dev.insufficient_fees` error. */
+/** Extract `required` mutez from an `evm_node.dev.insufficient_fees` error. */
 function extractRequiredFee(err: unknown): number | null {
-  const e = err as { message?: string; errors?: Array<Record<string, unknown>> };
-  const fromErrors = e.errors?.find(x => typeof x.required === 'number')?.required;
-  if (typeof fromErrors === 'number') return fromErrors;
-  const m = e.message?.match(/required:\s*(\d+)/);
-  return m ? Number(m[1]) : null;
+  const e = err as { message?: string; errors?: unknown };
+  const haystack = JSON.stringify(e.errors ?? '') + ' ' + (e.message ?? '');
+  const m = haystack.match(/"required"\s*:\s*"?([\d.]+)"?/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!isFinite(n) || n <= 0) return null;
+  return n < 1 ? Math.ceil(n * 1_000_000) : Math.ceil(n);
 }
 
 /**
@@ -93,7 +98,7 @@ export class LocalSignerClient implements ITezosWalletClient {
       this.toolkit.estimate.transfer(params),
       getFeeConstants(),
     ]);
-    const opSize   = Number(est.opSize);
+    const opSize   = Number(est.opSize) + OP_SIZE_MARGIN_BYTES;
     const computed = computeKernelFee(est.gasLimit, opSize, c);
 
     const submit = (fee: number) =>

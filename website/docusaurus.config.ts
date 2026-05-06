@@ -51,6 +51,13 @@ const config: Config = {
   ],
 
   themeConfig: {
+    announcementBar: {
+      id: 'experimental_poc',
+      content: 'Experimental software · Pre-release POC · Do not use with mainnet funds',
+      backgroundColor: '#3b2a1a',
+      textColor: '#ffd9a8',
+      isCloseable: false,
+    },
     colorMode: {
       defaultMode: 'dark',
       disableSwitch: true,
