@@ -5,6 +5,7 @@ import { fetchL1XtzBalance, fetchErc20Balance } from '@/lib/balances';
 import { USDC_CONTRACT, FAUCET_URL } from '@/lib/constants';
 import { mutezToXtz, formatUsdc } from '@/lib/format';
 import { sendPopupRequest } from '@/lib/messaging';
+import { formatError } from '@/lib/errors';
 import { AccountCard } from '../tx/AccountCard';
 import { Button, IconBtn } from '../tx/Button';
 import { Icon } from '../tx/Icon';
@@ -13,7 +14,7 @@ import { ChainPill } from '../tx/ChainPill';
 import { TopBar } from '../tx/TopBar';
 import { BottomTabs } from '../tx/BottomTabs';
 import { Badge } from '../tx/Badge';
-import { toast } from '../tx/Toast';
+import { toast, errorToast } from '../tx/Toast';
 
 interface Balances {
   xtz:  string;   // tz1 balance via the Michelson runtime RPC (the only XTZ balance that exists)
@@ -22,17 +23,17 @@ interface Balances {
 
 type AssetFilter = 'all' | 'l1' | 'l2';
 
+const isSidePanel = new URLSearchParams(window.location.search).get('mode') === 'side';
+
 export function Home({ state, onChanged }: { state: VaultState; onChanged: () => void }) {
   const navigate = useNavigate();
   const [bal, setBal]     = useState<Balances | null>(null);
   const [loading, setLd]  = useState(true);
-  const [error,   setErr] = useState<string | null>(null);
   const [assetFilter, setAssetFilter] = useState<AssetFilter>('all');
 
   const refresh = async () => {
     if (state.status !== 'unlocked') return;
     setLd(true);
-    setErr(null);
     try {
       // NOTE: we deliberately do NOT fetch eth_getBalance on the EVM alias.
       // Tezos X kernel's AliasForwarder routes any XTZ sent to a 0x alias back
@@ -49,11 +50,23 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
       const usdc = usdcRes.status === 'fulfilled' ? formatUsdc(usdcRes.value)  : '0.00';
       setBal({ xtz, usdc });
 
-      const firstError =
-        xtzRes.status  === 'rejected' ? (xtzRes.reason as Error).message :
-        usdcRes.status === 'rejected' ? `USDC: ${(usdcRes.reason as Error).message}` :
-        null;
-      if (firstError) setErr(firstError);
+      // Surface a single danger toast with retry — both fetches sharing the
+      // same root cause (RPC down) shouldn't yield two stacked messages.
+      const reason = xtzRes.status === 'rejected'
+        ? xtzRes.reason
+        : usdcRes.status === 'rejected'
+          ? usdcRes.reason
+          : null;
+      if (reason != null) {
+        const e = formatError(reason);
+        errorToast({
+          message:   e.title,
+          secondary: e.code === 'rpc-unreachable' ? '· network'
+                   : e.code === 'rpc-timeout'     ? '· timeout'
+                   : undefined,
+          retry:     () => void refresh(),
+        });
+      }
     } finally {
       setLd(false);
     }
@@ -84,8 +97,8 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
   return (
     <div className="tx-page">
       <TopBar
-        center={
-          <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        left={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div className="tx-logo-mark" style={{ width: 18, height: 18, borderRadius: 4 }} />
             <span style={{ fontSize: 13, fontWeight: 500 }}>Tezos X</span>
             <Badge variant="testnet">Testnet</Badge>
@@ -97,6 +110,20 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
             <IconBtn label="Refresh" size="sm" onClick={() => void refresh()}>
               <Icon name="refresh" size={16} />
             </IconBtn>
+            {!isSidePanel && (
+              <IconBtn
+                label="Open in side panel"
+                size="sm"
+                onClick={async () => {
+                  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+                  if (tab?.windowId == null) return;
+                  await chrome.sidePanel.open({ windowId: tab.windowId });
+                  window.close();
+                }}
+              >
+                <Icon name="sidebar" size={16} />
+              </IconBtn>
+            )}
             <IconBtn label="Lock" size="sm" onClick={lock}>
               <Icon name="lock" size={16} />
             </IconBtn>
@@ -126,9 +153,6 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
             <span>{bal ? fmt2(xtzNum) : '—'}</span>
             <span style={{ color: 'var(--tx-fg-muted)', fontWeight: 400, marginLeft: 6 }}>XTZ</span>
           </div>
-          {error && (
-            <div style={{ fontSize: 11, color: 'var(--tx-danger)', marginTop: 6 }}>{error}</div>
-          )}
         </div>
 
         <div style={{ padding: '4px 16px 16px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>

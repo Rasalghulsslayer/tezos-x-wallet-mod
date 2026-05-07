@@ -305,4 +305,9 @@ chrome.runtime.onInstalled.addListener(() => {
   console.info('[TezosX Wallet] service worker installed, v0.4.3');
 });
 
+// Toolbar icon click keeps the popup behavior; the side panel is opt-in.
+chrome.sidePanel
+  ?.setPanelBehavior({ openPanelOnActionClick: false })
+  .catch((err) => console.warn('[TezosX Wallet] sidePanel unavailable:', err));
+
 console.info('[TezosX Wallet] service worker booted');

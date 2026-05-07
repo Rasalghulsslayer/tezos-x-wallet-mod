@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isValidEdsk, isValidMnemonic } from '@/lib/seed';
 import { sendPopupRequest } from '@/lib/messaging';
+import { formatError } from '@/lib/errors';
 import { Button } from '../tx/Button';
 import { TopBar } from '../tx/TopBar';
+import { ErrorInline } from '../tx/ErrorInline';
 
 type Mode = 'mnemonic' | 'edsk';
 
@@ -13,15 +15,15 @@ export function Import({ onDone }: { onDone: () => void }) {
   const [secret, setSec]   = useState('');
   const [password, setPwd] = useState('');
   const [confirm,  setCnf] = useState('');
-  const [error,    setErr] = useState<string | null>(null);
+  const [error,    setErr] = useState<unknown>(null);
   const [loading,  setLd]  = useState(false);
 
   const switchMode = (m: Mode) => { setMode(m); setSec(''); setErr(null); };
 
   const submit = async () => {
     setErr(null);
-    if (password.length < 8) return setErr('Password must be at least 8 characters');
-    if (password !== confirm) return setErr('Passwords do not match');
+    if (password.length < 8) return setErr(new Error('Password must be at least 8 characters'));
+    if (password !== confirm) return setErr(new Error('Passwords do not match'));
     setLd(true);
     try {
       if (mode === 'mnemonic') {
@@ -36,7 +38,7 @@ export function Import({ onDone }: { onDone: () => void }) {
       onDone();
       navigate('/', { replace: true });
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(e);
     } finally {
       setLd(false);
     }
@@ -80,7 +82,7 @@ export function Import({ onDone }: { onDone: () => void }) {
             <span className="tx-field-label">Confirm password</span>
             <input className="tx-input" type="password" value={confirm} onChange={(e) => setCnf(e.target.value)} />
           </label>
-          {error != null && <p style={{ fontSize: 12, color: 'var(--tx-danger)' }}>{error}</p>}
+          {error != null && <ErrorInline error={formatError(error)} />}
         </div>
       </div>
 

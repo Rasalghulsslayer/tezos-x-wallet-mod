@@ -6,6 +6,7 @@ import { timeAgo } from '@/lib/format';
 import { TopBar } from '../tx/TopBar';
 import { Icon } from '../tx/Icon';
 import { Button } from '../tx/Button';
+import { EmptyState } from '../tx/EmptyState';
 
 export function Connections({ state, onChanged }: { state: VaultState; onChanged: () => void }) {
   const navigate = useNavigate();
@@ -29,16 +30,21 @@ export function Connections({ state, onChanged }: { state: VaultState; onChanged
   return (
     <div className="tx-page">
       <TopBar title="Connected sites" onBack={() => navigate(-1)} />
-      <div className="tx-page-scroll">
+      <div className="tx-page-scroll" style={{ display: 'flex', flexDirection: 'column' }}>
         {sessions == null ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--tx-fg-muted)', fontSize: 13 }}>Loading…</div>
         ) : sessions.length === 0 ? (
-          <div style={{ padding: '48px 24px', textAlign: 'center' }}>
-            <div style={{ fontSize: 14, fontWeight: 500 }}>No connected sites</div>
-            <div style={{ fontSize: 12, color: 'var(--tx-fg-muted)', marginTop: 6, maxWidth: 260, margin: '6px auto 0' }}>
-              Visit a dApp and approve the connection — it will appear here.
-            </div>
-          </div>
+          <EmptyState
+            icon={
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <path d="M9 4v5M15 4v5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <rect x="6" y="9" width="12" height="6" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M12 15v5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            }
+            title="No connected dApps"
+            detail="When a website asks to connect, you'll review and approve it here."
+          />
         ) : (
           <div style={{ padding: '8px 0' }}>
             {sessions.map((s) => {

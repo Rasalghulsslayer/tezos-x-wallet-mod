@@ -6,11 +6,13 @@ export function TopBar({
   onBack,
   right,
   center,
+  left,
 }: {
   title?: string;
   onBack?: () => void;
   right?: ReactNode;
   center?: ReactNode;
+  left?: ReactNode;
 }) {
   return (
     <div className="tx-topbar">
@@ -20,7 +22,7 @@ export function TopBar({
             <Icon name="arrow-left" size={18} />
           </button>
         )}
-        <span className="tx-topbar-title">{title ?? ''}</span>
+        {left ?? <span className="tx-topbar-title">{title ?? ''}</span>}
       </div>
       {center}
       <div style={{ display: 'flex', gap: 4 }}>{right}</div>

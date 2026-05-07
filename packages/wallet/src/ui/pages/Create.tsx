@@ -2,10 +2,12 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { newMnemonic } from '@/lib/seed';
 import { sendPopupRequest } from '@/lib/messaging';
+import { formatError } from '@/lib/errors';
 import { Button } from '../tx/Button';
 import { Icon } from '../tx/Icon';
 import { TopBar } from '../tx/TopBar';
 import { Dots } from '../tx/Dots';
+import { ErrorInline } from '../tx/ErrorInline';
 
 type Stage = 'intro' | 'reveal' | 'confirm' | 'password';
 
@@ -25,7 +27,7 @@ export function Create({ onDone }: { onDone: () => void }) {
 
   const [password, setPwd]  = useState('');
   const [confirm,  setCnf]  = useState('');
-  const [error,    setErr]  = useState<string | null>(null);
+  const [error,    setErr]  = useState<unknown>(null);
   const [loading,  setLd]   = useState(false);
 
   const stageIdx = { intro: 0, reveal: 1, confirm: 2, password: 3 }[stage];
@@ -39,15 +41,15 @@ export function Create({ onDone }: { onDone: () => void }) {
 
   const submit = async () => {
     setErr(null);
-    if (password.length < 8) return setErr('Password must be at least 8 characters');
-    if (password !== confirm) return setErr('Passwords do not match');
+    if (password.length < 8) return setErr(new Error('Password must be at least 8 characters'));
+    if (password !== confirm) return setErr(new Error('Passwords do not match'));
     setLd(true);
     try {
       await sendPopupRequest({ type: 'CREATE_WALLET', mnemonic, password });
       onDone();
       navigate('/', { replace: true });
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(e);
     } finally {
       setLd(false);
     }
@@ -181,7 +183,7 @@ export function Create({ onDone }: { onDone: () => void }) {
                 <span className="tx-field-label">Confirm password</span>
                 <input className="tx-input" type="password" value={confirm} onChange={(e) => setCnf(e.target.value)} placeholder="Repeat it" />
               </label>
-              {error != null && <p style={{ fontSize: 12, color: 'var(--tx-danger)' }}>{error}</p>}
+              {error != null && <ErrorInline error={formatError(error)} />}
             </div>
           </div>
           <div className="tx-action-bar">

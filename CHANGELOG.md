@@ -9,6 +9,12 @@ This file is an index of releases. For details (added / changed / fixed / compat
 
 ---
 
+## 2026-05-07
+
+- **`@tezosx/wallet` 0.5.0** — UI minor. **Side panel mode (Chrome 114+):** dock the wallet UI as a persistent panel via a new icon in the Home top bar; popup remains the default click behavior. **Send page UX overhaul:** "Available · balance" row + `MAX` pill under the amount input (with soft-red insufficient state and loading skeleton); "Likely insufficient funds" banner on the review stage (CTA stays primary — kernel may settle). **Unified error display** across every wallet surface: new `formatError(err, ctx?)` dispatcher in `lib/errors.ts` covers Tezos RPC, auth, EIP-1193 and network families; new `ErrorInline` / `FatalScreen` / danger `Toast` components round out the existing `ErrorCard`. `sendPopupRequest` now throws a typed `Error & { code }` so EIP-1193 codes survive end-to-end. Visual specs from the Claude Design handoff bundles. → [details](packages/wallet/CHANGELOG.md#050--2026-05-07)
+
+---
+
 ## 2026-05-06
 
 - **`@tezosx/wallet` 0.4.3** — security + UX patch. **Security:** closes a clickjacking vector on the approval popup (reported responsibly by Eugene Yakovchuk) by removing `approve.html` from `web_accessible_resources`, adding `Content-Security-Policy: frame-ancestors 'none'`, and a runtime iframe guard before React mounts. Three independent layers, any one of which suffices. **UX:** persistent, non-dismissible "Experimental software · Pre-release POC · Do not use with mainnet funds" banner across every wallet page and the documentation site (per François Thiré's request). → [details](packages/wallet/CHANGELOG.md#043--2026-05-06)

@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import type { VaultState } from '@/lib/messages';
 import { TopBar } from '../tx/TopBar';
 import { BottomTabs } from '../tx/BottomTabs';
-import { Button } from '../tx/Button';
+import { EmptyState } from '../tx/EmptyState';
 
 export function Activity({ state }: { state: VaultState }) {
   const navigate = useNavigate();
@@ -11,16 +11,25 @@ export function Activity({ state }: { state: VaultState }) {
   return (
     <div className="tx-page">
       <TopBar title="Activity" />
-      <div className="tx-page-scroll">
-        <div style={{ padding: '48px 24px', textAlign: 'center' }}>
-          <div style={{ fontSize: 14, fontWeight: 500 }}>No activity yet</div>
-          <div style={{ fontSize: 12, color: 'var(--tx-fg-muted)', marginTop: 6, maxWidth: 260, margin: '6px auto 0' }}>
-            Send or receive XTZ to get started. Transaction history will appear here in a future version.
-          </div>
-          <div style={{ marginTop: 14 }}>
-            <Button variant="outline" onClick={() => navigate('/receive')}>Receive</Button>
-          </div>
-        </div>
+      <div className="tx-page-scroll" style={{ display: 'flex', flexDirection: 'column' }}>
+        <EmptyState
+          icon={
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          }
+          title="No activity yet"
+          detail="Send or receive XTZ and your transactions will show up here."
+          action={{
+            label: 'Receive',
+            icon: (
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                <path d="M6 2.5v7M2.5 6h7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+            ),
+            onClick: () => navigate('/receive'),
+          }}
+        />
       </div>
       <BottomTabs />
     </div>
