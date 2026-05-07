@@ -1,27 +1,31 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { PendingRequest } from '@/lib/messages';
 import { sendApproveRequest } from '@/lib/messaging';
+import { formatError, makeError } from '@/lib/errors';
 import { Button } from '../tx/Button';
 import { Icon } from '../tx/Icon';
 import { Badge } from '../tx/Badge';
 import { Line } from '../tx/Line';
+import { ErrorCard } from '../tx/ErrorCard';
 import { truncAddr } from '../tx/utils';
 
 type Stage = 'request' | 'signing' | 'done' | 'error';
 
-/* eslint-disable react-hooks/rules-of-hooks -- */
+/* eslint-disable react-hooks/rules-of-hooks */
 export function Approve() {
   if (window.top !== window) {
     return (
-      <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--tx-danger)' }}>
-        This window cannot be embedded in another page.
+      <div className="tx-approval">
+        <div className="tx-page-scroll" style={{ padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <ErrorCard error={makeError('iframe-blocked')} />
+        </div>
       </div>
     );
   }
 
   const [pending, setPending] = useState<PendingRequest | null>(null);
   const [stage,   setStage]   = useState<Stage>('request');
-  const [error,   setError]   = useState<string | null>(null);
+  const [error,   setError]   = useState<unknown>(null);
 
   const requestId = useMemo(
     () => new URLSearchParams(window.location.search).get('requestId') ?? '',
@@ -29,10 +33,10 @@ export function Approve() {
   );
 
   useEffect(() => {
-    if (requestId === '') { setError('Missing requestId'); setStage('error'); return; }
+    if (requestId === '') { setError(new Error('Missing requestId')); setStage('error'); return; }
     sendApproveRequest<PendingRequest>({ type: 'GET_PENDING', requestId })
       .then(setPending)
-      .catch((e: Error) => { setError(e.message); setStage('error'); });
+      .catch((e: Error) => { setError(e); setStage('error'); });
   }, [requestId]);
 
   const respond = async (decision: 'approve' | 'reject') => {
@@ -42,7 +46,7 @@ export function Approve() {
       setStage('done');
       setTimeout(() => window.close(), 900);
     } catch (e) {
-      setError((e as Error).message);
+      setError(e);
       setStage('error');
     }
   };
@@ -78,17 +82,13 @@ export function Approve() {
     return (
       <div className="tx-approval">
         <div className="tx-topbar" />
-        <div className="tx-page-scroll" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12, textAlign: 'center' }}>
-          {error ? (
-            <>
-              <Icon name="alert" size={36} color="var(--tx-danger)" />
-              <div style={{ fontSize: 14, color: 'var(--tx-danger)' }}>{error}</div>
-            </>
-          ) : (
-            <div className="tx-sending" />
-          )}
+        <div className="tx-page-scroll" style={{ padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {error != null
+            ? <ErrorCard error={formatError(error)} />
+            : <div className="tx-sending" />
+          }
         </div>
-        {error && (
+        {error != null && (
           <div className="tx-action-bar">
             <Button variant="outline" full onClick={() => window.close()}>Close</Button>
           </div>

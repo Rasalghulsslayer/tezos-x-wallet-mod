@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import type { VaultState } from '../lib/messages';
 import { sendPopupRequest } from '../lib/messaging';
+import { makeError } from '../lib/errors';
 import { Welcome }     from './pages/Welcome';
 import { Create }      from './pages/Create';
 import { Import }      from './pages/Import';
@@ -14,6 +15,7 @@ import { Settings }    from './pages/Settings';
 import { Receive }     from './pages/Receive';
 import { ToastHost }   from './tx/Toast';
 import { ExperimentalBanner } from './tx/ExperimentalBanner';
+import { FatalScreen } from './tx/FatalScreen';
 
 export function App() {
   return (
@@ -57,11 +59,7 @@ function Gate() {
   }, [state?.status]);
 
   if (error != null) {
-    return (
-      <div className="tx-page" style={{ padding: 24, color: 'var(--tx-danger)', fontSize: 13 }}>
-        Failed to reach the wallet backend: {error}
-      </div>
-    );
+    return <FatalScreen error={makeError('sw-unreachable')} onReload={() => window.location.reload()} />;
   }
 
   if (state == null) {

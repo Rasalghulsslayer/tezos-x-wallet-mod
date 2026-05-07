@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { sendPopupRequest } from '@/lib/messaging';
+import { formatError } from '@/lib/errors';
 import { Button } from '../tx/Button';
+import { ErrorInline } from '../tx/ErrorInline';
 
 export function Unlock({ onDone }: { onDone: () => void }) {
   const navigate = useNavigate();
   const [password, setPwd] = useState('');
-  const [error, setErr]    = useState<string | null>(null);
+  const [error, setErr]    = useState<unknown>(null);
   const [loading, setLd]   = useState(false);
 
   const submit = async () => {
@@ -18,7 +20,7 @@ export function Unlock({ onDone }: { onDone: () => void }) {
       onDone();
       navigate('/', { replace: true });
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(e);
       setPwd('');
     } finally {
       setLd(false);
@@ -50,9 +52,7 @@ export function Unlock({ onDone }: { onDone: () => void }) {
             onChange={(e) => setPwd(e.target.value)}
             placeholder="Password"
           />
-          {error != null && (
-            <p style={{ fontSize: 12, color: 'var(--tx-danger)', textAlign: 'center', margin: 0 }}>{error}</p>
-          )}
+          {error != null && <ErrorInline error={formatError(error)} showDetail={false} />}
           <Button variant="accent" full type="submit" disabled={loading || password.length === 0}>
             {loading ? 'Unlocking…' : 'Unlock'}
           </Button>

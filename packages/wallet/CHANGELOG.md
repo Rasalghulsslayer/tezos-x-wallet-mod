@@ -6,6 +6,39 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.5.0] — 2026-05-07
+
+### Changed
+- **Unified error display across the wallet.** Every surface that used a raw red `<p>` now renders the same `ErrorCard` / `ErrorInline` / danger `Toast` / `FatalScreen` family and routes the underlying error through a new `formatError(err, ctx?)` dispatcher (`src/lib/errors.ts`). The dispatcher recognises:
+  - **Tezos RPC** — `contract.balance_too_low`, `contract.counter_in_the_past`, `gas_exhausted.operation`, `tezlink_error`, `evm_node.dev.insufficient_fees` (existing, now under the unified roof).
+  - **Auth** — `invalid-mnemonic`, `invalid-edsk`, `password-too-short`, `wrong-password`, `no-vault` — recognised by canonical thrown messages.
+  - **EIP-1193** — `4001`, `4100`, `4200`, `-32601`, `-32602`, `-32603` — recognised by the numeric `code` on the `Error` (preserved end-to-end now that `sendPopupRequest` throws a typed `Error & { code }` instead of a plain string).
+  - **Network** — `rpc-unreachable`, `rpc-timeout`, `rpc-5xx` — recognised by fetch / abort / 5xx patterns.
+  - **App-level** — `sw-unreachable`, `iframe-blocked` — built manually with `makeError(key)`.
+- **New components:**
+  - `tx/ErrorInline.tsx` — compact 12 px-icon variant for form-validation errors (Unlock password, Create / Import field validation, Settings reveal modal). Title-only or title + detail. No raw payload, no copy.
+  - `tx/FatalScreen.tsx` — full-popup centred reset (icon block · title · detail · `Reload wallet` + optional `Contact support` · machine code footer). Replaces the bare red `<p>` that App.tsx used when the SW couldn't be reached.
+  - `tx/Toast.tsx` extended with a `danger` variant + new `errorToast({ message, secondary, retry, sticky })` API. The success `toast(string)` API is unchanged. The danger toast can be transient (5 s + 2 px progress hairline) or sticky (no timer, close button); both support a Retry action.
+- **Surfaces converted:** `Approve` (ErrorCard for `stage='error'` and the iframe-blocked guard via `makeError('iframe-blocked')`), `Home` (single danger toast with Retry instead of two stacked inline messages on simultaneous fetch failures), `Unlock` / `Create` / `Import` / `Settings` reveal modal (ErrorInline under the relevant field), `App` (FatalScreen on SW unreachable). All seven surfaces now store the raw error (`useState<unknown>`) and only format at render time, so the `code` field survives.
+
+### Removed
+- `src/lib/tezos-errors.ts` — collapsed into `src/lib/errors.ts` (broader scope; the old export `formatTezosError` is gone too — call `formatError` directly).
+
+### Added
+- **Side panel mode (Chrome 114+).** Click the new sidebar icon in the Home top bar to dock the wallet UI as a persistent panel on the right edge of the browser, MetaMask-style. The popup mode remains the default click behavior of the toolbar icon — the side panel is opt-in per session. Implementation: `sidePanel` permission + `side_panel.default_path: "popup.html?mode=side"` in the manifest, `chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false })` at SW boot, and a click-handler call to `chrome.sidePanel.open({ windowId })` directly in the popup (must run inside the user-gesture frame — round-trips to the SW lose the gesture and Chrome rejects). The bouton is hidden when already in the side panel via the `?mode=side` query param. `.tx-popup` adapted from `360×600` fixed to `100vw × 100vh` with `min-width / min-height` so the popup keeps its size while the panel can stretch.
+
+### Changed
+- **Send page surfaces balance, warns on insufficient funds, and parses errors.** Three coordinated UX upgrades on the Send flow:
+  1. The form stage now shows an "Available · X.XXXXXX XTZ/USDC" row directly under the amount input, with a `MAX` pill that pre-fills the input (XTZ keeps a 0.01 reserve for fees; USDC fills the full balance). The row turns soft red with an alert glyph when the typed amount exceeds the balance — no flash, just a 220 ms colour transition. Loading state shows a skeleton.
+  2. The review stage inserts a "Likely insufficient funds" banner between the review card and the CTA when the request exceeds the cached balance. The CTA stays primary — explicit user override is allowed (the kernel may settle from a balance the RPC hasn't refreshed).
+  3. The error display, previously a raw HTTP 500 dump, is now parsed by a new `lib/tezos-errors.ts` helper: `formatTezosError` recognises `contract.balance_too_low`, `contract.counter_in_the_past`, `gas_exhausted.operation`, `tezlink_error`, and `evm_node.dev.insufficient_fees`, surfacing a friendly title + detail (e.g. "Insufficient funds — Tried to spend 0.000334 ꜩ but balance is 0 ꜩ"). Raw RPC payload stays available behind a "Show technical details" disclosure with a single-line scrollable mono window and a Copy action. Unknown error IDs fall back to "Operation rejected ({id})"; non-Tezos errors fall back to a truncated message.
+- New components: `tx/AvailableRow.tsx`, `tx/InsufficientWarning.tsx`, `tx/ErrorCard.tsx`. Visual specs followed from the Claude Design handoff bundle (3 micro-elements at 360 px popup width, with token/sizing/type/interaction specs).
+
+### Compatibility
+- No wire-protocol change. Manifest now declares `sidePanel` permission — re-install / reload required for the new permission to take effect.
+
+---
+
 ## [0.4.3] — 2026-05-06
 
 ### Fixed

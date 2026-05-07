@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import type { VaultState } from '@/lib/messages';
 import { sendPopupRequest } from '@/lib/messaging';
 import { EVM_EXPLORER, TEZOS_EXPLORER } from '@/lib/constants';
+import { formatError } from '@/lib/errors';
 import { TopBar } from '../tx/TopBar';
 import { BottomTabs } from '../tx/BottomTabs';
 import { AccountCard } from '../tx/AccountCard';
 import { Icon, type IconName } from '../tx/Icon';
 import { Button } from '../tx/Button';
 import { toast } from '../tx/Toast';
+import { ErrorInline } from '../tx/ErrorInline';
 
 type Secret = { kind: 'mnemonic' | 'edsk'; value: string } | null;
 
@@ -17,7 +19,7 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
   const [modal, setModal] = useState<'reveal' | null>(null);
   const [pwd, setPwd]     = useState('');
   const [secret, setSec]  = useState<Secret>(null);
-  const [err, setErr]     = useState<string | null>(null);
+  const [err, setErr]     = useState<unknown>(null);
   const [shown, setShown] = useState(false);
   const [loading, setLd]  = useState(false);
 
@@ -29,7 +31,7 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
       setSec(payload);
       setShown(true);
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(e);
     } finally {
       setLd(false);
     }
@@ -74,7 +76,7 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
         <LinkRow icon="lock" t="Lock wallet" onClick={lock} />
 
         <div className="tx-section-head"><span className="t">About</span></div>
-        <LinkRow icon="info" t="Version" sub="Wallet v0.4.3 · Relayer v0.4.1" />
+        <LinkRow icon="info" t="Version" sub="Wallet v0.5.0 · Relayer v0.4.1" />
         <LinkRow icon="info" t="Network" sub="Tezos X Previewnet" />
 
         <div style={{ height: 16 }} />
@@ -123,7 +125,11 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
                   placeholder="Password"
                   autoFocus
                 />
-                {err != null && <p style={{ fontSize: 12, color: 'var(--tx-danger)', marginTop: 10 }}>{err}</p>}
+                {err != null && (
+                  <div style={{ marginTop: 10 }}>
+                    <ErrorInline error={formatError(err)} />
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
                   <Button variant="outline" onClick={closeModal}>Cancel</Button>
                   <Button variant="accent" full disabled={loading || pwd.length === 0} onClick={reveal}>

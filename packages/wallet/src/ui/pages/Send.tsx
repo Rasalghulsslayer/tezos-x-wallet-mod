@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import type { ResolveTxResult, SendTxResult, VaultState } from '@/lib/messages';
 import { sendPopupRequest } from '@/lib/messaging';
 import { detectRuntime, type DestRuntime } from '@/lib/address';
-import { EVM_EXPLORER, TEZOS_EXPLORER } from '@/lib/constants';
+import { EVM_EXPLORER, TEZOS_EXPLORER, USDC_CONTRACT } from '@/lib/constants';
+import { fetchL1XtzBalance, fetchErc20Balance } from '@/lib/balances';
+import { mutezToXtz, formatUsdc } from '@/lib/format';
+import { formatError } from '@/lib/errors';
 import { Button } from '../tx/Button';
 import { Icon } from '../tx/Icon';
 import { TopBar } from '../tx/TopBar';
@@ -11,6 +14,9 @@ import { AssetMark } from '../tx/AssetMark';
 import { ChainPill } from '../tx/ChainPill';
 import { Line } from '../tx/Line';
 import { RoutingCard } from '../tx/RoutingCard';
+import { AvailableRow } from '../tx/AvailableRow';
+import { InsufficientWarning } from '../tx/InsufficientWarning';
+import { ErrorCard } from '../tx/ErrorCard';
 import { truncAddr } from '../tx/utils';
 
 type Stage = 'form' | 'review' | 'sending' | 'resolving' | 'done';
@@ -25,14 +31,40 @@ interface DoneState {
   pending: boolean;
 }
 
+interface Balances {
+  /** Native XTZ on the Michelson runtime, formatted decimal string. */
+  xtz:  string;
+  /** USDC ERC-20 on the EVM runtime, formatted decimal string. */
+  usdc: string;
+  loading: boolean;
+}
+
 const RESOLVE_POLL_MS    = 2_000;
 const RESOLVE_TIMEOUT_MS = 60_000;
+/** Fee margin reserved when the user clicks Max on XTZ (mutez). */
+const MAX_FEE_RESERVE_MUTEZ = 10_000n; // 0.01 XTZ
 
 function xtzToHexWei(xtz: string): string {
   const [whole, frac = ''] = xtz.trim().split('.');
   const padded = (whole + frac.padEnd(18, '0')).slice(0, whole.length + 18);
   const big = BigInt(padded);
   return '0x' + big.toString(16);
+}
+
+/** Decimal XTZ string → mutez bigint (6 decimals). */
+function mutezToBig(xtz: string): bigint {
+  const [whole, frac = ''] = xtz.trim().split('.');
+  const mutezPart = (whole + frac.padEnd(6, '0')).slice(0, whole.length + 6);
+  return BigInt(mutezPart || '0');
+}
+
+/** mutez bigint → decimal XTZ string with trailing zeros trimmed. */
+function bigMutezToXtzString(mutez: bigint): string {
+  const whole = mutez / 1_000_000n;
+  const frac  = mutez % 1_000_000n;
+  return frac === 0n
+    ? whole.toString()
+    : `${whole.toString()}.${frac.toString().padStart(6, '0').replace(/0+$/, '')}`;
 }
 
 function routingLabel(dest: DestRuntime): string {
@@ -57,6 +89,28 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
   const [done,   setDone]  = useState<DoneState | null>(null);
   /** Synthetic hash returned by the SW, used to poll RESOLVE_TX. */
   const [pendingResolve, setPendingResolve] = useState<{ syntheticHash: string } | null>(null);
+  const [balances, setBalances] = useState<Balances>({ xtz: '0', usdc: '0', loading: true });
+
+  // Fetch balances on mount + on unlocked-state change. Same pattern as Home.
+  const tz1      = state.status === 'unlocked' ? state.tz1      : '';
+  const evmAlias = state.status === 'unlocked' ? state.evmAlias : '';
+  useEffect(() => {
+    if (tz1 === '' || evmAlias === '') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [xtzMutez, usdcHex] = await Promise.all([
+          fetchL1XtzBalance(tz1),
+          fetchErc20Balance(USDC_CONTRACT, evmAlias),
+        ]);
+        if (cancelled) return;
+        setBalances({ xtz: mutezToXtz(xtzMutez), usdc: formatUsdc(usdcHex), loading: false });
+      } catch {
+        if (!cancelled) setBalances((b) => ({ ...b, loading: false }));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [tz1, evmAlias]);
 
   // Poll the SW for the real EVM hash while in the "resolving" stage.
   useEffect(() => {
@@ -111,6 +165,25 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
     !usdcOnL1 &&
     /^\d+(\.\d+)?$/.test(amount) &&
     Number(amount) > 0;
+
+  const availableStr = asset === 'XTZ' ? balances.xtz : balances.usdc;
+  const insufficient = !balances.loading
+    && parseFloat(amount || '0') > 0
+    && parseFloat(amount || '0') > parseFloat(availableStr);
+
+  const handleMax = () => {
+    if (balances.loading) return;
+    if (asset === 'XTZ') {
+      // Reserve a small fee margin so the user doesn't tap below the kernel cost.
+      const mutezTotal = mutezToBig(balances.xtz);
+      const usable     = mutezTotal > MAX_FEE_RESERVE_MUTEZ
+        ? mutezTotal - MAX_FEE_RESERVE_MUTEZ
+        : 0n;
+      setAmt(bigMutezToXtzString(usable));
+    } else {
+      setAmt(balances.usdc);
+    }
+  };
 
   const submit = async () => {
     setStage('sending');
@@ -276,9 +349,16 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
             <Line label="Network" value="Tezos X Previewnet" />
           </div>
 
-          {error != null && (
-            <p style={{ fontSize: 12, color: 'var(--tx-danger)', marginTop: 12 }}>{error}</p>
-          )}
+          {error != null
+            ? <ErrorCard error={formatError(error)} />
+            : insufficient && (
+                <InsufficientWarning
+                  requested={parseFloat(amount).toString()}
+                  available={availableStr}
+                  asset={asset}
+                />
+              )
+          }
 
           <div style={{ fontSize: 11, color: 'var(--tx-fg-subtle)', padding: '12px 4px', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
             <Icon name="info" size={14} color="var(--tx-fg-subtle)" />
@@ -356,11 +436,16 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
             onChange={(e) => setAmt(e.target.value.replace(/[^0-9.]/g, ''))}
             placeholder="0"
           />
+          <AvailableRow
+            available={availableStr}
+            asset={asset}
+            insufficient={insufficient}
+            loading={balances.loading}
+            onMax={handleMax}
+          />
         </div>
 
-        {error != null && (
-          <p style={{ fontSize: 12, color: 'var(--tx-danger)', marginTop: 12 }}>{error}</p>
-        )}
+        {error != null && <ErrorCard error={formatError(error)} />}
       </div>
       <div className="tx-action-bar">
         <Button variant="accent" full disabled={!valid} onClick={() => setStage('review')}>
