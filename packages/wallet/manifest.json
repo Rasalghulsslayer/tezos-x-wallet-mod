@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TezosX Wallet",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Standalone Tezos wallet with built-in TezosX relayer for Tezos X EVM dApps",
 
   "permissions": ["storage", "tabs", "sidePanel"],

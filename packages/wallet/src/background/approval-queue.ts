@@ -1,4 +1,5 @@
 import type { PendingRequest } from '../lib/messages';
+import { setPendingBadge } from '../lib/badge';
 
 type Decision = 'approve' | 'reject';
 
@@ -26,6 +27,12 @@ export class ApprovalQueue {
     return this.queue.get(requestId)?.request;
   }
 
+  /** Read-only iterator over pending entries. Used by the SW to map a
+   *  closed approval window back to its request id. */
+  entries(): IterableIterator<[string, Readonly<Pending>]> {
+    return this.queue.entries();
+  }
+
   /**
    * Enqueue a new dApp request and return a promise that resolves with the
    * user's decision. Opens the approve.html window side by side.
@@ -47,6 +54,7 @@ export class ApprovalQueue {
         resolve,
         window: window ?? undefined,
       });
+      this.syncBadge();
     });
   }
 
@@ -60,6 +68,7 @@ export class ApprovalQueue {
 
     this.queue.delete(requestId);
     pending.resolve(decision);
+    this.syncBadge();
 
     if (pending.window?.id != null) {
       chrome.windows.remove(pending.window.id).catch(() => {});
@@ -74,6 +83,11 @@ export class ApprovalQueue {
       if (window?.id != null) chrome.windows.remove(window.id).catch(() => {});
     }
     this.queue.clear();
+    this.syncBadge();
     console.info('[TezosX Wallet] ApprovalQueue flushed:', reason);
+  }
+
+  private syncBadge(): void {
+    void setPendingBadge(this.queue.size);
   }
 }

@@ -6,6 +6,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.6.0] — 2026-05-07
+
+### Added
+- **Toolbar badge for pending dApp requests.** When a dApp triggers `eth_requestAccounts` or `eth_sendTransaction`, the extension icon now shows a counter so the user doesn't miss an approval if they switched tabs. Cleared on approve/reject, on lock, and when the user closes the approval window manually (which is now correctly treated as a reject — was a latent bug previously). New `lib/badge.ts` wrapper around `chrome.action`; the colour is centralised in `BADGE_BG_COLOR` (`var(--tx-purple)` ≈ `#a78bfa`).
+- **Live status timeline on the Send "Done" screen.** Replaces the single check + hash with a 3-step indicator (Broadcasted → Included → Finalized) that polls TzKT for L1 native transfers (`api.previewnet.tezosx.tzkt.io`) and the Tezlink EVM JSON-RPC for cross-runtime transfers, updating every 2 s (then 5 s once included) until the operation reaches finality (`FINALIZED_AFTER_BLOCKS = 2`). Shows the block number once included, the confirmation count once finalized, and a direct explorer link. Falls back to "Status unavailable" with a manual explorer link if polling fails for longer than `TX_POLL_TIMEOUT_MS` (2 minutes); flips a red "failed" dot if the op reverts.
+
+### Fixed
+- **Closing the approval window manually now resolves correctly.** The wallet listens to `chrome.windows.onRemoved` and rejects the matching pending request with code `4001`. Previously the request stayed in the queue forever, the dApp's promise hung, and the badge would have stuck on a non-zero count.
+
+### Internal
+- New `lib/poller.ts` — generic poll-with-cancel engine (`startPoller({ fetch, onUpdate, isDone, intervalMs, timeoutMs, onTimeout })`) decoupled from any specific domain. Reusable later for balance refresh, activity feed, etc.
+- New `lib/tx-status.ts` — `TxStatus` discriminated union and L1 (TzKT) / L2 (EVM RPC) fetchers built on top of the generic engine.
+- New `ui/tx/StatusTimeline.tsx` — pure presentation component, no side effects, takes a `TxStatus` and renders it.
+- `ApprovalQueue` now exposes a read-only `entries()` iterator so the SW can map a closed approval window back to its request id without breaching the encapsulation of its internal `Map`.
+- `clearPendingBadge()` is called both at SW boot and inside the `onInstalled` listener so a stale badge can never outlive the queue (Chrome persists the badge across SW restarts).
+
+### Compatibility
+- No wire-protocol change.
+
+---
+
 ## [0.5.0] — 2026-05-07
 
 ### Changed

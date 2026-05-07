@@ -6,6 +6,7 @@ import { LocalSignerClient } from './signer';
 import { ApprovalQueue } from './approval-queue';
 import { sessionStore } from '../lib/storage';
 import { detectRuntime } from '../lib/address';
+import { clearPendingBadge } from '../lib/badge';
 import type {
   ApproveRequest,
   ContentPush,
@@ -17,6 +18,8 @@ import type {
 } from '../lib/messages';
 
 // ── Global state (cleared on SW kill) ─────────────────────────────────────────
+
+void clearPendingBadge();
 
 const keyring  = new Keyring();
 const queue    = new ApprovalQueue();
@@ -302,7 +305,16 @@ chrome.runtime.onMessage.addListener(
 );
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.info('[TezosX Wallet] service worker installed, v0.4.3');
+  void clearPendingBadge();
+  console.info('[TezosX Wallet] service worker installed, v0.6.0');
+});
+
+chrome.windows.onRemoved.addListener((windowId) => {
+  for (const [requestId, pending] of queue.entries()) {
+    if (pending.window?.id === windowId) {
+      queue.resolve(requestId, 'reject');
+    }
+  }
 });
 
 // Toolbar icon click keeps the popup behavior; the side panel is opt-in.

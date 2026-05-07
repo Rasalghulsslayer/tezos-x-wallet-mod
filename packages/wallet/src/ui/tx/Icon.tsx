@@ -6,7 +6,7 @@ export type IconName =
   | 'copy' | 'eye' | 'eye-off' | 'lock' | 'home' | 'send' | 'activity'
   | 'settings' | 'plus' | 'qr' | 'link' | 'shield' | 'alert' | 'info'
   | 'globe' | 'scan' | 'wallet' | 'refresh' | 'dots' | 'help' | 'bell'
-  | 'logout' | 'sidebar';
+  | 'logout' | 'sidebar' | 'external-link';
 
 export function Icon({
   name,
@@ -68,6 +68,7 @@ export function Icon({
     case 'bell':            return S(<><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10 21a2 2 0 0 0 4 0" /></>);
     case 'logout':          return S(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></>);
     case 'sidebar':         return S(<><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M15 3v18" /><path d="m10 15-3-3 3-3" /></>);
+    case 'external-link':   return S(<><path d="M14 4h6v6" /><path d="M20 4 11 13" /><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></>);
     default:                return null;
   }
 }

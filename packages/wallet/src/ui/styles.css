@@ -930,3 +930,303 @@ html, body {
 }
 .tx-empty-cta:hover         { background: var(--tx-surface-2); }
 .tx-empty-cta:focus-visible { outline: 2px solid var(--tx-purple); outline-offset: 2px; }
+
+/* ─── Send "Done" · live status redesign ───────────────────────────────── */
+
+/* Hero block — icon + title + amount + route + ETA chip */
+.tx-status-hero {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+  width: 100%;
+}
+.tx-status-hero-icon {
+  width: 72px; height: 72px;
+  border-radius: 22px;
+  display: grid; place-items: center;
+  position: relative;
+  background: var(--tx-surface-2);
+  transition: background 320ms var(--tx-ease), box-shadow 320ms var(--tx-ease);
+}
+.tx-status-hero-icon.broadcasting {
+  border-radius: 50%;
+  background: rgba(124, 92, 255, 0.10);
+  box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.28);
+}
+.tx-status-hero-icon.included {
+  background: rgba(0, 194, 255, 0.10);
+  box-shadow: inset 0 0 0 1px rgba(0, 194, 255, 0.28);
+}
+.tx-status-hero-icon.finalized {
+  background: var(--tx-success-bg);
+  box-shadow: inset 0 0 0 1px rgba(76, 222, 148, 0.30);
+}
+.tx-status-hero-icon.failed {
+  background: rgba(255, 93, 93, 0.10);
+  box-shadow: inset 0 0 0 1px rgba(255, 93, 93, 0.28);
+}
+
+/* Broadcasting glyph — concentric arc spinner + radiating arcs */
+.tx-status-glyph {
+  position: relative;
+  display: grid; place-items: center;
+  width: 100%; height: 100%;
+}
+.tx-status-spinner {
+  position: absolute; inset: 0;
+  animation: tx-status-spin 1s linear infinite;
+}
+.tx-status-spinner .track { stroke: rgba(124, 92, 255, 0.18); }
+.tx-status-spinner .arc   { stroke: var(--tx-purple); stroke-dasharray: 60 220; stroke-linecap: round; }
+@keyframes tx-status-spin { to { transform: rotate(360deg); } }
+
+.tx-status-bcast { position: relative; z-index: 1; }
+.tx-status-bcast .arc-mid { transform-origin: center; animation: tx-status-bcast 1.6s ease-out 0.25s infinite; opacity: 0; }
+.tx-status-bcast .arc-out { transform-origin: center; animation: tx-status-bcast 1.6s ease-out infinite;       opacity: 0; }
+@keyframes tx-status-bcast {
+  0%   { opacity: 0;    transform: scale(0.6); }
+  30%  { opacity: 0.85; }
+  100% { opacity: 0;    transform: scale(1.1); }
+}
+
+/* Included pulse — cyan box-shadow ring */
+.tx-status-pulse {
+  position: absolute; inset: -2px;
+  border-radius: 24px;
+  pointer-events: none;
+}
+.tx-status-pulse.cyan {
+  box-shadow: 0 0 0 0 rgba(0, 194, 255, 0.45);
+  animation: tx-status-pulse-cyan 2.4s ease-in-out infinite;
+}
+@keyframes tx-status-pulse-cyan {
+  0%   { box-shadow: 0 0 0 0  rgba(0, 194, 255, 0.45); }
+  70%  { box-shadow: 0 0 0 12px rgba(0, 194, 255, 0); }
+  100% { box-shadow: 0 0 0 0  rgba(0, 194, 255, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tx-status-spinner,
+  .tx-status-bcast .arc-mid,
+  .tx-status-bcast .arc-out,
+  .tx-status-pulse.cyan { animation: none; }
+}
+
+.tx-status-hero-title {
+  font-size: 24px; font-weight: 600;
+  letter-spacing: -0.018em; line-height: 1.15;
+  margin: 0;
+  color: var(--tx-fg);
+}
+.tx-status-hero-amt {
+  font-size: 13px; line-height: 1;
+  margin-top: 2px;
+  color: var(--tx-fg-muted);
+  font-family: var(--tx-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.tx-status-hero-amt .num { color: var(--tx-fg); }
+.tx-status-hero-route {
+  font-size: 11px; line-height: 1;
+  margin-top: 4px;
+  color: var(--tx-fg-subtle);
+  letter-spacing: 0.02em;
+}
+
+/* ETA chip */
+.tx-status-eta {
+  display: inline-flex; align-items: center;
+  gap: 8px;
+  height: 26px; padding: 0 12px;
+  border-radius: var(--tx-r-pill);
+  background: var(--tx-surface-2);
+  font-size: 11.5px;
+  color: var(--tx-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+.tx-status-blip {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--tx-purple);
+  box-shadow: 0 0 8px var(--tx-purple);
+  animation: tx-status-blip 1.4s ease-in-out infinite;
+}
+.tx-status-eta.included .tx-status-blip {
+  background: var(--tx-cyan);
+  box-shadow: 0 0 8px var(--tx-cyan);
+}
+.tx-status-eta.finalized {
+  background: var(--tx-success-bg);
+  color: var(--tx-success);
+}
+.tx-status-eta.finalized .tx-status-blip {
+  background: var(--tx-success);
+  box-shadow: 0 0 8px var(--tx-success);
+  animation-duration: 2.4s;
+}
+@keyframes tx-status-blip {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tx-status-blip { animation: none; }
+}
+
+/* Progress timeline · horizontal rail */
+.tx-status-timeline {
+  margin-top: 20px;
+  width: 100%;
+  background: var(--tx-surface-2);
+  border-radius: var(--tx-r-md);
+  padding: 14px 14px 12px;
+  text-align: left;
+  box-sizing: border-box;
+}
+.tx-status-rail {
+  position: relative;
+  height: 2px;
+  margin: 6px 14px 14px;
+  background: var(--tx-surface-3);
+  border-radius: 1px;
+}
+.tx-status-rail-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  border-radius: 1px;
+  background: linear-gradient(90deg, var(--tx-purple), var(--tx-cyan), var(--tx-success));
+  transition: width 600ms var(--tx-ease);
+}
+.tx-status-rail-fill.is-failed {
+  background: linear-gradient(90deg, var(--tx-purple), var(--tx-danger));
+}
+.tx-status-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  margin-top: -22px;
+  position: relative;
+}
+.tx-status-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--tx-fg-subtle);
+}
+.tx-status-node {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--tx-bg);
+  box-shadow: inset 0 0 0 2px var(--tx-surface-3);
+  display: grid; place-items: center;
+  color: var(--tx-fg-subtle);
+  transition: all 300ms var(--tx-ease);
+}
+.tx-status-step.done .tx-status-node {
+  box-shadow: inset 0 0 0 2px var(--tx-success);
+  background:   var(--tx-success);
+  color:        #04121A;
+}
+.tx-status-step.active .tx-status-node {
+  box-shadow: inset 0 0 0 2px var(--tx-purple);
+  background:   var(--tx-bg);
+  color:        var(--tx-purple);
+  position: relative;
+}
+.tx-status-step.active .tx-status-node::before {
+  content: ""; position: absolute; inset: -3px;
+  border-radius: 50%;
+  border: 1.5px solid var(--tx-purple);
+  opacity: 0.5;
+  animation: tx-status-nodepulse 1.8s ease-in-out infinite;
+}
+.tx-status-step.active.included .tx-status-node {
+  box-shadow: inset 0 0 0 2px var(--tx-cyan);
+  color: var(--tx-cyan);
+}
+.tx-status-step.active.included .tx-status-node::before { border-color: var(--tx-cyan); }
+.tx-status-step.failed .tx-status-node {
+  box-shadow: inset 0 0 0 2px var(--tx-danger);
+  background:   rgba(255, 93, 93, 0.10);
+  color:        var(--tx-danger);
+}
+@keyframes tx-status-nodepulse {
+  0%, 100% { transform: scale(1);   opacity: 0.55; }
+  50%      { transform: scale(1.2); opacity: 0;    }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tx-status-step.active .tx-status-node::before { animation: none; }
+}
+.tx-status-step.done .tx-status-step-label,
+.tx-status-step.active .tx-status-step-label { color: var(--tx-fg); }
+.tx-status-step.failed .tx-status-step-label { color: var(--tx-danger); }
+.tx-status-step-label {
+  font-size: 11px; font-weight: 500;
+  letter-spacing: -0.005em;
+}
+.tx-status-step-sub {
+  font-size: 10px;
+  color: var(--tx-fg-subtle);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--tx-font-mono);
+  min-height: 12px;
+}
+.tx-status-step.done .tx-status-step-sub { color: var(--tx-fg-muted); }
+
+/* Meta block — hash / block / view */
+.tx-status-meta {
+  margin-top: 14px;
+  width: 100%;
+  background: var(--tx-surface-2);
+  border-radius: var(--tx-r-md);
+  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
+  box-sizing: border-box;
+}
+.tx-status-meta-row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 11.5px;
+}
+.tx-status-meta-row .k { color: var(--tx-fg-muted); }
+.tx-status-meta-row .v {
+  color: var(--tx-fg);
+  font-family: var(--tx-font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.005em;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.tx-status-meta-row .v.link {
+  color: var(--tx-fg);
+  text-decoration: none;
+  cursor: pointer;
+}
+.tx-status-meta-row .v.link:hover { color: var(--tx-cyan); }
+.tx-status-meta-row .v .pending { color: var(--tx-fg-subtle); }
+
+/* Failure card on the Done stage (echoes ErrorCard but inline) */
+.tx-status-fail {
+  margin-top: 14px;
+  width: 100%;
+  background: var(--tx-danger-bg);
+  box-shadow: inset 0 0 0 1px rgba(255, 93, 93, 0.22);
+  border-radius: var(--tx-r-md);
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 10px;
+  text-align: left;
+  box-sizing: border-box;
+}
+.tx-status-fail-ico { color: var(--tx-danger); padding-top: 1px; }
+.tx-status-fail-title {
+  font-size: 13px; font-weight: 600; color: var(--tx-danger);
+}
+.tx-status-fail-detail {
+  margin-top: 3px;
+  font-size: 11.5px; line-height: 1.5;
+  color: var(--tx-fg);
+}
