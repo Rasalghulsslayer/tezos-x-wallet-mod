@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import type { ResolveTxResult, SendTxResult, VaultState } from '@/lib/messages';
 import { sendPopupRequest } from '@/lib/messaging';
 import { detectRuntime, type DestRuntime } from '@/lib/address';
-import { EVM_EXPLORER, TEZOS_EXPLORER, USDC_CONTRACT } from '@/lib/constants';
+import { USDC_CONTRACT } from '@/lib/constants';
 import { fetchL1XtzBalance, fetchErc20Balance } from '@/lib/balances';
 import { mutezToXtz, formatUsdc } from '@/lib/format';
 import { formatError } from '@/lib/errors';
+import { trackTx, type TxStatus } from '@/lib/tx-status';
 import { Button } from '../tx/Button';
 import { Icon } from '../tx/Icon';
 import { TopBar } from '../tx/TopBar';
@@ -17,9 +18,13 @@ import { RoutingCard } from '../tx/RoutingCard';
 import { AvailableRow } from '../tx/AvailableRow';
 import { InsufficientWarning } from '../tx/InsufficientWarning';
 import { ErrorCard } from '../tx/ErrorCard';
+import { StatusTimeline } from '../tx/StatusTimeline';
+import { StatusHero } from '../tx/StatusHero';
+import { StatusMeta } from '../tx/StatusMeta';
+import { TEZOS_EXPLORER, EVM_EXPLORER } from '@/lib/constants';
 import { truncAddr } from '../tx/utils';
 
-type Stage = 'form' | 'review' | 'sending' | 'resolving' | 'done';
+type Stage = 'form' | 'review' | 'done';
 type Asset = 'XTZ' | 'USDC';
 
 interface DoneState {
@@ -73,12 +78,6 @@ function routingLabel(dest: DestRuntime): string {
   return '—';
 }
 
-function settlingSuffix(dest: DestRuntime): string {
-  if (dest === 'l2') return 'via NAC gateway';
-  if (dest === 'l1') return 'on the Michelson runtime';
-  return '';
-}
-
 export function Send({ state, onDone }: { state: VaultState; onDone: () => void }) {
   const navigate = useNavigate();
   const [asset,  setAsset] = useState<Asset>('XTZ');
@@ -87,6 +86,10 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
   const [stage,  setStage] = useState<Stage>('form');
   const [error,  setErr]   = useState<string | null>(null);
   const [done,   setDone]  = useState<DoneState | null>(null);
+  const [txStatus, setTxStatus] = useState<TxStatus | null>(null);
+  /** Wall-clock origin used by the timeline's "X s ago" sub. Set when we
+   *  enter the `done` stage so the counter survives status updates. */
+  const [doneStartedAt, setDoneStartedAt] = useState<number | null>(null);
   /** Synthetic hash returned by the SW, used to poll RESOLVE_TX. */
   const [pendingResolve, setPendingResolve] = useState<{ syntheticHash: string } | null>(null);
   const [balances, setBalances] = useState<Balances>({ xtz: '0', usdc: '0', loading: true });
@@ -112,9 +115,8 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
     return () => { cancelled = true; };
   }, [tz1, evmAlias]);
 
-  // Poll the SW for the real EVM hash while in the "resolving" stage.
   useEffect(() => {
-    if (stage !== 'resolving' || pendingResolve == null) return;
+    if (pendingResolve == null) return;
 
     let cancelled = false;
     const startedAt = Date.now();
@@ -128,9 +130,8 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
         });
         if (cancelled) return;
         if (result.resolved) {
-          setDone({ hash: result.hash, runtime: 'l2', pending: false });
+          setDone((prev) => prev != null ? { ...prev, hash: result.hash, pending: false } : prev);
           setPendingResolve(null);
-          setStage('done');
           onDone();
           return;
         }
@@ -139,20 +140,30 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
       }
 
       if (Date.now() - startedAt >= RESOLVE_TIMEOUT_MS) {
-        // Give up; fall back to the L1 op hash via the explorer.
-        setDone({ hash: pendingResolve.syntheticHash, runtime: 'l2', pending: true });
+        // Give up; trackTx will eventually time out on the synthetic hash and
+        // surface "Status unavailable" with a manual explorer link.
+        setDone((prev) => prev != null ? { ...prev, pending: true } : prev);
         setPendingResolve(null);
-        setStage('done');
         onDone();
         return;
       }
 
-      setTimeout(tick, RESOLVE_POLL_MS);
+      setTimeout(() => { void tick(); }, RESOLVE_POLL_MS);
     };
 
-    setTimeout(tick, RESOLVE_POLL_MS);
+    setTimeout(() => { void tick(); }, RESOLVE_POLL_MS);
     return () => { cancelled = true; };
-  }, [stage, pendingResolve, onDone]);
+  }, [pendingResolve, onDone]);
+
+  useEffect(() => {
+    if (stage !== 'done' || done == null || done.hash === '') return;
+    const handle = trackTx({
+      hash:     done.hash,
+      runtime:  done.runtime,
+      onUpdate: setTxStatus,
+    });
+    return () => handle.stop();
+  }, [stage, done]);
 
   if (state.status !== 'unlocked') return null;
 
@@ -186,8 +197,12 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
   };
 
   const submit = async () => {
-    setStage('sending');
     setErr(null);
+    setTxStatus(null);
+    const predictedRuntime: 'l1' | 'l2' = (asset === 'XTZ' && dest === 'l1') ? 'l1' : 'l2';
+    setDone({ hash: '', runtime: predictedRuntime, pending: false });
+    setDoneStartedAt(Date.now());
+    setStage('done');
     try {
       const result = await sendPopupRequest<SendTxResult>({
         type:   'SEND_TX',
@@ -198,16 +213,18 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
 
       if (result.runtime === 'l1') {
         setDone({ hash: result.hash, runtime: 'l1', pending: false });
-        setStage('done');
         onDone();
         return;
       }
 
-      // Cross-runtime: wait for the real EVM hash before showing "Done".
+      // Cross-runtime: surface the synthetic hash now; the resolve effect
+      // will swap in the real EVM hash once the kernel mints it.
+      setDone({ hash: result.hash, runtime: 'l2', pending: true });
       setPendingResolve({ syntheticHash: result.hash });
-      setStage('resolving');
     } catch (e) {
       setErr((e as Error).message);
+      setDone(null);
+      setDoneStartedAt(null);
       setStage('review');
     }
   };
@@ -217,99 +234,56 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
     if (stage === 'review') setStage('form');
   };
 
-  const explorerUrl = (d: DoneState): string =>
-    d.runtime === 'l1'
-      ? `${TEZOS_EXPLORER}/${d.hash}`
-      : d.pending
-        ? `${TEZOS_EXPLORER}/${d.hash}`           // L1 op hash fallback
-        : `${EVM_EXPLORER}/tx/${d.hash}`;
-
-  // ── Sending stage ────────────────────────────────────────────────────────
-  if (stage === 'sending') {
-    return (
-      <div className="tx-page">
-        <TopBar title="" />
-        <div className="tx-page-scroll" style={{ padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 20 }}>
-          <div className="tx-sending" />
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 500 }}>Broadcasting…</div>
-            <div style={{ fontSize: 13, color: 'var(--tx-fg-muted)', marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>
-              {parseFloat(amount || '0').toLocaleString()} {asset} · {settlingSuffix(dest)}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Resolving stage (cross-runtime: waiting for the real EVM hash) ──────
-  if (stage === 'resolving') {
-    return (
-      <div className="tx-page">
-        <TopBar title="" />
-        <div className="tx-page-scroll" style={{ padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 20 }}>
-          <div className="tx-sending" />
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 500 }}>Confirming on the EVM runtime…</div>
-            <div style={{ fontSize: 13, color: 'var(--tx-fg-muted)', marginTop: 6 }}>
-              L1 op signed. Waiting for the kernel-synthesized EVM transaction.
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // ── Done stage ───────────────────────────────────────────────────────────
-  if (stage === 'done' && done != null) {
+  if (stage === 'done' && done != null && doneStartedAt != null) {
+    const isFinalized   = txStatus?.stage === 'finalized';
+    const isFailed      = txStatus?.stage === 'failed' || txStatus?.stage === 'unavailable';
+    const explorerUrl   = done.runtime === 'l1'
+      ? `${TEZOS_EXPLORER}/${done.hash}`
+      : `${EVM_EXPLORER}/tx/${done.hash}`;
+    const explorerName  = done.runtime === 'l1' ? 'tzkt' : 'blockscout';
+    const status        = txStatus ?? { stage: 'broadcasting' as const };
+
     return (
       <div className="tx-page">
         <TopBar title="" />
-        <div className="tx-page-scroll" style={{ padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 20 }}>
-          <div style={{ flex: 1 }} />
-          <div className="tx-success-burst">
-            <Icon name="check" size={32} color="var(--tx-success)" strokeWidth={2.25} />
-          </div>
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.015em' }}>
-              {done.pending ? 'Submitted' : 'Sent'}
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--tx-fg-muted)', marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>
-              {parseFloat(amount || '0').toLocaleString()} {asset} to {truncAddr(to, 6)}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--tx-fg-subtle)', marginTop: 4 }}>
-              {settlingSuffix(dest)}
-            </div>
-          </div>
-          <div style={{ flex: 1 }} />
-
-          {done.pending && (
-            <div style={{ fontSize: 11, color: 'var(--tx-warning)', maxWidth: 280 }}>
-              The L1 op is confirmed but the kernel-synthesized EVM hash didn't resolve in time. Open the L1 operation on tzkt to track it.
+        <div className="tx-page-scroll" style={{ padding: '0 16px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <StatusHero
+            status={status}
+            runtime={done.runtime}
+            amount={parseFloat(amount || '0').toString()}
+            asset={asset}
+            to={truncAddr(to, 6)}
+          />
+          <StatusTimeline status={status} runtime={done.runtime} startedAt={doneStartedAt} />
+          {!isFailed && done.hash !== '' && <StatusMeta status={status} runtime={done.runtime} hash={done.hash} />}
+          {isFailed && (
+            <div className="tx-status-fail" role="alert">
+              <span className="tx-status-fail-ico" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="6.75" stroke="currentColor" strokeWidth="1.4" />
+                  <path d="M8 4.75v3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                  <circle cx="8" cy="11" r="0.75" fill="currentColor" />
+                </svg>
+              </span>
+              <div>
+                <div className="tx-status-fail-title">
+                  {txStatus?.stage === 'failed' ? 'Transaction failed' : 'Status unavailable'}
+                </div>
+                <div className="tx-status-fail-detail">
+                  {txStatus?.stage === 'failed'
+                    ? `The op was rejected on-chain (${txStatus.reason}).`
+                    : "The RPC didn't reply. Your op was broadcast — check the explorer to see if it landed."}
+                </div>
+              </div>
             </div>
           )}
-
-          <a
-            href={explorerUrl(done)}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              fontSize: 11,
-              color: 'var(--tx-fg-muted)',
-              letterSpacing: '0.02em',
-              textDecoration: 'none',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            <span>Hash</span>
-            <span className="tx-mono" style={{ color: 'var(--tx-fg)' }}>{truncAddr(done.hash, 5)}</span>
-            <Icon name="arrow-up-right" size={11} />
-          </a>
         </div>
         <div className="tx-action-bar">
-          <Button variant="accent" full onClick={() => navigate('/')}>Done</Button>
+          {isFailed
+            ? <Button variant="outline" full onClick={() => window.open(explorerUrl, '_blank')}>View on {explorerName} →</Button>
+            : <Button variant={isFinalized ? 'accent' : 'outline'} full onClick={() => navigate('/')}>Done</Button>
+          }
         </div>
       </div>
     );
