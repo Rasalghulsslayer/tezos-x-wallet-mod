@@ -7,7 +7,7 @@ import {
   type MichelineMichelsonV1Expression,
 } from '@airgap/beacon-sdk';
 import type { MichelsonV1Expression } from '@taquito/rpc';
-import { TEZOS_L1_RPC, NAC_CONTRACT } from './constants.js';
+import { TEZOS_L1_RPC, NAC_CONTRACT } from './shared/constants.js';
 import type { BeaconPermissions } from './types.js';
 import type { ITezosWalletClient } from './wallet-client.js';
 

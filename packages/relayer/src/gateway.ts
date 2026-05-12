@@ -1,5 +1,5 @@
 import type { MichelsonV1Expression } from '@taquito/rpc';
-import { NAC_ENTRYPOINT } from './constants.js';
+import { NAC_ENTRYPOINT } from './shared/constants.js';
 import type { EthTransactionRequest } from './types.js';
 
 /**

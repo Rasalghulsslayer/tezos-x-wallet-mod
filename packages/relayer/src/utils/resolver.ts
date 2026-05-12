@@ -1,6 +1,6 @@
 import type { TezlinkClient } from '../tezlink.js';
-import { hexToNum, numToHex } from './hex.js';
-import { sleep } from './async.js';
+import { hexToNum, numToHex } from '../shared/hex.js';
+import { sleep } from '../shared/async.js';
 
 /**
  * Map a synthetic NAC hash back to the real EVM transaction hash by scanning

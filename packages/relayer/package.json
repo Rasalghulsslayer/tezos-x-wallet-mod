@@ -10,7 +10,7 @@
     "./wallet-client": "./src/wallet-client.ts",
     "./gateway": "./src/gateway.ts",
     "./tezlink": "./src/tezlink.ts",
-    "./constants": "./src/constants.ts",
+    "./constants": "./src/shared/constants.ts",
     "./types": "./src/types.ts",
     "./utils/*": "./src/utils/*.ts",
     "./package.json": "./package.json"

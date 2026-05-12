@@ -1,5 +1,5 @@
-import { TEZLINK_EVM_RPC } from '../constants.js';
-import { jsonRpc } from './rpc.js';
+import { TEZLINK_EVM_RPC } from '../shared/constants.js';
+import { jsonRpc } from '../shared/rpc.js';
 
 /**
  * Derive the deterministic EVM alias (0x...) for a Tezos tz1 address.

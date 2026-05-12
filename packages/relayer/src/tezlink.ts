@@ -1,5 +1,5 @@
-import { TEZLINK_EVM_RPC } from './constants.js';
-import { jsonRpc } from './utils/rpc.js';
+import { TEZLINK_EVM_RPC } from './shared/constants.js';
+import { jsonRpc } from './shared/rpc.js';
 import type { EthTransactionReceipt } from './types.js';
 
 /**

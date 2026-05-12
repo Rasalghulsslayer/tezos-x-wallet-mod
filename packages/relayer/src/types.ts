@@ -76,3 +76,7 @@ export interface BeaconPermissions {
   address:   string;   // tz1...
   publicKey: string;
 }
+
+// ── Domain re-exports ──────────────────────────────────────────────────────
+
+export * from './domain/index.js';
