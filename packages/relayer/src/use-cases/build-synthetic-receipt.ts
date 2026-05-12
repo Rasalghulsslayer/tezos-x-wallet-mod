@@ -1,12 +1,17 @@
-import { keccak256, toBytes } from 'viem';
+/**
+ * l1OpHashToEvmHash: keccak256 of a Michelson opHash, returned as a 32-byte
+ * EVM-style hex hash.
+ * buildSyntheticReceipt: fallback EthTransactionReceipt for cross-runtime
+ * transactions whose real EVM hash cannot be resolved.
+ */
+
+import { keccak } from '../shared/keccak.js';
 import type { EthTransactionReceipt } from '../types.js';
 
-/** Derive a stable 32-byte EVM-style hash from a Michelson runtime opHash. */
 export function l1OpHashToEvmHash(l1OpHash: string): string {
-  return keccak256(toBytes(l1OpHash));
+  return keccak(l1OpHash);
 }
 
-/** Fallback receipt returned when no real EVM receipt can be resolved. */
 export function buildSyntheticReceipt(
   syntheticHash: string,
   from: string,

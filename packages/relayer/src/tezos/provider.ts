@@ -1,9 +1,9 @@
 import EventEmitter from 'eventemitter3';
 import { TezlinkClient } from './tezlink.js';
-import { GatewayBuilder } from '../gateway.js';
-import { deriveEvmAlias } from '../utils/derive.js';
-import { l1OpHashToEvmHash, buildSyntheticReceipt } from '../utils/receipt.js';
-import { findRealHash } from '../utils/resolver.js';
+import { buildTezosToEvmCall } from '../use-cases/build-tezos-to-evm-call.js';
+import { deriveEvmAlias } from '../use-cases/derive-alias.js';
+import { l1OpHashToEvmHash, buildSyntheticReceipt } from '../use-cases/build-synthetic-receipt.js';
+import { findRealHash } from '../use-cases/resolve-synthetic-hash.js';
 import type { ITezosWalletClient } from '../ports/tezos-wallet-client.js';
 import type {
   EIP1193Provider,
@@ -41,7 +41,6 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
 
   private readonly beacon:  ITezosWalletClient;
   private readonly tezlink = new TezlinkClient();
-  private readonly gateway = new GatewayBuilder();
 
   /**
    * @param walletClient Wallet backend implementing ITezosWalletClient. Pass
@@ -219,7 +218,7 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
     console.info('[TezosX Relayer] eth_sendTransaction →', { to: tx.to, value: tx.value ?? '0x0', data: tx.data ?? '0x' });
 
     // Build NAC gateway Micheline call (async: may resolve selector via 4byte.directory)
-    const { entrypoint, michelineArg, mutezAmount } = await this.gateway.fromEthTransaction(tx);
+    const { entrypoint, michelineArg, mutezAmount } = await buildTezosToEvmCall(tx);
     console.info('[TezosX Relayer] NAC call built →', { entrypoint, mutezAmount });
 
     // Record the EVM head block BEFORE submission — used later by the resolver
@@ -228,7 +227,7 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
     console.info('[TezosX Relayer] fromBlock snapshot →', fromBlock);
 
     // Submit to Temple via Beacon — opens signing popup
-    const l1OpHash = await this.beacon.sendContractCall(entrypoint, michelineArg, mutezAmount);
+    const l1OpHash = await this.beacon.sendContractCall(entrypoint, michelineArg, mutezAmount.toString());
     console.info('[TezosX Relayer] L1 opHash signed →', l1OpHash);
 
     // Derive a stable 32-byte EVM-style hash from the L1 opHash

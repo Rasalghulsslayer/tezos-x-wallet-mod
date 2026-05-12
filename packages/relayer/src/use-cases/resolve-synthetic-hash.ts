@@ -1,13 +1,13 @@
+/**
+ * findRealHash: scan EVM blocks starting at fromBlock to find the kernel-
+ * synthesized transaction whose `from` or `to` matches the alias and that
+ * has not been claimed yet.
+ */
+
 import type { TezlinkClient } from '../tezos/tezlink.js';
 import { hexToNum, numToHex } from '../shared/hex.js';
 import { sleep } from '../shared/async.js';
 
-/**
- * Map a synthetic NAC hash back to the real EVM transaction hash by scanning
- * blocks from `fromBlock` to head, matching the first unclaimed tx whose
- * `from` equals `evmAlias`. Retries up to `maxAttempts` times with
- * `intervalMs` delay. Returns the real hash or null.
- */
 export async function findRealHash(
   tezlink:       TezlinkClient,
   evmAlias:      string,
@@ -25,8 +25,6 @@ export async function findRealHash(
     intervalMs,
   );
 }
-
-// ── Internals ─────────────────────────────────────────────────────────────────
 
 async function attemptFind(
   tezlink:       TezlinkClient,
@@ -77,8 +75,6 @@ async function scanBlock(
     })),
   );
 
-  // Kernel-synthesized tx may list the alias as `from` OR `to` depending on
-  // the cross-runtime flow, so we match both sides.
   const match = block.transactions.find(
     (tx) =>
       !claimedHashes.has(tx.hash) &&

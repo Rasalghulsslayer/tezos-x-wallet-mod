@@ -3,3 +3,4 @@
  */
 
 export * from './tezos-wallet-client.js';
+export * from './transport.js';
