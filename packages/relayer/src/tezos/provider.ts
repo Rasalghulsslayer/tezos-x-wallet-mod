@@ -1,10 +1,10 @@
 import EventEmitter from 'eventemitter3';
 import { TezlinkClient } from './tezlink.js';
-import { GatewayBuilder } from './gateway.js';
-import { deriveEvmAlias } from './utils/derive.js';
-import { l1OpHashToEvmHash, buildSyntheticReceipt } from './utils/receipt.js';
-import { findRealHash } from './utils/resolver.js';
-import type { ITezosWalletClient } from './wallet-client.js';
+import { GatewayBuilder } from '../gateway.js';
+import { deriveEvmAlias } from '../utils/derive.js';
+import { l1OpHashToEvmHash, buildSyntheticReceipt } from '../utils/receipt.js';
+import { findRealHash } from '../utils/resolver.js';
+import type { ITezosWalletClient } from '../ports/tezos-wallet-client.js';
 import type {
   EIP1193Provider,
   RequestArguments,
@@ -13,7 +13,7 @@ import type {
   RelayerSession,
   PendingOp,
   EthTransactionRequest,
-} from './types.js';
+} from '../types.js';
 
 // ── EIP-1193 error codes ───────────────────────────────────────────────────
 

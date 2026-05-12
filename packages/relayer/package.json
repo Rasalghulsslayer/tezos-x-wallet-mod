@@ -6,12 +6,13 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./provider": "./src/provider.ts",
-    "./wallet-client": "./src/wallet-client.ts",
-    "./gateway": "./src/gateway.ts",
-    "./tezlink": "./src/tezlink.ts",
-    "./constants": "./src/shared/constants.ts",
+    "./tezos": "./src/tezos/index.ts",
     "./types": "./src/types.ts",
+    "./constants": "./src/shared/constants.ts",
+    "./provider": "./src/tezos/provider.ts",
+    "./wallet-client": "./src/ports/tezos-wallet-client.ts",
+    "./gateway": "./src/gateway.ts",
+    "./tezlink": "./src/tezos/tezlink.ts",
     "./utils/*": "./src/utils/*.ts",
     "./package.json": "./package.json"
   },

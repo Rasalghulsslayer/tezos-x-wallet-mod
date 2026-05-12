@@ -1,4 +1,4 @@
-import type { TezlinkClient } from '../tezlink.js';
+import type { TezlinkClient } from '../tezos/tezlink.js';
 import { hexToNum, numToHex } from '../shared/hex.js';
 import { sleep } from '../shared/async.js';
 

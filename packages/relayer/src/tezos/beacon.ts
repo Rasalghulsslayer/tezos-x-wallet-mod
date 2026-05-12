@@ -7,9 +7,9 @@ import {
   type MichelineMichelsonV1Expression,
 } from '@airgap/beacon-sdk';
 import type { MichelsonV1Expression } from '@taquito/rpc';
-import { TEZOS_L1_RPC, NAC_CONTRACT } from './shared/constants.js';
-import type { BeaconPermissions } from './types.js';
-import type { ITezosWalletClient } from './wallet-client.js';
+import { TEZOS_L1_RPC, NAC_CONTRACT } from '../shared/constants.js';
+import type { BeaconPermissions } from '../types.js';
+import type { ITezosWalletClient } from '../ports/tezos-wallet-client.js';
 
 const EIP1193_USER_REJECTED = 4001;
 const JSON_RPC_INTERNAL = -32603;

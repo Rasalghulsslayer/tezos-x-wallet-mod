@@ -1,5 +1,5 @@
-import { RelayerProvider } from './provider.js';
-import { BeaconClient } from './beacon.js';
+import { RelayerProvider } from './tezos/provider.js';
+import { BeaconClient } from './tezos/beacon.js';
 import type { EIP1193Provider } from './types.js';
 
 declare global {

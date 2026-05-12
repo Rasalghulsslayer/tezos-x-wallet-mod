@@ -1,6 +1,6 @@
-import { TEZLINK_EVM_RPC } from './shared/constants.js';
-import { jsonRpc } from './shared/rpc.js';
-import type { EthTransactionReceipt } from './types.js';
+import { TEZLINK_EVM_RPC } from '../shared/constants.js';
+import { jsonRpc } from '../shared/rpc.js';
+import type { EthTransactionReceipt } from '../types.js';
 
 /**
  * Minimal shape of a block returned by eth_getBlockByNumber(..., true).

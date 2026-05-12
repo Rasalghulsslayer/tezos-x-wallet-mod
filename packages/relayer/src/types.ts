@@ -77,6 +77,7 @@ export interface BeaconPermissions {
   publicKey: string;
 }
 
-// ── Domain re-exports ──────────────────────────────────────────────────────
+// ── Domain & ports re-exports ──────────────────────────────────────────────
 
 export * from './domain/index.js';
+export * from './ports/index.js';
