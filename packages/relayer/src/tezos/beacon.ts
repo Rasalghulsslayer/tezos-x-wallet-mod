@@ -8,8 +8,7 @@ import {
 } from '@airgap/beacon-sdk';
 import type { MichelsonV1Expression } from '@taquito/rpc';
 import { TEZOS_L1_RPC, NAC_CONTRACT } from '../shared/constants.js';
-import type { BeaconPermissions } from '../types.js';
-import type { ITezosWalletClient } from '../ports/tezos-wallet-client.js';
+import type { ITezosWalletClient, WalletPermissions } from '../ports/tezos-wallet-client.js';
 
 const EIP1193_USER_REJECTED = 4001;
 const JSON_RPC_INTERNAL = -32603;
@@ -56,7 +55,7 @@ export class BeaconClient implements ITezosWalletClient {
   }
 
   /** Return existing connected account without opening a popup, or null. */
-  async getActiveAccount(): Promise<BeaconPermissions | null> {
+  async getActiveAccount(): Promise<WalletPermissions | null> {
     const account = await this.client.getActiveAccount();
     if (account == null) return null;
     return { address: account.address, publicKey: account.publicKey ?? '' };
@@ -66,7 +65,7 @@ export class BeaconClient implements ITezosWalletClient {
    * Open the Temple Wallet popup to request permissions.
    * Resolves after user approves; throws EIP-1193 error 4001 on rejection.
    */
-  async requestPermissions(): Promise<BeaconPermissions> {
+  async requestPermissions(): Promise<WalletPermissions> {
     try {
       // Network is already configured at DAppClient construction.
       // RequestPermissionInput only accepts { scopes? } — no network override.

@@ -6,7 +6,7 @@
  */
 
 import { keccak } from '../shared/keccak.js';
-import type { EthTransactionReceipt } from '../types.js';
+import type { EthTransactionReceipt } from '../domain/eth-tx.js';
 
 export function l1OpHashToEvmHash(l1OpHash: string): string {
   return keccak(l1OpHash);

@@ -6,6 +6,42 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.5.0] — 2026-05-12
+
+### Added
+- **New named entry points** alongside the existing per-file paths:
+  - `@tezosx/relayer/tezos` — curated public surface for Tezos-consumer wallets: `RelayerProvider`, `BeaconClient`, `TezlinkClient`, plus the use-case helpers `buildTezosToEvmCall`, `deriveEvmAlias`, `resolveTezosAddress`.
+  - `@tezosx/relayer/evm` — public surface for EVM-consumer wallets: `encodeNacTransfer`, `encodeNacCallMichelson`, `buildCrossRuntimeTx` (high-level builder taking a `CrossRuntimeIntent` + `fromAddress` + `TransportPort`), `buildEvmToTezosCall` (pure use case), the async-iterable `trackCrossRuntimeStatus`, and the `NAC_PRECOMPILE_ADDR` and `NAC_RECOMMENDED_GAS` constants.
+  - `@tezosx/relayer/types` — type hub re-exporting the entire `src/domain/` and `src/ports/` layers.
+- **Use cases as pure functions** under `src/use-cases/`: `derive-alias`, `resolve-synthetic-hash`, `build-synthetic-receipt`, `build-tezos-to-evm-call`, `build-evm-to-tezos-call`, `track-cross-runtime-status`. Each takes its dependencies as parameters (ports/transports) and is testable in isolation.
+- **`TransportPort` and `JsonRpcTransport` interfaces** under `src/ports/transport.ts` — minimal abstractions for the Tezlink EVM RPC and Tezos L1 RPC channels, consumed by the EVM-side builders and the cross-runtime status tracker.
+- **Domain layer** under `src/domain/` carrying every runtime-agnostic type and error class: `CrossRuntimeIntent`, `CrossRuntimeCall` (union of `GatewayCall` and `PrecompileCall`), `CrossRuntimeDirection`, `CrossTxStatus`, `RuntimeId`, `ChainConfig`, `AliasMapping`, `RelayerError` and its subtypes `GatewayError` and `PrecompileError`. The EIP-1193 surface types (`RequestArguments`, `ProviderRpcError`, `ProviderConnectInfo`, `EIP1193Provider`) and the Ethereum-tx types (`EthTransactionRequest`, `EthTransactionReceipt`) now also live in `src/domain/`.
+- **README** for the package describing both consumer modes, the public surface map, and the source layout.
+
+### Changed
+- **Internal reorganisation toward clean architecture** (no behaviour change). `src/` is now split into `domain/`, `ports/`, `use-cases/`, `shared/`, `tezos/`, `evm/`, plus the existing `polyfills/`. The bare `index.ts` IIFE entry script still auto-injects `window.ethereum` exactly as before.
+- **`GatewayBuilder` (class) replaced by `buildTezosToEvmCall` (pure async function)** returning the new domain `GatewayCall` type, which carries `direction: 'michelson-to-evm'`, `contractAddr`, `entrypoint: 'default' | 'call_evm'`, and `mutezAmount: bigint`. The `RelayerProvider` internally calls the new function and converts `mutezAmount.toString()` at the beacon call site — the `ITezosWalletClient` interface still takes a string mutez amount, so consumer wallets need no change.
+- **Constants moved from `src/constants.ts` into `src/shared/constants.ts`**. The `@tezosx/relayer/constants` exports map entry now resolves to the new home unchanged; the legacy `src/constants.ts` is removed.
+- **Cross-cutting helpers moved from `src/utils/` into `src/shared/`** (hex, async, rpc) and `src/use-cases/` (derive, resolver, receipt). `src/utils/` is gone; the `@tezosx/relayer/utils/derive` exports map entry redirects to `src/use-cases/derive-alias.ts` so the wallet's existing import keeps working.
+- **Tezos-consumer source files relocated** out of the bare `src/` directory: `provider.ts`, `beacon.ts`, `tezlink.ts` moved into `src/tezos/` and `wallet-client.ts` moved into `src/ports/tezos-wallet-client.ts`. The exports map redirects `./provider`, `./wallet-client`, `./tezlink` to the new homes; consumers see no change.
+- **`src/types.ts` dismantled**: EIP-1193 types moved to `src/domain/eip-1193.ts`, Ethereum-tx types to `src/domain/eth-tx.ts`, `RelayerSession` and `PendingOp` inlined as private interfaces inside `src/tezos/provider.ts`, `BeaconPermissions` consolidated into `WalletPermissions` (the two were structurally identical). The `@tezosx/relayer/types` exports map entry redirects to `src/domain/index.ts`, which re-exports everything in `domain/` plus the port interfaces.
+
+### Removed
+- **`src/gateway.ts`** (replaced by `src/use-cases/build-tezos-to-evm-call.ts`).
+- **`src/constants.ts`** and **`src/utils/{hex,async,rpc,derive,resolver,receipt}.ts`** — content relocated to `src/shared/` or `src/use-cases/`.
+- **`src/types.ts`** — content relocated to `src/domain/` (see Changed).
+- **`./gateway` exports map entry** — no external consumer; internal callers use the use case.
+- **`./utils/*` wildcard exports map entry** — replaced by a specific `./utils/derive` entry redirecting to the use case (only utility path the wallet still imports).
+- **`BeaconPermissions` interface** — collapsed into the structurally identical `WalletPermissions` exported from `src/ports/tezos-wallet-client.ts`.
+
+### Compatibility
+- **Wallet 0.6.0 builds and runs unchanged.** Every existing wallet import — `@tezosx/relayer/{provider,wallet-client,tezlink,constants,types,utils/derive}` — resolves to the new home via the exports map. No shim files; only redirects.
+- **The injected `window.ethereum` runtime surface is unchanged.** Same EIP-1193 methods, same return shapes, same synthetic-hash → real-hash resolution flow.
+- The IIFE bundle (`dist/relayer.iife.js`) and the Chrome MV3 extension under `extension/` are unaffected by the source reorganisation.
+- Kernel requirement unchanged from 0.4.0 (Previewnet, the 4-field `call_evm` signature).
+
+---
+
 ## [0.4.1] — 2026-05-05
 
 ### Added

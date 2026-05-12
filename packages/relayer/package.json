@@ -1,6 +1,6 @@
 {
   "name": "@tezosx/relayer",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -8,7 +8,7 @@
     ".": "./src/index.ts",
     "./tezos": "./src/tezos/index.ts",
     "./evm": "./src/evm/index.ts",
-    "./types": "./src/types.ts",
+    "./types": "./src/domain/index.ts",
     "./constants": "./src/shared/constants.ts",
     "./provider": "./src/tezos/provider.ts",
     "./wallet-client": "./src/ports/tezos-wallet-client.ts",

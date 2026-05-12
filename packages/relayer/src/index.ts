@@ -1,6 +1,6 @@
 import { RelayerProvider } from './tezos/provider.js';
 import { BeaconClient } from './tezos/beacon.js';
-import type { EIP1193Provider } from './types.js';
+import type { EIP1193Provider } from './domain/eip-1193.js';
 
 declare global {
   interface Window {

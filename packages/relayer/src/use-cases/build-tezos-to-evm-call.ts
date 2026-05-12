@@ -7,7 +7,7 @@
 import type { MichelsonV1Expression } from '@taquito/rpc';
 import { NAC_CONTRACT } from '../shared/constants.js';
 import type { GatewayCall } from '../domain/cross-runtime.js';
-import type { EthTransactionRequest } from '../types.js';
+import type { EthTransactionRequest } from '../domain/eth-tx.js';
 
 function stripHexPrefix(hex: string): string {
   return hex.startsWith('0x') ? hex.slice(2) : hex;

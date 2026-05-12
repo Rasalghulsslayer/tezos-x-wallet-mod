@@ -3,7 +3,7 @@
  * Michelson runtime endpoint.
  */
 
-import type { ProviderRpcError } from '../types.js';
+import type { ProviderRpcError } from '../domain/eip-1193.js';
 
 const JSON_RPC_INTERNAL = -32603;
 
