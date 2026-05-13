@@ -32,7 +32,13 @@ const vaultStore:    VaultStore       = new ChromeVaultStore();
 const sessionStore:  SessionStore     = new ChromeSessionStore();
 const notifications: NotificationPort = new ChromeNotificationPort();
 
-export const persistentPorts = { vaultStore, sessionStore, notifications };
+export interface PersistentPorts {
+  vaultStore:    VaultStore;
+  sessionStore:  SessionStore;
+  notifications: NotificationPort;
+}
+
+export const persistentPorts: PersistentPorts = { vaultStore, sessionStore, notifications };
 
 export function buildContainer(secrets: UnlockedSecrets): Container {
   const signer   = new TezosSigner(secrets.secretKey, secrets.publicKey, secrets.tz1);
