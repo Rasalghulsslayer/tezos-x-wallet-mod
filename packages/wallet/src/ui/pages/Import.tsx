@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isValidEdsk, isValidMnemonic } from '@/domain/validation';
-import { sendPopupRequest } from '@/lib/messaging';
+import { sendPopupRequest } from '@/shared/messaging';
 import { formatError } from '@/domain/error';
 import { Button } from '../tx/Button';
 import { TopBar } from '../tx/TopBar';

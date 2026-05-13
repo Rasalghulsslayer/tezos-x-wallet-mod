@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { PendingRequest } from '@/lib/messages';
-import { sendApproveRequest } from '@/lib/messaging';
+import type { PendingRequest } from '@/shared/messages';
+import { sendApproveRequest } from '@/shared/messaging';
 import { formatError, makeError } from '@/domain/error';
 import { Button } from '../tx/Button';
 import { Icon } from '../tx/Icon';

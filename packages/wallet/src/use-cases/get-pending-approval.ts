@@ -3,7 +3,7 @@
  */
 
 import type { ApprovalQueue } from '../background/approval-queue';
-import type { PendingRequest } from '../lib/messages';
+import type { PendingRequest } from '../shared/messages';
 
 export interface GetPendingApprovalReq {
   requestId: string;

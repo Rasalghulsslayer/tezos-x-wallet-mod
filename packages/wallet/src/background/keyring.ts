@@ -2,7 +2,7 @@ import {
   deriveTezosIdentity,
   deriveTezosIdentityFromSecretKey,
   newMnemonic,
-} from '../lib/seed';
+} from '../shared/seed';
 import { isValidEdsk, isValidMnemonic } from '../domain/validation';
 import type { VaultStore, EncryptedVault } from '../ports/vault-store';
 

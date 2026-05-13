@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import type { VaultState } from '../lib/messages';
-import { sendPopupRequest } from '../lib/messaging';
+import type { VaultState } from '../shared/messages';
+import { sendPopupRequest } from '../shared/messaging';
 import { makeError } from '../domain/error';
 import { Welcome }     from './pages/Welcome';
 import { Create }      from './pages/Create';

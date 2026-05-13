@@ -1,9 +1,9 @@
-import '@/lib/buffer-shim';
+import '@/shared/buffer-shim';
 import { Keyring } from './keyring';
 import { ApprovalQueue } from './approval-queue';
 import { buildContainer, persistentPorts } from '../composition/container';
 import { dispatch, type SwState, type SwDeps } from '../composition/sw-wiring';
-import type { ContentPush } from '../lib/messages';
+import type { ContentPush } from '../shared/messages';
 
 // ── SW-scoped mutable state (cleared on SW kill) ─────────────────────────────
 

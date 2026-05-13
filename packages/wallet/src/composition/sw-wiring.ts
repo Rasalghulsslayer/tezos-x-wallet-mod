@@ -14,7 +14,7 @@ import type {
   EthereumRequest,
   PopupRequest,
   WalletResponse,
-} from '../lib/messages';
+} from '../shared/messages';
 import type { StoredSession } from '../ports/session-store';
 
 import { getState }                from '../use-cases/get-state';

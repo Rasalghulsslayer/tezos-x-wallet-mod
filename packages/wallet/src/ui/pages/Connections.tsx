@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { VaultState } from '@/lib/messages';
+import type { VaultState } from '@/shared/messages';
 import type { StoredSession } from '@/ports/session-store';
-import { sendPopupRequest } from '@/lib/messaging';
-import { timeAgo } from '@/lib/format';
+import { sendPopupRequest } from '@/shared/messaging';
+import { timeAgo } from '@/shared/format';
 import { TopBar } from '../tx/TopBar';
 import { Icon } from '../tx/Icon';
 import { Button } from '../tx/Button';

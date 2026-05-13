@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import type { VaultState } from '@/lib/messages';
+import type { VaultState } from '@/shared/messages';
 import { TopBar } from '../tx/TopBar';
 import { BottomTabs } from '../tx/BottomTabs';
 import { EmptyState } from '../tx/EmptyState';

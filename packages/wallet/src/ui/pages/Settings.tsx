@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { VaultState } from '@/lib/messages';
-import { sendPopupRequest } from '@/lib/messaging';
-import { EVM_EXPLORER, TEZOS_EXPLORER } from '@/lib/constants';
+import type { VaultState } from '@/shared/messages';
+import { sendPopupRequest } from '@/shared/messaging';
+import { EVM_EXPLORER, TEZOS_EXPLORER } from '@/shared/constants';
 import { formatError } from '@/domain/error';
 import { TopBar } from '../tx/TopBar';
 import { BottomTabs } from '../tx/BottomTabs';

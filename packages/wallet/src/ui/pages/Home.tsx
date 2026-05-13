@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { VaultState } from '@/lib/messages';
+import type { VaultState } from '@/shared/messages';
 import { fetchL1XtzBalance, fetchErc20Balance } from '@/adapters/tezos/tezos-balance-fetcher';
-import { USDC_CONTRACT, FAUCET_URL } from '@/lib/constants';
-import { mutezToXtz, formatUsdc } from '@/lib/format';
-import { sendPopupRequest } from '@/lib/messaging';
+import { USDC_CONTRACT, FAUCET_URL } from '@/shared/constants';
+import { mutezToXtz, formatUsdc } from '@/shared/format';
+import { sendPopupRequest } from '@/shared/messaging';
 import { formatError } from '@/domain/error';
 import { AccountCard } from '../tx/AccountCard';
 import { Button, IconBtn } from '../tx/Button';

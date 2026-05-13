@@ -5,7 +5,7 @@
  */
 
 import type { NotificationPort } from '../../ports/notification-port';
-import { BADGE_BG_COLOR } from '../../lib/constants';
+import { BADGE_BG_COLOR } from '../../shared/constants';
 
 export class ChromeNotificationPort implements NotificationPort {
   async setPendingCount(count: number): Promise<void> {

@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { ResolveTxResult, SendTxResult, VaultState } from '@/lib/messages';
-import { sendPopupRequest } from '@/lib/messaging';
+import type { ResolveTxResult, SendTxResult, VaultState } from '@/shared/messages';
+import { sendPopupRequest } from '@/shared/messaging';
 import { detectRuntime } from '@/domain/validation';
 import type { DestRuntime } from '@/domain/chain';
-import { USDC_CONTRACT } from '@/lib/constants';
+import { USDC_CONTRACT } from '@/shared/constants';
 import { fetchL1XtzBalance, fetchErc20Balance } from '@/adapters/tezos/tezos-balance-fetcher';
-import { mutezToXtz, formatUsdc } from '@/lib/format';
+import { mutezToXtz, formatUsdc } from '@/shared/format';
 import { formatError } from '@/domain/error';
-import { trackTx } from '@/lib/tx-status';
+import { trackTx } from '@/shared/tx-status';
 import type { TxStatus } from '@/domain/tx-status';
 import { Button } from '../tx/Button';
 import { Icon } from '../tx/Icon';
@@ -23,7 +23,7 @@ import { ErrorCard } from '../tx/ErrorCard';
 import { StatusTimeline } from '../tx/StatusTimeline';
 import { StatusHero } from '../tx/StatusHero';
 import { StatusMeta } from '../tx/StatusMeta';
-import { TEZOS_EXPLORER, EVM_EXPLORER } from '@/lib/constants';
+import { TEZOS_EXPLORER, EVM_EXPLORER } from '@/shared/constants';
 import { truncAddr } from '../tx/utils';
 
 type Stage = 'form' | 'review' | 'done';

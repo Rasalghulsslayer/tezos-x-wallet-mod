@@ -1,4 +1,4 @@
-import type { PendingRequest } from '../lib/messages';
+import type { PendingRequest } from '../shared/messages';
 import type { NotificationPort } from '../ports/notification-port';
 
 type Decision = 'approve' | 'reject';

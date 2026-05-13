@@ -3,7 +3,7 @@
  * formatError dispatcher routing raw errors to the right family handler.
  */
 
-import { mutezToXtz } from '../lib/format';
+import { mutezToXtz } from '../shared/format';
 
 export interface FormattedError {
   title:  string;

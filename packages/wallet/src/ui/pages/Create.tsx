@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { newMnemonic } from '@/lib/seed';
-import { sendPopupRequest } from '@/lib/messaging';
+import { newMnemonic } from '@/shared/seed';
+import { sendPopupRequest } from '@/shared/messaging';
 import { formatError } from '@/domain/error';
 import { Button } from '../tx/Button';
 import { Icon } from '../tx/Icon';
