@@ -1,5 +1,5 @@
 import type { PendingRequest } from '../lib/messages';
-import { setPendingBadge } from '../lib/badge';
+import type { NotificationPort } from '../ports/notification-port';
 
 type Decision = 'approve' | 'reject';
 
@@ -16,6 +16,8 @@ interface Pending {
  */
 export class ApprovalQueue {
   private readonly queue = new Map<string, Pending>();
+
+  constructor(private readonly notifications: NotificationPort) {}
 
   /** List pending requests (read by approve.html to render the UI). */
   list(): PendingRequest[] {
@@ -88,6 +90,6 @@ export class ApprovalQueue {
   }
 
   private syncBadge(): void {
-    void setPendingBadge(this.queue.size);
+    void this.notifications.setPendingCount(this.queue.size);
   }
 }

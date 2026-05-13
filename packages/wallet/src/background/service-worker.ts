@@ -1,31 +1,27 @@
 import '@/lib/buffer-shim';
-import { RelayerProvider } from '@tezosx/relayer/provider';
 import { deriveEvmAlias } from '@tezosx/relayer/utils/derive';
 import { Keyring } from './keyring';
-import { LocalSignerClient } from './signer';
 import { ApprovalQueue } from './approval-queue';
-import { sessionStore } from '../lib/storage';
 import { detectRuntime } from '../domain/validation';
-import { clearPendingBadge } from '../lib/badge';
+import { buildContainer, persistentPorts, type Container } from '../composition/container';
 import type {
   ApproveRequest,
   ContentPush,
   EthereumRequest,
   PopupRequest,
-  StoredSession,
   VaultState,
   WalletResponse,
 } from '../lib/messages';
+import type { StoredSession } from '../ports/session-store';
 
 // ── Global state (cleared on SW kill) ─────────────────────────────────────────
 
-void clearPendingBadge();
+void persistentPorts.notifications.setPendingCount(0);
 
-const keyring  = new Keyring();
-const queue    = new ApprovalQueue();
-let   signer:   LocalSignerClient | null = null;
-let   provider: RelayerProvider | null   = null;
-let   evmAlias: string | null            = null;
+const keyring  = new Keyring(persistentPorts.vaultStore);
+const queue    = new ApprovalQueue(persistentPorts.notifications);
+let   container: Container | null = null;
+let   evmAlias:  string | null    = null;
 
 // ── Derived helpers ───────────────────────────────────────────────────────────
 
@@ -41,32 +37,30 @@ async function currentVaultState(): Promise<VaultState> {
   return { status: 'unlocked', tz1: unlocked.tz1, evmAlias: alias };
 }
 
-function rebuildProviderForUnlockedKey(): void {
+function rebuildContainerForUnlockedKey(): void {
   const unlocked = keyring.getUnlocked();
   if (unlocked == null) {
-    signer   = null;
-    provider = null;
-    evmAlias = null;
+    container = null;
+    evmAlias  = null;
     return;
   }
-  signer = new LocalSignerClient(
-    unlocked.secretKey,
-    unlocked.publicKey,
-    unlocked.tz1,
-  );
-  provider = new RelayerProvider(signer);
+  container = buildContainer({
+    tz1:       unlocked.tz1,
+    publicKey: unlocked.publicKey,
+    secretKey: unlocked.secretKey,
+  });
 
   // Forward every provider event to all tabs hosting a connected origin.
-  provider.on('accountsChanged', (accounts: string[]) =>
+  container.provider.on('accountsChanged', (accounts: string[]) =>
     void broadcastEvent({ type: 'PROVIDER_EVENT', event: 'accountsChanged', data: accounts }),
   );
-  provider.on('chainChanged', (chainId: string) =>
+  container.provider.on('chainChanged', (chainId: string) =>
     void broadcastEvent({ type: 'PROVIDER_EVENT', event: 'chainChanged', data: chainId }),
   );
-  provider.on('connect', (info: { chainId: string }) =>
+  container.provider.on('connect', (info: { chainId: string }) =>
     void broadcastEvent({ type: 'PROVIDER_EVENT', event: 'connect', data: info }),
   );
-  provider.on('disconnect', (err: { code: number; message: string }) =>
+  container.provider.on('disconnect', (err: { code: number; message: string }) =>
     void broadcastEvent({
       type:  'PROVIDER_EVENT',
       event: 'disconnect',
@@ -76,7 +70,7 @@ function rebuildProviderForUnlockedKey(): void {
 }
 
 async function broadcastEvent(push: ContentPush): Promise<void> {
-  const sessions = await sessionStore.list();
+  const sessions = await persistentPorts.sessionStore.list();
   await Promise.all(
     sessions.map(async ({ origin }) => {
       const tabs = await chrome.tabs.query({ url: `${origin}/*` });
@@ -99,33 +93,32 @@ async function handlePopupRequest(msg: PopupRequest): Promise<WalletResponse> {
 
       case 'CREATE_WALLET': {
         await keyring.importFromMnemonic(msg.mnemonic, msg.password);
-        rebuildProviderForUnlockedKey();
+        rebuildContainerForUnlockedKey();
         return { ok: true, data: await currentVaultState() };
       }
 
       case 'IMPORT_WALLET': {
         await keyring.importFromMnemonic(msg.mnemonic, msg.password);
-        rebuildProviderForUnlockedKey();
+        rebuildContainerForUnlockedKey();
         return { ok: true, data: await currentVaultState() };
       }
 
       case 'IMPORT_SECRET_KEY': {
         await keyring.importFromSecretKey(msg.edsk, msg.password);
-        rebuildProviderForUnlockedKey();
+        rebuildContainerForUnlockedKey();
         return { ok: true, data: await currentVaultState() };
       }
 
       case 'UNLOCK': {
         await keyring.unlock(msg.password);
-        rebuildProviderForUnlockedKey();
+        rebuildContainerForUnlockedKey();
         return { ok: true, data: await currentVaultState() };
       }
 
       case 'LOCK': {
         keyring.lock();
-        signer   = null;
-        provider = null;
-        evmAlias = null;
+        container = null;
+        evmAlias  = null;
         queue.rejectAll('wallet locked');
         return { ok: true };
       }
@@ -139,14 +132,14 @@ async function handlePopupRequest(msg: PopupRequest): Promise<WalletResponse> {
         return { ok: true, data: queue.list() };
 
       case 'LIST_SESSIONS':
-        return { ok: true, data: await sessionStore.list() };
+        return { ok: true, data: await persistentPorts.sessionStore.list() };
 
       case 'DISCONNECT':
-        await sessionStore.remove(msg.origin);
+        await persistentPorts.sessionStore.remove(msg.origin);
         return { ok: true };
 
       case 'SEND_TX': {
-        if (signer == null || provider == null) {
+        if (container == null) {
           return { ok: false, code: 4100, message: 'Wallet is locked' };
         }
 
@@ -155,14 +148,14 @@ async function handlePopupRequest(msg: PopupRequest): Promise<WalletResponse> {
         // Same-runtime XTZ → native Michelson runtime transfer, no NAC gateway.
         if (msg.asset === 'XTZ' && dest === 'l1') {
           const mutez = (BigInt(msg.amount) / 10n ** 12n).toString();
-          const opHash = await signer.sendNativeTransfer(msg.to, mutez);
+          const opHash = await container.signer.sendNativeTransfer(msg.to, mutez);
           return { ok: true, data: { runtime: 'l1', hash: opHash } };
         }
 
         // Cross-runtime XTZ (tz1 → 0x) or USDC → NAC gateway. Returns the
         // synthetic NAC hash; the popup will then poll RESOLVE_TX to get the
         // real kernel-synthesized EVM hash before showing "Done".
-        const synthetic = await provider.request({
+        const synthetic = await container.provider.request({
           method: 'eth_sendTransaction',
           params: [{
             to:    msg.to,
@@ -174,10 +167,10 @@ async function handlePopupRequest(msg: PopupRequest): Promise<WalletResponse> {
       }
 
       case 'RESOLVE_TX': {
-        if (provider == null) {
+        if (container == null) {
           return { ok: false, code: 4100, message: 'Wallet is locked' };
         }
-        const real = await provider.resolveSyntheticHash(msg.syntheticHash);
+        const real = await container.provider.resolveSyntheticHash(msg.syntheticHash);
         if (real != null) {
           return { ok: true, data: { resolved: true, hash: real } };
         }
@@ -252,12 +245,12 @@ async function handleEthereumRequest(msg: EthereumRequest): Promise<WalletRespon
     }
   }
 
-  if (provider == null) {
+  if (container == null) {
     return { ok: false, code: 4100, message: 'Wallet is locked' };
   }
 
   try {
-    const result = await provider.request(msg.args);
+    const result = await container.provider.request(msg.args);
 
     if (method === 'eth_requestAccounts') {
       const unlocked = keyring.getUnlocked();
@@ -266,10 +259,10 @@ async function handleEthereumRequest(msg: EthereumRequest): Promise<WalletRespon
           origin:      msg.origin,
           tz1Address:  unlocked.tz1,
           evmAlias:    result[0],
-          chainId:     await provider.request({ method: 'eth_chainId' }) as string,
+          chainId:     await container.provider.request({ method: 'eth_chainId' }) as string,
           connectedAt: Date.now(),
         };
-        await sessionStore.upsert(session);
+        await persistentPorts.sessionStore.upsert(session);
       }
     }
 
@@ -305,7 +298,7 @@ chrome.runtime.onMessage.addListener(
 );
 
 chrome.runtime.onInstalled.addListener(() => {
-  void clearPendingBadge();
+  void persistentPorts.notifications.setPendingCount(0);
   console.info('[TezosX Wallet] service worker installed, v0.6.0');
 });
 

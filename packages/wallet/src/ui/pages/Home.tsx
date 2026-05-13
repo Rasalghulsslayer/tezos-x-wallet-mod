@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { VaultState } from '@/lib/messages';
-import { fetchL1XtzBalance, fetchErc20Balance } from '@/lib/balances';
+import { fetchL1XtzBalance, fetchErc20Balance } from '@/adapters/tezos/tezos-balance-fetcher';
 import { USDC_CONTRACT, FAUCET_URL } from '@/lib/constants';
 import { mutezToXtz, formatUsdc } from '@/lib/format';
 import { sendPopupRequest } from '@/lib/messaging';

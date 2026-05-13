@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { StoredSession, VaultState } from '@/lib/messages';
+import type { VaultState } from '@/lib/messages';
+import type { StoredSession } from '@/ports/session-store';
 import { sendPopupRequest } from '@/lib/messaging';
 import { timeAgo } from '@/lib/format';
 import { TopBar } from '../tx/TopBar';

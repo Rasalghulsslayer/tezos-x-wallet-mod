@@ -4,7 +4,7 @@ import {
   newMnemonic,
 } from '../lib/seed';
 import { isValidEdsk, isValidMnemonic } from '../domain/validation';
-import { vaultStore, type EncryptedVault } from '../lib/storage';
+import type { VaultStore, EncryptedVault } from '../ports/vault-store';
 
 /** Payload chiffré dans le vault. Distingue l'origine du secret. */
 export type VaultPayload =
@@ -109,9 +109,11 @@ async function decryptVault(vault: EncryptedVault, password: string): Promise<Va
 export class Keyring {
   private unlocked: UnlockedIdentity | null = null;
 
+  constructor(private readonly vaultStore: VaultStore) {}
+
   /** True when a vault is persisted in storage (wallet has been set up). */
   async hasVault(): Promise<boolean> {
-    return (await vaultStore.load()) != null;
+    return (await this.vaultStore.load()) != null;
   }
 
   /** True when the vault has been decrypted in the current SW session. */
@@ -137,7 +139,7 @@ export class Keyring {
     if (!isValidMnemonic(trimmed)) throw new Error('Invalid BIP39 mnemonic');
     if (password.length < 8)      throw new Error('Password must be at least 8 characters');
 
-    await vaultStore.save(await encryptPayload({ kind: 'mnemonic', value: trimmed }, password));
+    await this.vaultStore.save(await encryptPayload({ kind: 'mnemonic', value: trimmed }, password));
     const identity = await deriveTezosIdentity(trimmed);
     this.unlocked = identity;
     return identity;
@@ -152,14 +154,14 @@ export class Keyring {
     const identity = await deriveTezosIdentityFromSecretKey(trimmed).catch(() => {
       throw new Error('Could not decode the secret key');
     });
-    await vaultStore.save(await encryptPayload({ kind: 'edsk', value: trimmed }, password));
+    await this.vaultStore.save(await encryptPayload({ kind: 'edsk', value: trimmed }, password));
     this.unlocked = identity;
     return identity;
   }
 
   /** Unlock an existing vault with the user's password. */
   async unlock(password: string): Promise<UnlockedIdentity> {
-    const vault = await vaultStore.load();
+    const vault = await this.vaultStore.load();
     if (vault == null) throw new Error('No wallet found');
 
     const payload = await decryptVault(vault, password).catch(() => {
@@ -180,7 +182,7 @@ export class Keyring {
 
   /** Re-decrypt and return the raw secret (mnemonic or edsk) for user-initiated export. */
   async exportSecret(password: string): Promise<VaultPayload> {
-    const vault = await vaultStore.load();
+    const vault = await this.vaultStore.load();
     if (vault == null) throw new Error('No wallet found');
     return decryptVault(vault, password).catch(() => {
       throw new Error('Incorrect password');

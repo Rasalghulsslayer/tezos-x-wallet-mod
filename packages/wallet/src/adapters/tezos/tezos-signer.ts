@@ -1,8 +1,18 @@
+/**
+ * TezosSigner: TezosSignerPort implementation backed by a tz1 secret key
+ * held in SW memory. Wraps Taquito's InMemorySigner and TezosToolkit for
+ * op injection. Computes a kernel-exact fee from live mempool/filter
+ * constants and retries with the kernel-reported required value on a
+ * residual insufficient_fees rejection.
+ */
+
 import { TezosToolkit, type TransferParams } from '@taquito/taquito';
 import { InMemorySigner } from '@taquito/signer';
 import type { MichelsonV1Expression } from '@taquito/rpc';
-import type { ITezosWalletClient, WalletPermissions } from '@tezosx/relayer/wallet-client';
+import type { WalletPermissions } from '@tezosx/relayer/wallet-client';
 import { TEZOS_L1_RPC, NAC_CONTRACT } from '@tezosx/relayer/constants';
+import type { TezosSignerPort } from '../../ports/signer-port';
+import type { TezosAccount } from '../../domain/account';
 
 type Rational = [string, string];
 type FeeConstants = {
@@ -17,7 +27,6 @@ let cachedConstants: { value: FeeConstants; at: number } | null = null;
 /** Bytes added to `est.opSize` to cover the 64-byte signature + zarith shift. */
 const OP_SIZE_MARGIN_BYTES = 96;
 
-/** Fetch live kernel fee constants from `mempool/filter` (cached 30s). */
 async function getFeeConstants(): Promise<FeeConstants> {
   const now = Date.now();
   if (cachedConstants && now - cachedConstants.at < CONSTANTS_TTL_MS) {
@@ -39,21 +48,18 @@ async function getFeeConstants(): Promise<FeeConstants> {
   return value;
 }
 
-/** ⌈ x · num / (1000 · den) ⌉ — converts nanotez·units → mutez, rounding up. */
 function ceilNanotezToMutez(x: bigint, [num, den]: Rational): bigint {
   const n = x * BigInt(num);
   const d = 1000n * BigInt(den);
   return (n + d - 1n) / d;
 }
 
-/** Kernel-exact fee: minimal_fees + gas_cost + byte_cost (mutez). */
 function computeKernelFee(gasLimit: number, opSize: number, c: FeeConstants): number {
   const gasCost  = ceilNanotezToMutez(BigInt(gasLimit), c.nanotezPerGas);
   const byteCost = ceilNanotezToMutez(BigInt(opSize),   c.nanotezPerByte);
   return Number(c.minimalFees + gasCost + byteCost);
 }
 
-/** Extract `required` mutez from an `evm_node.dev.insufficient_fees` error. */
 function extractRequiredFee(err: unknown): number | null {
   const e = err as { message?: string; errors?: unknown };
   const haystack = JSON.stringify(e.errors ?? '') + ' ' + (e.message ?? '');
@@ -64,17 +70,22 @@ function extractRequiredFee(err: unknown): number | null {
   return n < 1 ? Math.ceil(n * 1_000_000) : Math.ceil(n);
 }
 
-/**
- * `ITezosWalletClient` implementation that signs Tezos operations locally
- * using a secret key held in SW memory.
- */
-export class LocalSignerClient implements ITezosWalletClient {
+export class TezosSigner implements TezosSignerPort {
+  readonly kind = 'tezos' as const;
+  readonly account: TezosAccount;
   private readonly toolkit:     TezosToolkit;
   private readonly permissions: WalletPermissions;
 
-  constructor(secretKey: string, publicKey: string, tz1: string) {
+  constructor(secretKey: string, publicKey: string, tz1: string, accountId?: string) {
     this.permissions = { address: tz1, publicKey };
-    this.toolkit     = new TezosToolkit(TEZOS_L1_RPC);
+    this.account = {
+      kind: 'tezos',
+      // Placeholder ID until W4 introduces proper UUID-based account IDs.
+      id:   accountId ?? tz1,
+      tz1,
+      publicKey,
+    };
+    this.toolkit = new TezosToolkit(TEZOS_L1_RPC);
     this.toolkit.setProvider({ signer: new InMemorySigner(secretKey) });
   }
 
@@ -88,11 +99,6 @@ export class LocalSignerClient implements ITezosWalletClient {
     return this.permissions;
   }
 
-  /**
-   * Transfer with a kernel-exact fee derived from live `mempool/filter`
-   * constants. Falls back to the kernel-reported `required` value on a
-   * residual `insufficient_fees` rejection.
-   */
   private async transferWithKernelAwareFees(params: TransferParams): Promise<string> {
     const [est, c] = await Promise.all([
       this.toolkit.estimate.transfer(params),
@@ -142,7 +148,6 @@ export class LocalSignerClient implements ITezosWalletClient {
     }
   }
 
-  /** Native L1 transfer (no NAC, no CRAC). Used for same-runtime XTZ sends. */
   async sendNativeTransfer(to: string, mutezAmount: string): Promise<string> {
     try {
       const hash = await this.transferWithKernelAwareFees({

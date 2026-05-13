@@ -5,7 +5,7 @@ import { sendPopupRequest } from '@/lib/messaging';
 import { detectRuntime } from '@/domain/validation';
 import type { DestRuntime } from '@/domain/chain';
 import { USDC_CONTRACT } from '@/lib/constants';
-import { fetchL1XtzBalance, fetchErc20Balance } from '@/lib/balances';
+import { fetchL1XtzBalance, fetchErc20Balance } from '@/adapters/tezos/tezos-balance-fetcher';
 import { mutezToXtz, formatUsdc } from '@/lib/format';
 import { formatError } from '@/domain/error';
 import { trackTx } from '@/lib/tx-status';

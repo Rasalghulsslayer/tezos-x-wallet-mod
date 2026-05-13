@@ -97,13 +97,3 @@ export type SendTxResult =
 export type ResolveTxResult =
   | { resolved: true;  hash: string }
   | { resolved: false };
-
-// ── Stored session (persisted in chrome.storage.local) ────────────────────────
-
-export interface StoredSession {
-  origin:      string;
-  tz1Address:  string;
-  evmAlias:    string;
-  chainId:     string;
-  connectedAt: number;
-}
