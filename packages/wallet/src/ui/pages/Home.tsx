@@ -5,7 +5,7 @@ import { fetchL1XtzBalance, fetchErc20Balance } from '@/lib/balances';
 import { USDC_CONTRACT, FAUCET_URL } from '@/lib/constants';
 import { mutezToXtz, formatUsdc } from '@/lib/format';
 import { sendPopupRequest } from '@/lib/messaging';
-import { formatError } from '@/lib/errors';
+import { formatError } from '@/domain/error';
 import { AccountCard } from '../tx/AccountCard';
 import { Button, IconBtn } from '../tx/Button';
 import { Icon } from '../tx/Icon';

@@ -7,13 +7,7 @@ import {
   TX_POLL_TIMEOUT_MS,
 } from './constants';
 import { startPoller, type PollHandle } from './poller';
-
-export type TxStatus =
-  | { stage: 'broadcasting' }
-  | { stage: 'included';   blockLevel: number; timestampMs: number }
-  | { stage: 'finalized';  blockLevel: number; confirmations: number }
-  | { stage: 'failed';     reason: string }
-  | { stage: 'unavailable' };
+import type { TxStatus } from '../domain/tx-status';
 
 export interface TrackTxArgs {
   hash:     string;

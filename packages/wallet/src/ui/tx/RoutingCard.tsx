@@ -1,4 +1,4 @@
-import type { DestRuntime } from '@/lib/address';
+import type { DestRuntime } from '@/domain/chain';
 import { ChainPill } from './ChainPill';
 import { Icon } from './Icon';
 

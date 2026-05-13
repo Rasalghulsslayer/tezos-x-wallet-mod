@@ -1,4 +1,4 @@
-import { generateMnemonic, validateMnemonic } from '@scure/bip39';
+import { generateMnemonic } from '@scure/bip39';
 import { wordlist as englishWordlist } from '@scure/bip39/wordlists/english.js';
 import { InMemorySigner } from '@taquito/signer';
 
@@ -11,11 +11,6 @@ export const MNEMONIC_WORDS = 24;
 /** Generate a fresh BIP39 English mnemonic of `MNEMONIC_WORDS` words. */
 export function newMnemonic(): string {
   return generateMnemonic(englishWordlist, 256);
-}
-
-/** Validate a user-provided mnemonic against the English wordlist. */
-export function isValidMnemonic(mnemonic: string): boolean {
-  return validateMnemonic(mnemonic.trim(), englishWordlist);
 }
 
 /** Expose the raw English wordlist (e.g. for autocomplete in the import form). */
@@ -43,24 +38,6 @@ export async function deriveTezosIdentity(mnemonic: string): Promise<{
   ]);
 
   return { tz1, publicKey, secretKey };
-}
-
-/** Guard used by the UI mnemonic autocomplete. */
-export function isValidBip39Word(word: string): boolean {
-  return (englishWordlist as readonly string[]).includes(word.toLowerCase());
-}
-
-// ── Secret-key (edsk) import ─────────────────────────────────────────────────
-
-/**
- * Accepts Tezos ed25519 secret keys (unencrypted):
- *  - 54 chars `edsk…`: 32-byte seed form
- *  - 98 chars `edsk…`: 64-byte full secret key form
- */
-const EDSK_REGEX = /^edsk(?:[1-9A-HJ-NP-Za-km-z]{50}|[1-9A-HJ-NP-Za-km-z]{94})$/;
-
-export function isValidEdsk(sk: string): boolean {
-  return EDSK_REGEX.test(sk.trim());
 }
 
 /**

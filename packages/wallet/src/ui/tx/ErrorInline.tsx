@@ -1,4 +1,4 @@
-import type { FormattedError } from '@/lib/errors';
+import type { FormattedError } from '@/domain/error';
 
 export function ErrorInline({ error, showDetail = true }: { error: FormattedError; showDetail?: boolean }) {
   return (

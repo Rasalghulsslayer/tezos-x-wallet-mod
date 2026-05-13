@@ -5,7 +5,7 @@ import { Keyring } from './keyring';
 import { LocalSignerClient } from './signer';
 import { ApprovalQueue } from './approval-queue';
 import { sessionStore } from '../lib/storage';
-import { detectRuntime } from '../lib/address';
+import { detectRuntime } from '../domain/validation';
 import { clearPendingBadge } from '../lib/badge';
 import type {
   ApproveRequest,

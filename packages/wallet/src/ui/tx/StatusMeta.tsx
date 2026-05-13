@@ -1,4 +1,4 @@
-import type { TxStatus } from '@/lib/tx-status';
+import type { TxStatus } from '@/domain/tx-status';
 import { TEZOS_EXPLORER, EVM_EXPLORER } from '@/lib/constants';
 import { Icon } from './Icon';
 

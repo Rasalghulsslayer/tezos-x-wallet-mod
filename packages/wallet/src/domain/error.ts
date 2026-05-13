@@ -1,6 +1,10 @@
-import { mutezToXtz } from './format';
+/**
+ * FormattedError, KNOWN_ERRORS catalog, makeError constructor, and the
+ * formatError dispatcher routing raw errors to the right family handler.
+ */
 
-/** Parsed error, ready for the UI. */
+import { mutezToXtz } from '../lib/format';
+
 export interface FormattedError {
   title:  string;
   detail: string;
@@ -120,7 +124,6 @@ const KNOWN_ERRORS: Record<string, Handler> = {
 
 const PROTO_PREFIX_RE = /^proto\.[^.]+\./;
 
-/** Build a FormattedError from a known KNOWN_ERRORS key. */
 function fromKey(key: string, raw: string, payload: RpcPayload = {}): FormattedError {
   const handler = KNOWN_ERRORS[key];
   if (!handler) {
@@ -129,12 +132,10 @@ function fromKey(key: string, raw: string, payload: RpcPayload = {}): FormattedE
   return { ...handler(payload), raw, code: key };
 }
 
-/** Build a FormattedError manually (e.g. for the iframe-guard or fatal screen). */
 export function makeError(key: string, ctx?: RpcPayload): FormattedError {
   return fromKey(key, key, ctx ?? {});
 }
 
-/** Parse Tezos RPC errors from a raw payload string. */
 function parseTezosRpc(raw: string): FormattedError | null {
   const jsonMatch = raw.match(/\[\s*\{[\s\S]+\}\s*\]/);
   if (!jsonMatch) return null;
@@ -159,43 +160,35 @@ function parseTezosRpc(raw: string): FormattedError | null {
   return null;
 }
 
-/** Top-level dispatcher: routes to the right family-handler based on shape. */
 export function formatError(err: unknown, ctx?: { method?: string }): FormattedError {
-  // Already formatted → passthrough.
   if (typeof err === 'object' && err !== null && 'title' in err && 'detail' in err) {
     return err as FormattedError;
   }
 
   const raw = err instanceof Error ? err.message : String(err);
 
-  // Auth — recognised by canonical thrown messages.
   if (/Invalid BIP39 mnemonic|invalid recovery phrase/i.test(raw)) return fromKey('invalid-mnemonic', raw);
   if (/Invalid Tezos secret key|invalid edsk/i.test(raw))           return fromKey('invalid-edsk', raw);
   if (/Password must be at least|password too short/i.test(raw))    return fromKey('password-too-short', raw);
   if (/Incorrect password|bad decrypt|decrypt/i.test(raw))          return fromKey('wrong-password', raw);
   if (/No wallet found|no vault/i.test(raw))                        return fromKey('no-vault', raw);
 
-  // EIP-1193 — recognised by numeric `code` field on the Error.
   const code = (err as { code?: number })?.code;
   if (typeof code === 'number') {
     const key = `eip1193:${code}`;
     if (KNOWN_ERRORS[key]) return fromKey(key, raw, ctx ?? {});
   }
 
-  // Network — recognised by fetch / abort patterns.
   if (/Failed to fetch|NetworkError|ECONNREFUSED|TypeError.*fetch/i.test(raw)) return fromKey('rpc-unreachable', raw);
   if (/timeout|aborted/i.test(raw))                                            return fromKey('rpc-timeout',     raw);
   if (/^L1 RPC 5\d\d|EVM RPC 5\d\d|HTTP 5\d\d/i.test(raw))                     return fromKey('rpc-5xx',         raw);
 
-  // Tezos RPC payloads.
   const tezos = parseTezosRpc(raw);
   if (tezos) return tezos;
 
-  // Generic fallback.
   return {
     title:  'Operation failed',
     detail: raw.length > 140 ? `${raw.slice(0, 137)}…` : raw,
     raw,
   };
 }
-

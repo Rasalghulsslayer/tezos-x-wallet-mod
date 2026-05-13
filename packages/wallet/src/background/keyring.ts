@@ -1,10 +1,9 @@
 import {
   deriveTezosIdentity,
   deriveTezosIdentityFromSecretKey,
-  isValidEdsk,
-  isValidMnemonic,
   newMnemonic,
 } from '../lib/seed';
+import { isValidEdsk, isValidMnemonic } from '../domain/validation';
 import { vaultStore, type EncryptedVault } from '../lib/storage';
 
 /** Payload chiffré dans le vault. Distingue l'origine du secret. */
