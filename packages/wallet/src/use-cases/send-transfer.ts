@@ -78,6 +78,10 @@ export async function sendTransfer(
       amount:      mutezAmount,
     };
     const tx        = await buildEvmToTezosTx(intent, signer.account.address);
+
+    const gasPriceHex = await deps.container.provider.request({ method: 'eth_gasPrice' }) as string;
+    const maxFeePerGas = BigInt(gasPriceHex) * 2n;
+
     const rawSigned = await signer.signEvmTx({
       to:                   tx.to,
       data:                 tx.data,
@@ -85,7 +89,7 @@ export async function sendTransfer(
       gasLimit:             tx.gasLimit,
       nonce:                tx.nonce,
       chainId:              tx.chainId,
-      maxFeePerGas:         0n,
+      maxFeePerGas,
       maxPriorityFeePerGas: 0n,
     });
     const hash = await deps.container.provider.request({

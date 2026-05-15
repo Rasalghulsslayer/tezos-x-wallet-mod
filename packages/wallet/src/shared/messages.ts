@@ -7,10 +7,25 @@ import type { RequestArguments } from '@tezosx/relayer/types';
 
 // ── Vault / session state snapshot ────────────────────────────────────────────
 
+export type VaultStateUnlocked =
+  | {
+      status:    'unlocked';
+      kind:      'tezos';
+      accountId: string;
+      tz1:       string;
+      evmAlias:  string;        // alias derived from tz1
+    }
+  | {
+      status:    'unlocked';
+      kind:      'evm';
+      accountId: string;
+      address:   `0x${string}`;
+    };
+
 export type VaultState =
-  | { status: 'empty' }                                   // no wallet created yet
-  | { status: 'locked' }                                  // vault persisted, awaiting password
-  | { status: 'unlocked'; tz1: string; evmAlias: string }; // unlocked in SW memory
+  | { status: 'empty'  }
+  | { status: 'locked' }
+  | VaultStateUnlocked;
 
 // ── Pending dApp approval requests ────────────────────────────────────────────
 
@@ -32,15 +47,25 @@ export interface PendingTransaction {
   createdAt:    number;
 }
 
-export type PendingRequest = PendingConnection | PendingTransaction;
+export interface PendingSignature {
+  kind:       'signature';
+  requestId:  string;
+  origin:     string;
+  message:    string;          // raw hex string sent by the dApp
+  decoded?:   string;          // best-effort utf-8 decode for display
+  createdAt:  number;
+}
+
+export type PendingRequest = PendingConnection | PendingTransaction | PendingSignature;
 
 // ── Popup UI → Service Worker ─────────────────────────────────────────────────
 
 export type PopupRequest =
   | { type: 'GET_STATE' }
-  | { type: 'CREATE_WALLET'; mnemonic: string; password: string }
-  | { type: 'IMPORT_WALLET'; mnemonic: string; password: string }
-  | { type: 'IMPORT_SECRET_KEY'; edsk: string; password: string }
+  | { type: 'CREATE_WALLET';      mnemonic:   string; password: string }   // Tezos
+  | { type: 'IMPORT_WALLET';      mnemonic:   string; password: string }   // Tezos
+  | { type: 'IMPORT_SECRET_KEY';  edsk:       string; password: string }   // Tezos edsk
+  | { type: 'IMPORT_EVM_PRIVKEY'; privateKey: string; password: string }   // EVM
   | { type: 'UNLOCK';        password: string }
   | { type: 'LOCK' }
   | { type: 'EXPORT_SEED';   password: string }
@@ -85,9 +110,11 @@ export type WalletResponse<T = unknown> =
  * Result of a SEND_TX.
  *
  * - `l1` — native Michelson runtime transfer. `hash` is the final L1 op hash.
- * - `l2` — cross-runtime via the NAC gateway. `hash` is the synthetic NAC
- *   hash; the popup must then poll `RESOLVE_TX` to swap it for the
- *   kernel-synthesized real EVM hash before showing "Done".
+ * - `l2` — EVM-side transfer or NAC gateway cross-runtime. For the gateway
+ *   path, `hash` is the synthetic NAC hash; the popup must then poll
+ *   `RESOLVE_TX` to swap it for the kernel-synthesized real EVM hash before
+ *   showing "Done". For native EVM transfers (EVM account → 0x), `hash` is
+ *   already the real EVM hash and resolution is a no-op.
  */
 export type SendTxResult =
   | { runtime: 'l1'; hash: string }

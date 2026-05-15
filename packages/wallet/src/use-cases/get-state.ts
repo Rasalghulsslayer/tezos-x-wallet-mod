@@ -1,7 +1,7 @@
 /**
- * getState: produces the current VaultState (empty / locked / unlocked) for
- * the popup. Resolves the EVM alias on first call after unlock and caches
- * it via deps.evmAliasCache.
+ * getState: produces the current VaultState (empty / locked / unlocked-tezos
+ * / unlocked-evm) for the popup. Resolves the EVM alias on first call after
+ * a Tezos-account unlock and caches it via deps.evmAliasCache.
  */
 
 import { deriveEvmAlias } from '@tezosx/relayer/utils/derive';
@@ -25,11 +25,20 @@ export async function getState(deps: GetStateDeps): Promise<VaultState> {
   if (account.kind === 'tezos') {
     const alias = deps.evmAliasCache.value ?? await deriveEvmAlias(account.tz1);
     deps.evmAliasCache.value = alias;
-    return { status: 'unlocked', tz1: account.tz1, evmAlias: alias };
+    return {
+      status:    'unlocked',
+      kind:      'tezos',
+      accountId: account.id,
+      tz1:       account.tz1,
+      evmAlias:  alias,
+    };
   }
 
-  // EVM-native account: tz1 is empty; evmAlias is the account's own address.
-  // VaultState will gain an account-kind discriminant in W4c.
   deps.evmAliasCache.value = account.address;
-  return { status: 'unlocked', tz1: '', evmAlias: account.address };
+  return {
+    status:    'unlocked',
+    kind:      'evm',
+    accountId: account.id,
+    address:   account.address,
+  };
 }

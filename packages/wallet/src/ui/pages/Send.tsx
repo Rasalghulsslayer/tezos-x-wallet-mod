@@ -1,15 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { ResolveTxResult, SendTxResult, VaultState } from '@/shared/messages';
+import type { ResolveTxResult, SendTxResult, VaultState, VaultStateUnlocked } from '@/shared/messages';
 import { sendPopupRequest } from '@/shared/messaging';
 import { detectRuntime } from '@/domain/validation';
 import type { DestRuntime } from '@/domain/chain';
 import { USDC_CONTRACT } from '@/shared/constants';
-import { fetchL1XtzBalance, fetchErc20Balance } from '@/adapters/tezos/tezos-balance-fetcher';
-import { mutezToXtz, formatUsdc } from '@/shared/format';
+import {
+  fetchL1XtzBalance,
+  fetchXtzBalance,
+  fetchErc20Balance,
+} from '@/adapters/tezos/tezos-balance-fetcher';
+import { mutezToXtz, weiToXtz, formatUsdc } from '@/shared/format';
 import { formatError } from '@/domain/error';
 import { trackTx } from '@/shared/tx-status';
 import type { TxStatus } from '@/domain/tx-status';
+import { signingSourceAddress } from '../view-models/account-card-vm';
 import { Button } from '../tx/Button';
 import { Icon } from '../tx/Icon';
 import { TopBar } from '../tx/TopBar';
@@ -30,26 +35,20 @@ type Stage = 'form' | 'review' | 'done';
 type Asset = 'XTZ' | 'USDC';
 
 interface DoneState {
-  /** Hash to display + linkify on the explorer for `runtime`. */
   hash:    string;
   runtime: 'l1' | 'l2';
-  /** True when we couldn't resolve the real EVM hash and we fell back
-   *  to showing the underlying L1 op hash with a "pending" hint. */
   pending: boolean;
 }
 
 interface Balances {
-  /** Native XTZ on the Michelson runtime, formatted decimal string. */
   xtz:  string;
-  /** USDC ERC-20 on the EVM runtime, formatted decimal string. */
   usdc: string;
   loading: boolean;
 }
 
 const RESOLVE_POLL_MS    = 2_000;
 const RESOLVE_TIMEOUT_MS = 60_000;
-/** Fee margin reserved when the user clicks Max on XTZ (mutez). */
-const MAX_FEE_RESERVE_MUTEZ = 10_000n; // 0.01 XTZ
+const MAX_FEE_RESERVE_MUTEZ = 10_000n;
 
 function xtzToHexWei(xtz: string): string {
   const [whole, frac = ''] = xtz.trim().split('.');
@@ -58,14 +57,12 @@ function xtzToHexWei(xtz: string): string {
   return '0x' + big.toString(16);
 }
 
-/** Decimal XTZ string → mutez bigint (6 decimals). */
 function mutezToBig(xtz: string): bigint {
   const [whole, frac = ''] = xtz.trim().split('.');
   const mutezPart = (whole + frac.padEnd(6, '0')).slice(0, whole.length + 6);
   return BigInt(mutezPart || '0');
 }
 
-/** mutez bigint → decimal XTZ string with trailing zeros trimmed. */
 function bigMutezToXtzString(mutez: bigint): string {
   const whole = mutez / 1_000_000n;
   const frac  = mutez % 1_000_000n;
@@ -74,14 +71,27 @@ function bigMutezToXtzString(mutez: bigint): string {
     : `${whole.toString()}.${frac.toString().padStart(6, '0').replace(/0+$/, '')}`;
 }
 
-function routingLabel(dest: DestRuntime): string {
-  if (dest === 'l1') return 'Same-runtime';
-  if (dest === 'l2') return 'Cross-runtime · L1 → L2 via NAC gateway';
-  return '—';
+function routingLabel(sourceKind: 'tezos' | 'evm', dest: DestRuntime): string {
+  if (dest == null) return '—';
+  if (sourceKind === 'tezos') {
+    return dest === 'l1'
+      ? 'Same-runtime · Tezos L1'
+      : 'Cross-runtime · L1 → L2 via NAC gateway';
+  }
+  return dest === 'l2'
+    ? 'Same-runtime · Tezos L2 (EVM)'
+    : 'Cross-runtime · L2 → L1 via NAC precompile';
 }
 
 export function Send({ state, onDone }: { state: VaultState; onDone: () => void }) {
+  if (state.status !== 'unlocked') return null;
+  return <SendUnlocked state={state} onDone={onDone} />;
+}
+
+function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: () => void }) {
   const navigate = useNavigate();
+  const isEvmSource = state.kind === 'evm';
+  // EVM-source XTZ-only in 0.7.0; USDC source-from-EVM is out of scope.
   const [asset,  setAsset] = useState<Asset>('XTZ');
   const [to,     setTo]    = useState('');
   const [amount, setAmt]   = useState('');
@@ -89,33 +99,37 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
   const [error,  setErr]   = useState<string | null>(null);
   const [done,   setDone]  = useState<DoneState | null>(null);
   const [txStatus, setTxStatus] = useState<TxStatus | null>(null);
-  /** Wall-clock origin used by the timeline's "X s ago" sub. Set when we
-   *  enter the `done` stage so the counter survives status updates. */
   const [doneStartedAt, setDoneStartedAt] = useState<number | null>(null);
-  /** Synthetic hash returned by the SW, used to poll RESOLVE_TX. */
   const [pendingResolve, setPendingResolve] = useState<{ syntheticHash: string } | null>(null);
   const [balances, setBalances] = useState<Balances>({ xtz: '0', usdc: '0', loading: true });
 
-  // Fetch balances on mount + on unlocked-state change. Same pattern as Home.
-  const tz1      = state.status === 'unlocked' ? state.tz1      : '';
-  const evmAlias = state.status === 'unlocked' ? state.evmAlias : '';
+  // Kind-dependent address resolution and balance source.
+  const fromAddr  = signingSourceAddress(state);
+  const usdcAddr  = state.kind === 'tezos' ? state.evmAlias : state.address;
+
   useEffect(() => {
-    if (tz1 === '' || evmAlias === '') return;
+    if (fromAddr === '') return;
     let cancelled = false;
     (async () => {
       try {
-        const [xtzMutez, usdcHex] = await Promise.all([
-          fetchL1XtzBalance(tz1),
-          fetchErc20Balance(USDC_CONTRACT, evmAlias),
-        ]);
+        const xtzPromise = state.kind === 'tezos'
+          ? fetchL1XtzBalance(state.tz1).then(mutezToXtz)
+          : fetchXtzBalance(state.address).then(weiToXtz);
+        // Skip the USDC fetch entirely for EVM-source: USDC isn't a selectable
+        // asset in this branch, so the value is never read.
+        const usdcPromise = state.kind === 'tezos'
+          ? fetchErc20Balance(USDC_CONTRACT, state.evmAlias).then(formatUsdc)
+          : Promise.resolve('0');
+
+        const [xtzStr, usdcStr] = await Promise.all([xtzPromise, usdcPromise]);
         if (cancelled) return;
-        setBalances({ xtz: mutezToXtz(xtzMutez), usdc: formatUsdc(usdcHex), loading: false });
+        setBalances({ xtz: xtzStr, usdc: usdcStr, loading: false });
       } catch {
         if (!cancelled) setBalances((b) => ({ ...b, loading: false }));
       }
     })();
     return () => { cancelled = true; };
-  }, [tz1, evmAlias]);
+  }, [fromAddr, usdcAddr, state.kind]);
 
   useEffect(() => {
     if (pendingResolve == null) return;
@@ -137,13 +151,9 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
           onDone();
           return;
         }
-      } catch {
-        /* keep polling — transient SW error */
-      }
+      } catch { /* keep polling */ }
 
       if (Date.now() - startedAt >= RESOLVE_TIMEOUT_MS) {
-        // Give up; trackTx will eventually time out on the synthetic hash and
-        // surface "Status unavailable" with a manual explorer link.
         setDone((prev) => prev != null ? { ...prev, pending: true } : prev);
         setPendingResolve(null);
         onDone();
@@ -167,15 +177,14 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
     return () => handle.stop();
   }, [stage, done]);
 
-  if (state.status !== 'unlocked') return null;
-
   const dest    = detectRuntime(to);
-  const isCross = dest === 'l2';
+  const isCross = state.kind === 'tezos' ? dest === 'l2' : dest === 'l1';
 
   const usdcOnL1 = asset === 'USDC' && dest === 'l1';
   const valid =
     dest !== null &&
     !usdcOnL1 &&
+    (!isEvmSource || asset === 'XTZ') &&
     /^\d+(\.\d+)?$/.test(amount) &&
     Number(amount) > 0;
 
@@ -187,7 +196,6 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
   const handleMax = () => {
     if (balances.loading) return;
     if (asset === 'XTZ') {
-      // Reserve a small fee margin so the user doesn't tap below the kernel cost.
       const mutezTotal = mutezToBig(balances.xtz);
       const usable     = mutezTotal > MAX_FEE_RESERVE_MUTEZ
         ? mutezTotal - MAX_FEE_RESERVE_MUTEZ
@@ -198,10 +206,16 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
     }
   };
 
+  // Predict the runtime the user will track on the explorer:
+  //   tz1 → tz1: L1; everything else routes through L2 (NAC gateway L1→L2
+  //   resolves to an EVM hash; EVM-source always broadcasts on L2 even when
+  //   the destination is L1).
+  const predictedRuntime: 'l1' | 'l2' =
+    state.kind === 'tezos' && asset === 'XTZ' && dest === 'l1' ? 'l1' : 'l2';
+
   const submit = async () => {
     setErr(null);
     setTxStatus(null);
-    const predictedRuntime: 'l1' | 'l2' = (asset === 'XTZ' && dest === 'l1') ? 'l1' : 'l2';
     setDone({ hash: '', runtime: predictedRuntime, pending: false });
     setDoneStartedAt(Date.now());
     setStage('done');
@@ -219,10 +233,18 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
         return;
       }
 
-      // Cross-runtime: surface the synthetic hash now; the resolve effect
-      // will swap in the real EVM hash once the kernel mints it.
-      setDone({ hash: result.hash, runtime: 'l2', pending: true });
-      setPendingResolve({ syntheticHash: result.hash });
+      // L2 — for tz1→0x via NAC gateway we get a synthetic hash; for
+      // EVM-source the hash is already the real EVM hash and resolution
+      // is a no-op. Try resolving regardless; the SW's EvmProvider returns
+      // null for real EVM hashes, which falls through to the timeout
+      // branch within RESOLVE_TIMEOUT_MS without harm.
+      const fromGateway = state.kind === 'tezos' && dest === 'l2';
+      setDone({ hash: result.hash, runtime: 'l2', pending: fromGateway });
+      if (fromGateway) {
+        setPendingResolve({ syntheticHash: result.hash });
+      } else {
+        onDone();
+      }
     } catch (e) {
       setErr((e as Error).message);
       setDone(null);
@@ -293,6 +315,16 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
 
   // ── Review stage ─────────────────────────────────────────────────────────
   if (stage === 'review') {
+    const fromChain: 'l1' | 'l2' = state.kind === 'tezos' ? 'l1' : 'l2';
+    const destChain: 'l1' | 'l2' = dest === 'l2' ? 'l2' : 'l1';
+    const reviewCopy = state.kind === 'tezos'
+      ? (isCross
+          ? 'Your tz1 signs an L1 op routed to the EVM runtime through the NAC gateway. The receiving 0x address is credited atomically.'
+          : 'Make sure the recipient is correct — transfers can\'t be reversed.')
+      : (isCross
+          ? 'Your 0x signs an EVM transaction that calls the NAC precompile. The kernel forwards the value to the receiving tz1 atomically.'
+          : 'Make sure the recipient is correct — transfers can\'t be reversed.');
+
     return (
       <div className="tx-page">
         <TopBar title="Review transfer" onBack={back} />
@@ -300,12 +332,12 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
           <div className="tx-lane" style={{ marginBottom: 16 }}>
             <div className="tx-lane-side">
               <span className="k">From</span>
-              <span className="v">{truncAddr(state.tz1, 6)}</span>
-              <ChainPill chain="l1" />
+              <span className="v">{truncAddr(fromAddr, 6)}</span>
+              <ChainPill chain={fromChain} />
             </div>
             <span
               className="tx-lane-arrow"
-              title={isCross ? 'via NAC gateway' : 'native L1 transfer'}
+              title={isCross ? 'cross-runtime via NAC' : 'native transfer'}
               style={isCross ? { background: 'linear-gradient(90deg, var(--tx-purple), var(--tx-cyan))', color: '#fff' } : undefined}
             >
               <Icon name="arrow-right" size={14} />
@@ -313,14 +345,14 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
             <div className="tx-lane-side">
               <span className="k">To</span>
               <span className="v">{truncAddr(to, 6)}</span>
-              <ChainPill chain={dest === 'l2' ? 'l2' : 'l1'} />
+              <ChainPill chain={destChain} />
             </div>
           </div>
 
           <div className="tx-card" style={{ padding: 0 }}>
             <Line label="Amount" value={`${parseFloat(amount).toLocaleString()} ${asset}`} />
             <div className="tx-divider" />
-            <Line label="Routing" value={routingLabel(dest)} />
+            <Line label="Routing" value={routingLabel(state.kind, dest)} />
             <div className="tx-divider" />
             <Line label="Network" value="Tezos X Previewnet" />
           </div>
@@ -338,11 +370,7 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
 
           <div style={{ fontSize: 11, color: 'var(--tx-fg-subtle)', padding: '12px 4px', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
             <Icon name="info" size={14} color="var(--tx-fg-subtle)" />
-            <span>
-              {isCross
-                ? 'Your tz1 signs an L1 op routed to the EVM runtime through the NAC gateway. The receiving 0x address is credited atomically.'
-                : 'Make sure the recipient is correct — transfers can\'t be reversed.'}
-            </span>
+            <span>{reviewCopy}</span>
           </div>
         </div>
         <div className="tx-action-bar" style={{ gap: 8 }}>
@@ -378,18 +406,24 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
           </button>
           <button
             className={`tx-btn ${asset === 'USDC' ? 'outline' : 'ghost'}`}
-            onClick={() => setAsset('USDC')}
+            disabled={isEvmSource}
+            onClick={() => !isEvmSource && setAsset('USDC')}
             style={{
               height: 56,
               justifyContent: 'flex-start',
               padding: '0 12px',
+              opacity: isEvmSource ? 0.5 : 1,
+              cursor: isEvmSource ? 'not-allowed' : 'pointer',
               boxShadow: asset === 'USDC' ? 'inset 0 0 0 1px var(--tx-cyan)' : undefined,
             }}
+            title={isEvmSource ? 'USDC sends from EVM accounts are coming in a follow-up release.' : undefined}
           >
             <AssetMark asset="usdc" size="sm" />
             <div style={{ textAlign: 'left', marginLeft: 4 }}>
               <div style={{ fontSize: 13 }}>USDC</div>
-              <div style={{ fontSize: 11, color: 'var(--tx-fg-muted)', fontWeight: 400 }}>ERC-20 · EVM runtime</div>
+              <div style={{ fontSize: 11, color: 'var(--tx-fg-muted)', fontWeight: 400 }}>
+                {isEvmSource ? 'Soon · EVM-source' : 'ERC-20 · EVM runtime'}
+              </div>
             </div>
           </button>
         </div>
@@ -399,9 +433,13 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
           className="tx-input mono"
           value={to}
           onChange={(e) => setTo(e.target.value)}
-          placeholder={asset === 'USDC' ? '0x…' : 'tz1… or 0x…'}
+          placeholder={
+            isEvmSource ? '0x… or tz1…' :
+            asset === 'USDC' ? '0x…' :
+            'tz1… or 0x…'
+          }
         />
-        <RoutingCard asset={asset} dest={dest} />
+        <RoutingCard asset={asset} dest={dest} sourceKind={state.kind} />
 
         <div className="tx-kicker" style={{ padding: '18px 0 8px' }}>Amount</div>
         <div className="tx-card flat" style={{ padding: 16 }}>

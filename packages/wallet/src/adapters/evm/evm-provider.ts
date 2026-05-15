@@ -82,23 +82,40 @@ export class EvmProvider extends EventEmitter implements EIP1193Provider {
 
     const fromAddress = this.signer.account.address;
     const [chainIdHex, nonceHex, gasPriceHex] = await Promise.all([
-      this.jsonRpc<string>('eth_chainId'),
-      this.jsonRpc<string>('eth_getTransactionCount', [fromAddress, 'latest']),
-      this.jsonRpc<string>('eth_gasPrice').catch(() => '0x0'),
+      this.jsonRpc<string>('eth_chainId').catch(() => undefined),
+      this.jsonRpc<string>('eth_getTransactionCount', [fromAddress, 'latest']).catch(() => undefined),
+      this.jsonRpc<string>('eth_gasPrice').catch(() => undefined),
     ]);
 
-    const rawSigned = await this.signer.signEvmTx({
+    if (chainIdHex == null) {
+      throw rpcError(JSON_RPC_INVALID_PARAMS, 'eth_sendTransaction: eth_chainId returned no result');
+    }
+
+    const gasPrice  = BigInt(gasPriceHex ?? '0x3b9aca00');  // 1 gwei fallback
+    const maxFeePerGas = gasPrice * 2n;
+
+    const txParams = {
       to:                   tx.to as `0x${string}`,
       data:                 (tx.data ?? '0x') as `0x${string}`,
       value:                BigInt(tx.value ?? '0x0'),
       gasLimit:             BigInt(tx.gas   ?? '0x1e8480'),  // 2M default
-      nonce:                BigInt(nonceHex),
+      nonce:                BigInt(nonceHex   ?? '0x0'),
       chainId:              BigInt(chainIdHex),
-      maxFeePerGas:         BigInt(gasPriceHex),
+      maxFeePerGas,
       maxPriorityFeePerGas: 0n,
-    });
+    };
+    const rawSigned = await this.signer.signEvmTx(txParams);
 
-    return this.jsonRpc<string>('eth_sendRawTransaction', [rawSigned]);
+    console.info('[EvmProvider] eth_sendTransaction signing',
+      { from: fromAddress, to: txParams.to, value: '0x'+txParams.value.toString(16),
+        nonce: '0x'+txParams.nonce.toString(16), chainId: '0x'+txParams.chainId.toString(16),
+        gasLimit: '0x'+txParams.gasLimit.toString(16),
+        maxFeePerGas: '0x'+maxFeePerGas.toString(16) });
+    console.info('[EvmProvider] rawSigned', rawSigned);
+
+    const txHash = await this.jsonRpc<string>('eth_sendRawTransaction', [rawSigned]);
+    console.info('[EvmProvider] eth_sendRawTransaction returned', txHash);
+    return txHash;
   }
 
   private async jsonRpc<T>(method: string, params: unknown[] = []): Promise<T> {

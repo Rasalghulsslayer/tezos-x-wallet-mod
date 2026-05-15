@@ -3,7 +3,7 @@
  * transaction ready to broadcast via eth_sendRawTransaction.
  */
 
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { keccak256 } from './keccak';
 import { rlpEncode, type RlpInput } from './rlp';
 import { bigIntToBytes, bytesToHex, concatBytes, hexToBytes } from './bytes';
@@ -44,15 +44,21 @@ export function signTransaction1559(tx: EvmTx1559, privateKeyHex: string): `0x${
   const sigHash     = hexToBytes(keccak256(unsigned));
 
   const privBytes = hexToBytes(privateKeyHex);
-  const sig       = secp256k1.sign(sigHash, privBytes, { lowS: true });
-  const yParity   = sig.recovery;
+
+  // @noble/curves v2: sign() with `format: 'recovered'` returns a 65-byte
+  // Uint8Array laid out as [recovery, r(32), s(32)]. The .d.ts overload types
+  // it as Uint8Array regardless of format; we parse the bytes explicitly.
+  const sigBytes = secp256k1.sign(sigHash, privBytes, { lowS: true, prehash: false, format: 'recovered' });
+  const yParity  = sigBytes[0];
+  const r        = BigInt(`0x${bytesToHex(sigBytes.subarray(1, 33))}`);
+  const s        = BigInt(`0x${bytesToHex(sigBytes.subarray(33, 65))}`);
 
   // EIP-1559 uses yParity (0 or 1) directly, not the legacy v = 27 + recovery.
   const signedFields: RlpInput = [
     ...unsignedFields,
     bigIntToBytes(BigInt(yParity)),
-    bigIntToBytes(sig.r),
-    bigIntToBytes(sig.s),
+    bigIntToBytes(r),
+    bigIntToBytes(s),
   ];
 
   const signedRlp = rlpEncode(signedFields);

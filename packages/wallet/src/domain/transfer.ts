@@ -1,6 +1,7 @@
 /**
- * TransferRequest, TransferRoute, decideRoute. Pure routing helper from
- * an Account + destination address. EVM source branches arrive in W4.
+ * TransferRequest, TransferRoute, decideRoute. Pure routing helper that
+ * picks among the four valid combinations of source account kind × target
+ * address runtime.
  */
 
 import type { Account } from './account';
@@ -23,10 +24,10 @@ export interface TransferRoute {
 }
 
 export function decideRoute(
-  _account:  Account,
+  account:   Account,
   toAddress: string,
 ): TransferRoute {
-  const sourceChain: RuntimeId = 'michelson';
+  const sourceChain: RuntimeId = account.kind === 'tezos' ? 'michelson' : 'evm';
   const dest = detectRuntime(toAddress);
   if (dest === null) {
     throw new Error(`Invalid destination address: ${toAddress}`);
@@ -36,5 +37,8 @@ export function decideRoute(
   if (sourceChain === targetChain) {
     return { sourceChain, targetChain, via: 'native' };
   }
-  return { sourceChain, targetChain, via: 'nac-gateway-l1' };
+  if (sourceChain === 'michelson') {
+    return { sourceChain, targetChain, via: 'nac-gateway-l1' };
+  }
+  return { sourceChain, targetChain, via: 'nac-precompile-l2' };
 }

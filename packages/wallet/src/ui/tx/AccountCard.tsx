@@ -4,26 +4,65 @@ import { CopyAddr } from './CopyAddr';
 import { Badge } from './Badge';
 import { truncAddr } from './utils';
 import { toast } from './Toast';
+import type { AccountCardVM } from '../view-models/account-card-vm';
 
-export type AccountVariant = 'split' | 'unified' | 'subtle' | 'toggle';
+export type AccountVariant = 'split' | 'unified' | 'subtle' | 'toggle' | 'vm';
 
 export function AccountCard({
   variant = 'split',
   tz1,
   eth,
+  vm,
   addrLen = 4,
   runtime,
   onRuntime,
   testnet,
 }: {
   variant?: AccountVariant;
-  tz1: string;
-  eth: string;
+  tz1?: string;
+  eth?: string;
+  vm?: AccountCardVM;
   addrLen?: number;
   runtime?: 'l1' | 'l2';
   onRuntime?: (r: 'l1' | 'l2') => void;
   testnet?: boolean;
 }) {
+  if (variant === 'vm') {
+    if (vm == null) throw new Error('AccountCard variant="vm" requires a `vm` prop');
+    if (vm.kind === 'evm') {
+      const copyAddr = () => {
+        void navigator.clipboard.writeText(vm.primary.address);
+        toast('EVM address copied');
+      };
+      return (
+        <div className="tx-account-card unified" onClick={copyAddr} style={{ cursor: 'pointer' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <Identicon seed={vm.identitySeed} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 500 }}>Account</div>
+              <div style={{ fontSize: 11, color: 'var(--tx-fg-muted)' }}>EVM-native</div>
+            </div>
+            {testnet && <Badge variant="testnet">Testnet</Badge>}
+          </div>
+          <div className="addr-row">
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="tx-badge cyan">L2</span>
+              <CopyAddr addr={vm.primary.address} len={addrLen} small />
+            </span>
+            <Icon name="copy" size={13} color="var(--tx-fg-subtle)" />
+          </div>
+        </div>
+      );
+    }
+    // Tezos VM — delegate to existing split layout
+    tz1     = vm.primary.address;
+    eth     = vm.secondary?.address ?? '';
+    variant = 'split';
+  }
+
+  if (tz1 == null || eth == null) {
+    throw new Error('AccountCard requires either `vm` or both `tz1` and `eth` props');
+  }
   if (variant === 'unified') {
     return (
       <div className="tx-account-card unified">

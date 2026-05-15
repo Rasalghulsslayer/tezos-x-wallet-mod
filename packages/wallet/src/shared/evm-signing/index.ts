@@ -9,3 +9,9 @@ export { rlpEncode, type RlpInput } from './rlp';
 export { signTransaction1559, type EvmTx1559 } from './sign-transaction-1559';
 export { signPersonalMessage } from './sign-personal-message';
 export { hexToBytes, bytesToHex, bigIntToBytes, concatBytes, padLeft } from './bytes';
+export {
+  deriveEvmAccount,
+  randomEvmPrivateKey,
+  normaliseEvmPrivateKey,
+  type EvmIdentity,
+} from './derive-evm-account';

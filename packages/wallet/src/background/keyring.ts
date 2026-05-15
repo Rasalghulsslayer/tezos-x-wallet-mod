@@ -10,8 +10,9 @@ import {
   deriveTezosIdentityFromSecretKey,
   newMnemonic,
 } from '../shared/seed';
+import { deriveEvmAccount } from '../shared/evm-signing';
 import { isValidEdsk, isValidMnemonic } from '../domain/validation';
-import type { Account, AccountId, TezosAccount } from '../domain/account';
+import type { Account, AccountId, EvmAccount, TezosAccount } from '../domain/account';
 import type { VaultStore, EncryptedVault } from '../ports/vault-store';
 
 // ── Secret payload types ───────────────────────────────────────────────────────
@@ -175,6 +176,23 @@ export class Keyring {
     };
     await this.vaultStore.save(await encryptJson(payload, password));
     this.unlocked = { account, secretKey };
+    return this.unlocked;
+  }
+
+  async importFromEvmPrivkey(privateKeyHex: string, password: string): Promise<UnlockedSession> {
+    if (password.length < 8) throw new Error('Password must be at least 8 characters');
+
+    const { address, publicKey, privateKey } = deriveEvmAccount(privateKeyHex);
+    const accountId = address;
+    const account: EvmAccount = { kind: 'evm', id: accountId, address, publicKey };
+    const payload: MultiAccountVaultPayload = {
+      version:  2,
+      accounts: [account],
+      active:   accountId,
+      secrets:  { [accountId]: { kind: 'evm-pk', value: privateKey } },
+    };
+    await this.vaultStore.save(await encryptJson(payload, password));
+    this.unlocked = { account, secretKey: privateKey };
     return this.unlocked;
   }
 

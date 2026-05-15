@@ -108,6 +108,15 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
         return refreshState();
       }
 
+      case 'IMPORT_EVM_PRIVKEY': {
+        await importAccount(
+          { source: 'evm-privkey', privateKey: msg.privateKey, password: msg.password },
+          { keyring: deps.keyring },
+        );
+        deps.rebuildContainer();
+        return refreshState();
+      }
+
       case 'UNLOCK': {
         await unlockVault(
           { password: msg.password },
@@ -196,7 +205,11 @@ function handleApproveRequest(msg: ApproveRequest, deps: SwDeps): WalletResponse
 async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promise<WalletResponse> {
   const method = msg.args.method;
 
-  const needsApproval = method === 'eth_requestAccounts' || method === 'eth_sendTransaction';
+  const needsApproval =
+    method === 'eth_requestAccounts'   ||
+    method === 'eth_sendTransaction'   ||
+    method === 'personal_sign'         ||
+    method === 'eth_signTypedData_v4';
 
   if (needsApproval) {
     const unlocked = deps.keyring.getUnlocked();
@@ -204,24 +217,38 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
       return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
     }
 
-    const decision = await deps.approvalQueue.enqueue(
-      method === 'eth_requestAccounts'
-        ? {
-            kind:      'connect',
-            requestId: msg.requestId,
-            origin:    msg.origin,
-            createdAt: Date.now(),
-          }
-        : {
-            kind:      'transaction',
-            requestId: msg.requestId,
-            origin:    msg.origin,
-            to:        (msg.args.params as { to: string }[])[0]?.to ?? '',
-            value:     (msg.args.params as { value?: string }[])[0]?.value ?? '0x0',
-            data:      (msg.args.params as { data?: string }[])[0]?.data ?? '0x',
-            createdAt: Date.now(),
-          },
-    );
+    let pending: Parameters<typeof deps.approvalQueue.enqueue>[0];
+    if (method === 'eth_requestAccounts') {
+      pending = {
+        kind:      'connect',
+        requestId: msg.requestId,
+        origin:    msg.origin,
+        createdAt: Date.now(),
+      };
+    } else if (method === 'eth_sendTransaction') {
+      pending = {
+        kind:      'transaction',
+        requestId: msg.requestId,
+        origin:    msg.origin,
+        to:        (msg.args.params as { to: string }[])[0]?.to ?? '',
+        value:     (msg.args.params as { value?: string }[])[0]?.value ?? '0x0',
+        data:      (msg.args.params as { data?: string }[])[0]?.data ?? '0x',
+        createdAt: Date.now(),
+      };
+    } else {
+      const params  = msg.args.params as string[];
+      const rawHex  = (method === 'personal_sign' ? params[0] : params[1]) ?? '';
+      pending = {
+        kind:      'signature',
+        requestId: msg.requestId,
+        origin:    msg.origin,
+        message:   rawHex,
+        decoded:   tryDecodeUtf8(rawHex),
+        createdAt: Date.now(),
+      };
+    }
+
+    const decision = await deps.approvalQueue.enqueue(pending);
 
     if (decision === 'reject') {
       return { ok: false, code: EIP_USER_REJECTED, message: 'User rejected the request' };
@@ -256,5 +283,22 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
     console.error('[TezosX Wallet] handleEthereumRequest error', method, err);
     const e = err as { code?: number; message?: string };
     return { ok: false, code: e.code ?? JSON_RPC_INTERNAL, message: e.message ?? 'Internal error' };
+  }
+}
+
+/** Best-effort utf-8 decode for a hex-encoded signing payload. Returns
+ *  undefined when the bytes don't look like printable text. */
+function tryDecodeUtf8(hex: string): string | undefined {
+  const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
+  if (clean.length === 0 || clean.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(clean)) {
+    return undefined;
+  }
+  try {
+    const bytes = new Uint8Array(clean.length / 2);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return /^[\x09\x0a\x0d\x20-\x7e -￿]+$/.test(text) ? text : undefined;
+  } catch {
+    return undefined;
   }
 }

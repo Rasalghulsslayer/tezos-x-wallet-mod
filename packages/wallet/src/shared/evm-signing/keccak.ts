@@ -3,7 +3,7 @@
  * 0x-prefixed 32-byte hex string.
  */
 
-import { keccak_256 } from '@noble/hashes/sha3';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 import { bytesToHex } from './bytes';
 
 export function keccak256(data: Uint8Array): `0x${string}` {

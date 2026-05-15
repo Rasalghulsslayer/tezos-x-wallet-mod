@@ -13,7 +13,10 @@ export function Receive({ state }: { state: VaultState }) {
 
   if (state.status !== 'unlocked') return null;
 
-  const addr = runtime === 'l1' ? state.tz1 : state.evmAlias;
+  const isEvm = state.kind === 'evm';
+  const addr  = isEvm
+    ? state.address
+    : runtime === 'l1' ? state.tz1 : state.evmAlias;
 
   const copy = () => {
     void navigator.clipboard.writeText(addr);
@@ -24,16 +27,20 @@ export function Receive({ state }: { state: VaultState }) {
     <div className="tx-page">
       <TopBar title="Receive" onBack={() => navigate(-1)} />
       <div className="tx-page-scroll" style={{ padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <div className="tx-runtime-toggle" style={{ marginBottom: 18 }}>
-          <button className={`l1 ${runtime === 'l1' ? 'on' : ''}`} onClick={() => setRuntime('l1')}>Michelson runtime</button>
-          <button className={`l2 ${runtime === 'l2' ? 'on' : ''}`} onClick={() => setRuntime('l2')}>EVM runtime</button>
-        </div>
+        {!isEvm && (
+          <div className="tx-runtime-toggle" style={{ marginBottom: 18 }}>
+            <button className={`l1 ${runtime === 'l1' ? 'on' : ''}`} onClick={() => setRuntime('l1')}>Michelson runtime</button>
+            <button className={`l2 ${runtime === 'l2' ? 'on' : ''}`} onClick={() => setRuntime('l2')}>EVM runtime</button>
+          </div>
+        )}
 
         <QrCode value={addr} />
 
         <div style={{ marginTop: 18, textAlign: 'center' }}>
           <div className="tx-kicker" style={{ marginBottom: 6 }}>
-            {runtime === 'l1' ? 'tz1 address' : '0x address'}
+            {isEvm
+              ? 'EVM address'
+              : runtime === 'l1' ? 'tz1 address' : '0x address'}
           </div>
           <div
             className="tx-mono"
@@ -56,8 +63,9 @@ export function Receive({ state }: { state: VaultState }) {
         </div>
 
         <div style={{ fontSize: 11, color: 'var(--tx-fg-subtle)', textAlign: 'center', marginTop: 16, lineHeight: 1.55 }}>
-          Only send {runtime === 'l1' ? 'Tezos-native assets' : 'EVM-side assets'} to this address.
-          <br />Cross-chain transfers need a bridge.
+          {isEvm
+            ? 'Native XTZ and ERC-20 tokens on the EVM runtime can be sent here.'
+            : <>Only send {runtime === 'l1' ? 'Tezos-native assets' : 'EVM-side assets'} to this address.<br />Cross-runtime transfers go through the wallet's Send flow.</>}
         </div>
       </div>
     </div>
