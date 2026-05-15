@@ -1,28 +1,56 @@
 /**
- * buildContainer: factory wiring the concrete adapters for an unlocked
- * Tezos session. persistentPorts holds the chrome.storage- and chrome.action-
- * backed singletons that exist whether the wallet is locked or unlocked.
+ * buildContainer: factory wiring the concrete adapters that match the
+ * active account's kind. persistentPorts holds the chrome.storage- and
+ * chrome.action-backed singletons that exist whether the wallet is locked
+ * or unlocked.
  */
 
 import { RelayerProvider } from '@tezosx/relayer/provider';
+import { TEZLINK_EVM_RPC } from '@tezosx/relayer/constants';
 import { TezosSigner } from '../adapters/tezos/tezos-signer';
+import { TezosBalanceFetcher } from '../adapters/tezos/tezos-balance-fetcher';
+import { EvmSigner } from '../adapters/evm/evm-signer';
+import { EvmProvider } from '../adapters/evm/evm-provider';
+import { EvmBalanceFetcher } from '../adapters/evm/evm-balance-fetcher';
 import { ChromeVaultStore } from '../adapters/chrome/chrome-vault-store';
 import { ChromeSessionStore } from '../adapters/chrome/chrome-session-store';
 import { ChromeNotificationPort } from '../adapters/chrome/chrome-notification';
-import type { TezosSignerPort } from '../ports/signer-port';
+import type { SignerPort } from '../ports/signer-port';
+import type { ProviderPort } from '../ports/provider-port';
+import type { BalanceFetcher } from '../ports/balance-fetcher';
 import type { VaultStore } from '../ports/vault-store';
 import type { SessionStore } from '../ports/session-store';
 import type { NotificationPort } from '../ports/notification-port';
+import type { TezosAccount, EvmAccount, AccountId } from '../domain/account';
 
-export interface UnlockedSecrets {
-  tz1:       string;
-  publicKey: string;
-  secretKey: string;
-}
+export type UnlockedSecrets =
+  | {
+      kind:       'tezos';
+      tz1:        string;
+      publicKey:  string;
+      secretKey:  string;
+      accountId?: AccountId;
+      label?:     string;
+    }
+  | {
+      kind:       'evm';
+      address:    `0x${string}`;
+      publicKey:  `0x${string}`;
+      privateKey: string;
+      accountId?: AccountId;
+      label?:     string;
+    };
 
 export interface Container {
-  signer:        TezosSignerPort;
-  provider:      RelayerProvider;
+  signer:         SignerPort;
+  provider:       ProviderPort;
+  balanceFetcher: BalanceFetcher;
+  vaultStore:     VaultStore;
+  sessionStore:   SessionStore;
+  notifications:  NotificationPort;
+}
+
+export interface PersistentPorts {
   vaultStore:    VaultStore;
   sessionStore:  SessionStore;
   notifications: NotificationPort;
@@ -32,22 +60,40 @@ const vaultStore:    VaultStore       = new ChromeVaultStore();
 const sessionStore:  SessionStore     = new ChromeSessionStore();
 const notifications: NotificationPort = new ChromeNotificationPort();
 
-export interface PersistentPorts {
-  vaultStore:    VaultStore;
-  sessionStore:  SessionStore;
-  notifications: NotificationPort;
-}
-
 export const persistentPorts: PersistentPorts = { vaultStore, sessionStore, notifications };
 
 export function buildContainer(secrets: UnlockedSecrets): Container {
-  const signer   = new TezosSigner(secrets.secretKey, secrets.publicKey, secrets.tz1);
-  const provider = new RelayerProvider(signer);
+  if (secrets.kind === 'tezos') {
+    const account: TezosAccount = {
+      kind:      'tezos',
+      id:        secrets.accountId ?? secrets.tz1,
+      label:     secrets.label,
+      tz1:       secrets.tz1,
+      publicKey: secrets.publicKey,
+    };
+    const signer   = new TezosSigner(account, secrets.secretKey);
+    const provider = new RelayerProvider(signer);
+    return {
+      signer,
+      provider,
+      balanceFetcher: new TezosBalanceFetcher(),
+      vaultStore, sessionStore, notifications,
+    };
+  }
+
+  const account: EvmAccount = {
+    kind:      'evm',
+    id:        secrets.accountId ?? secrets.address,
+    label:     secrets.label,
+    address:   secrets.address,
+    publicKey: secrets.publicKey,
+  };
+  const signer   = new EvmSigner(account, secrets.privateKey);
+  const provider = new EvmProvider(signer, TEZLINK_EVM_RPC);
   return {
     signer,
     provider,
-    vaultStore,
-    sessionStore,
-    notifications,
+    balanceFetcher: new EvmBalanceFetcher(),
+    vaultStore, sessionStore, notifications,
   };
 }

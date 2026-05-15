@@ -109,7 +109,10 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
       }
 
       case 'UNLOCK': {
-        await unlockVault({ password: msg.password }, { keyring: deps.keyring });
+        await unlockVault(
+          { password: msg.password },
+          { keyring: deps.keyring, sessionStore: deps.persistentPorts.sessionStore },
+        );
         deps.rebuildContainer();
         return refreshState();
       }
@@ -235,9 +238,11 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
     if (method === 'eth_requestAccounts') {
       const unlocked = deps.keyring.getUnlocked();
       if (unlocked != null && Array.isArray(result) && typeof result[0] === 'string') {
+        const { account } = unlocked;
         const session: StoredSession = {
           origin:      msg.origin,
-          tz1Address:  unlocked.tz1,
+          accountId:   account.id,
+          tz1Address:  account.kind === 'tezos' ? account.tz1 : '',
           evmAlias:    result[0],
           chainId:     await deps.state.container.provider.request({ method: 'eth_chainId' }) as string,
           connectedAt: Date.now(),

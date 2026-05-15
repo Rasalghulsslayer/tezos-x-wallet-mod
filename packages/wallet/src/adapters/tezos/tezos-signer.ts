@@ -72,20 +72,15 @@ function extractRequiredFee(err: unknown): number | null {
 
 export class TezosSigner implements TezosSignerPort {
   readonly kind = 'tezos' as const;
-  readonly account: TezosAccount;
   private readonly toolkit:     TezosToolkit;
   private readonly permissions: WalletPermissions;
 
-  constructor(secretKey: string, publicKey: string, tz1: string, accountId?: string) {
-    this.permissions = { address: tz1, publicKey };
-    this.account = {
-      kind: 'tezos',
-      // Placeholder ID until W4 introduces proper UUID-based account IDs.
-      id:   accountId ?? tz1,
-      tz1,
-      publicKey,
-    };
-    this.toolkit = new TezosToolkit(TEZOS_L1_RPC);
+  constructor(
+    readonly account: TezosAccount,
+    secretKey:        string,
+  ) {
+    this.permissions = { address: account.tz1, publicKey: account.publicKey };
+    this.toolkit     = new TezosToolkit(TEZOS_L1_RPC);
     this.toolkit.setProvider({ signer: new InMemorySigner(secretKey) });
   }
 

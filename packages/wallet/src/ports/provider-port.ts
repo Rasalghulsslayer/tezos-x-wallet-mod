@@ -1,8 +1,12 @@
 /**
- * ProviderPort: EIP-1193 provider abstraction. Aliases the relayer's
- * EIP1193Provider; an EVM-native provider in W4 satisfies the same shape.
+ * ProviderPort: EIP-1193 provider plus the wallet-side resolveSyntheticHash
+ * method used to swap a synthetic NAC hash for the real kernel-synthesized
+ * EVM hash. RelayerProvider (Tezos consumer) and EvmProvider (EVM consumer)
+ * both satisfy this contract.
  */
 
 import type { EIP1193Provider } from '@tezosx/relayer/types';
 
-export type ProviderPort = EIP1193Provider;
+export interface ProviderPort extends EIP1193Provider {
+  resolveSyntheticHash(syntheticHash: string): Promise<string | null>;
+}

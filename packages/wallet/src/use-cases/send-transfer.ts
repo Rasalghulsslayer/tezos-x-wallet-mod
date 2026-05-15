@@ -1,12 +1,15 @@
 /**
- * sendTransfer: routes a transfer to either the native L1 path (signer
- * directly) or the L2 NAC-gateway path (RelayerProvider eth_sendTransaction)
- * based on destination shape + asset. Returns the runtime + the produced
- * hash (synthetic in the L2 case; the orchestrator polls resolveTx
- * separately to swap it for the real EVM hash).
+ * sendTransfer: routes a transfer across the four valid combinations of
+ * source signer kind × destination runtime. Tezos sources go through
+ * either the TezosSigner native L1 path or the RelayerProvider NAC
+ * gateway path. EVM sources go through the EvmProvider for same-runtime
+ * sends and through the NAC precompile (via buildEvmToTezosTx + the
+ * EvmSigner) for cross-runtime sends.
  */
 
-import { detectRuntime } from '../domain/validation';
+import type { CrossRuntimeIntent } from '@tezosx/relayer/types';
+import { decideRoute } from '../domain/transfer';
+import { buildEvmToTezosTx } from '../adapters/evm/nac-precompile-builder';
 import type { Container } from '../composition/container';
 
 export interface SendTransferReq {
@@ -27,25 +30,70 @@ export async function sendTransfer(
   req:  SendTransferReq,
   deps: SendTransferDeps,
 ): Promise<SendTransferResult> {
-  const dest = detectRuntime(req.to);
+  const signer = deps.container.signer;
+  const route  = decideRoute(signer.account, req.to);
 
-  // Same-runtime XTZ → native Michelson runtime transfer, no NAC gateway.
-  if (req.asset === 'XTZ' && dest === 'l1') {
-    const mutez = (BigInt(req.amount) / 10n ** 12n).toString();
-    const opHash = await deps.container.signer.sendNativeTransfer(req.to, mutez);
-    return { runtime: 'l1', hash: opHash };
+  if (signer.kind === 'tezos') {
+    if (req.asset === 'XTZ' && route.via === 'native') {
+      const mutez  = (BigInt(req.amount) / 10n ** 12n).toString();
+      const opHash = await signer.sendNativeTransfer(req.to, mutez);
+      return { runtime: 'l1', hash: opHash };
+    }
+    // Cross-runtime XTZ (tz1 → 0x) or USDC → NAC gateway. Returns the
+    // synthetic NAC hash; the popup polls resolveTx to swap it for the
+    // kernel-synthesized real EVM hash before showing "Done".
+    const synthetic = await deps.container.provider.request({
+      method: 'eth_sendTransaction',
+      params: [{
+        to:    req.to,
+        value: req.amount,
+        data:  req.asset === 'XTZ' ? '0x' : req.amount,
+      }],
+    }) as string;
+    return { runtime: 'l2', hash: synthetic };
   }
 
-  // Cross-runtime XTZ (tz1 → 0x) or USDC → NAC gateway. Returns the
-  // synthetic NAC hash; the orchestrator polls resolveTx to swap it for
-  // the kernel-synthesized real EVM hash before showing "Done".
-  const synthetic = await deps.container.provider.request({
-    method: 'eth_sendTransaction',
-    params: [{
-      to:    req.to,
-      value: req.amount,
-      data:  req.asset === 'XTZ' ? '0x' : req.amount,
-    }],
-  }) as string;
-  return { runtime: 'l2', hash: synthetic };
+  // EVM signer paths
+  if (req.asset !== 'XTZ') {
+    throw new Error(`EVM-source ${req.asset} transfers are not supported in 0.7.0`);
+  }
+
+  if (route.via === 'native') {
+    // EVM-to-EVM XTZ transfer through EvmProvider; returns the real EVM hash.
+    const hash = await deps.container.provider.request({
+      method: 'eth_sendTransaction',
+      params: [{ to: req.to, value: req.amount, data: '0x' }],
+    }) as string;
+    return { runtime: 'l2', hash };
+  }
+
+  if (route.via === 'nac-precompile-l2') {
+    // EVM → tz1 via NAC precompile. The relayer's buildCrossRuntimeTx
+    // produces a fully-populated EVM tx; the EvmSigner signs it; the
+    // EvmProvider broadcasts via eth_sendRawTransaction.
+    const mutezAmount  = BigInt(req.amount) / 10n ** 12n;
+    const intent: CrossRuntimeIntent = {
+      kind:        'transfer',
+      destination: req.to,
+      amount:      mutezAmount,
+    };
+    const tx        = await buildEvmToTezosTx(intent, signer.account.address);
+    const rawSigned = await signer.signEvmTx({
+      to:                   tx.to,
+      data:                 tx.data,
+      value:                tx.value,
+      gasLimit:             tx.gasLimit,
+      nonce:                tx.nonce,
+      chainId:              tx.chainId,
+      maxFeePerGas:         0n,
+      maxPriorityFeePerGas: 0n,
+    });
+    const hash = await deps.container.provider.request({
+      method: 'eth_sendRawTransaction',
+      params: [rawSigned],
+    }) as string;
+    return { runtime: 'l2', hash };
+  }
+
+  throw new Error(`Unsupported route: ${JSON.stringify(route)}`);
 }

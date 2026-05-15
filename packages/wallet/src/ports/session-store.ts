@@ -5,6 +5,7 @@
 
 export interface StoredSession {
   origin:      string;
+  accountId?:  string;
   tz1Address:  string;
   evmAlias:    string;
   chainId:     string;

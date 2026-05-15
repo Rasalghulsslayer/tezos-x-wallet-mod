@@ -24,11 +24,14 @@ function rebuildContainer(): void {
     state.evmAlias  = null;
     return;
   }
-  state.container = buildContainer({
-    tz1:       unlocked.tz1,
-    publicKey: unlocked.publicKey,
-    secretKey: unlocked.secretKey,
-  });
+  const { account, secretKey } = unlocked;
+  state.container = buildContainer(
+    account.kind === 'tezos'
+      ? { kind: 'tezos', accountId: account.id, label: account.label,
+          tz1: account.tz1, publicKey: account.publicKey, secretKey }
+      : { kind: 'evm', accountId: account.id, label: account.label,
+          address: account.address, publicKey: account.publicKey, privateKey: secretKey },
+  );
 
   state.container.provider.on('accountsChanged', (accounts: string[]) =>
     void broadcastEvent({ type: 'PROVIDER_EVENT', event: 'accountsChanged', data: accounts }),

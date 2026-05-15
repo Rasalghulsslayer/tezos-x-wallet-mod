@@ -1,29 +1,50 @@
+/**
+ * Keyring: vault encryption/decryption and in-memory unlock state.
+ * V1 (0.6.0): encrypted blob contains { kind: 'mnemonic'|'edsk', value }.
+ * V2 (0.7.0): encrypted blob contains { version: 2, accounts, active, secrets }.
+ * unlock() detects V1 and upgrades transparently; the caller migrates sessions.
+ */
+
 import {
   deriveTezosIdentity,
   deriveTezosIdentityFromSecretKey,
   newMnemonic,
 } from '../shared/seed';
 import { isValidEdsk, isValidMnemonic } from '../domain/validation';
+import type { Account, AccountId, TezosAccount } from '../domain/account';
 import type { VaultStore, EncryptedVault } from '../ports/vault-store';
 
-/** Payload chiffré dans le vault. Distingue l'origine du secret. */
-export type VaultPayload =
-  | { kind: 'mnemonic'; value: string }
-  | { kind: 'edsk';     value: string };
+// ── Secret payload types ───────────────────────────────────────────────────────
 
-/** Number of PBKDF2 iterations used to stretch the password into an AES-GCM key. */
+export type AccountSecret =
+  | { kind: 'mnemonic'; value: string }
+  | { kind: 'edsk';     value: string }
+  | { kind: 'evm-pk';   value: string };
+
+/** Alias kept for callers that imported VaultPayload. */
+export type VaultPayload = AccountSecret;
+
+/** V2 — 0.7.0 multi-account-ready format (stored as the encrypted plaintext). */
+export type MultiAccountVaultPayload = {
+  version:  2;
+  accounts: Account[];
+  active:   AccountId;
+  secrets:  Record<AccountId, AccountSecret>;
+};
+
+/** Unlocked keyring state held in SW memory — cleared on lock / SW death. */
+export interface UnlockedSession {
+  account:   Account;
+  secretKey: string;  // edsk… for Tezos; hex private key for EVM
+}
+
+// ── PBKDF2 / AES-GCM constants ────────────────────────────────────────────────
+
 const PBKDF2_ITERATIONS = 200_000;
 const SALT_BYTES        = 16;
 const IV_BYTES          = 12;
 
-/** Unlocked keyring state held in SW memory — cleared on lock / SW death. */
-export interface UnlockedIdentity {
-  tz1:       string;
-  publicKey: string;
-  secretKey: string;  // Tezos-encoded (edsk...)
-}
-
-// ── Low-level crypto helpers (pure, no side-effects on storage) ───────────────
+// ── Low-level crypto helpers ──────────────────────────────────────────────────
 
 function randomBytes(len: number): Uint8Array {
   const bytes = new Uint8Array(len);
@@ -61,7 +82,7 @@ async function deriveAesKey(password: string, salt: Uint8Array, iterations: numb
   );
 }
 
-async function encryptPayload(payload: VaultPayload, password: string): Promise<EncryptedVault> {
+async function encryptJson<T>(payload: T, password: string): Promise<EncryptedVault> {
   const salt = randomBytes(SALT_BYTES);
   const iv   = randomBytes(IV_BYTES);
   const key  = await deriveAesKey(password, salt, PBKDF2_ITERATIONS);
@@ -82,47 +103,52 @@ async function encryptPayload(payload: VaultPayload, password: string): Promise<
   };
 }
 
-async function decryptVault(vault: EncryptedVault, password: string): Promise<VaultPayload> {
+async function decryptVaultRaw(vault: EncryptedVault, password: string): Promise<string> {
   const key = await deriveAesKey(password, fromBase64(vault.salt), vault.iterations);
   const plaintext = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv: fromBase64(vault.iv) as BufferSource },
     key,
     fromBase64(vault.ciphertext) as BufferSource,
   );
-  const raw = new TextDecoder().decode(plaintext);
+  return new TextDecoder().decode(plaintext);
+}
 
-  // Format actuel : JSON typé { kind, value }. Fallback sur l'ancien format
-  // (plain mnemonic) pour les vaults créés avant l'introduction de edsk.
+function tryParseV2(raw: string): MultiAccountVaultPayload | null {
   try {
-    const parsed = JSON.parse(raw) as VaultPayload;
-    if (parsed != null && (parsed.kind === 'mnemonic' || parsed.kind === 'edsk')) {
-      return parsed;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (parsed.version === 2 && Array.isArray(parsed.accounts)) {
+      return parsed as unknown as MultiAccountVaultPayload;
     }
-  } catch {
-    /* fallthrough : ancien format */
-  }
+  } catch { /* not JSON or wrong shape */ }
+  return null;
+}
+
+function parseLegacyV1(raw: string): AccountSecret & { kind: 'mnemonic' | 'edsk' } {
+  try {
+    const parsed = JSON.parse(raw) as AccountSecret;
+    if (parsed.kind === 'mnemonic' || parsed.kind === 'edsk') {
+      return parsed as AccountSecret & { kind: 'mnemonic' | 'edsk' };
+    }
+  } catch { /* fallthrough: plain mnemonic (very old format) */ }
   return { kind: 'mnemonic', value: raw };
 }
 
-// ── Keyring public API — orchestrates storage + crypto + derivation ───────────
+// ── Keyring public API ────────────────────────────────────────────────────────
 
 export class Keyring {
-  private unlocked: UnlockedIdentity | null = null;
+  private unlocked: UnlockedSession | null = null;
 
   constructor(private readonly vaultStore: VaultStore) {}
 
-  /** True when a vault is persisted in storage (wallet has been set up). */
   async hasVault(): Promise<boolean> {
     return (await this.vaultStore.load()) != null;
   }
 
-  /** True when the vault has been decrypted in the current SW session. */
   isUnlocked(): boolean {
     return this.unlocked !== null;
   }
 
-  /** Returns the unlocked identity, or null if the wallet is locked. */
-  getUnlocked(): UnlockedIdentity | null {
+  getUnlocked(): UnlockedSession | null {
     return this.unlocked;
   }
 
@@ -133,59 +159,123 @@ export class Keyring {
     return mnemonic;
   }
 
-  /** Import an existing mnemonic and persist the encrypted vault. */
-  async importFromMnemonic(mnemonic: string, password: string): Promise<UnlockedIdentity> {
+  async importFromMnemonic(mnemonic: string, password: string): Promise<UnlockedSession> {
     const trimmed = mnemonic.trim().toLowerCase();
     if (!isValidMnemonic(trimmed)) throw new Error('Invalid BIP39 mnemonic');
     if (password.length < 8)      throw new Error('Password must be at least 8 characters');
 
-    await this.vaultStore.save(await encryptPayload({ kind: 'mnemonic', value: trimmed }, password));
-    const identity = await deriveTezosIdentity(trimmed);
-    this.unlocked = identity;
-    return identity;
+    const { tz1, publicKey, secretKey } = await deriveTezosIdentity(trimmed);
+    const accountId = tz1;
+    const account: TezosAccount = { kind: 'tezos', id: accountId, tz1, publicKey };
+    const payload: MultiAccountVaultPayload = {
+      version:  2,
+      accounts: [account],
+      active:   accountId,
+      secrets:  { [accountId]: { kind: 'mnemonic', value: trimmed } },
+    };
+    await this.vaultStore.save(await encryptJson(payload, password));
+    this.unlocked = { account, secretKey };
+    return this.unlocked;
   }
 
-  /** Import directly from a Tezos-encoded secret key (edsk...). */
-  async importFromSecretKey(edsk: string, password: string): Promise<UnlockedIdentity> {
+  async importFromSecretKey(edsk: string, password: string): Promise<UnlockedSession> {
     const trimmed = edsk.trim();
-    if (!isValidEdsk(trimmed))    throw new Error('Invalid Tezos secret key (expected edsk…)');
-    if (password.length < 8)      throw new Error('Password must be at least 8 characters');
+    if (!isValidEdsk(trimmed)) throw new Error('Invalid Tezos secret key (expected edsk…)');
+    if (password.length < 8)   throw new Error('Password must be at least 8 characters');
 
-    const identity = await deriveTezosIdentityFromSecretKey(trimmed).catch(() => {
+    const { tz1, publicKey, secretKey } = await deriveTezosIdentityFromSecretKey(trimmed).catch(() => {
       throw new Error('Could not decode the secret key');
     });
-    await this.vaultStore.save(await encryptPayload({ kind: 'edsk', value: trimmed }, password));
-    this.unlocked = identity;
-    return identity;
+    const accountId = tz1;
+    const account: TezosAccount = { kind: 'tezos', id: accountId, tz1, publicKey };
+    const payload: MultiAccountVaultPayload = {
+      version:  2,
+      accounts: [account],
+      active:   accountId,
+      secrets:  { [accountId]: { kind: 'edsk', value: trimmed } },
+    };
+    await this.vaultStore.save(await encryptJson(payload, password));
+    this.unlocked = { account, secretKey };
+    return this.unlocked;
   }
 
-  /** Unlock an existing vault with the user's password. */
-  async unlock(password: string): Promise<UnlockedIdentity> {
+  /**
+   * Unlock an existing vault. Detects the V1 (0.6.0) format and upgrades it
+   * to V2 in-place. The caller should migrate the session store when
+   * upgraded === true.
+   */
+  async unlock(password: string): Promise<{ session: UnlockedSession; upgraded: boolean; accountId: AccountId }> {
     const vault = await this.vaultStore.load();
     if (vault == null) throw new Error('No wallet found');
 
-    const payload = await decryptVault(vault, password).catch(() => {
+    let raw: string;
+    try {
+      raw = await decryptVaultRaw(vault, password);
+    } catch {
       throw new Error('Incorrect password');
-    });
+    }
 
-    const identity = payload.kind === 'mnemonic'
-      ? await deriveTezosIdentity(payload.value)
-      : await deriveTezosIdentityFromSecretKey(payload.value);
-    this.unlocked = identity;
-    return identity;
+    const v2 = tryParseV2(raw);
+    if (v2 != null) {
+      const activeId = v2.active;
+      const account  = v2.accounts.find(a => a.id === activeId);
+      const secret   = v2.secrets[activeId];
+      if (account == null || secret == null) throw new Error('Vault corrupted: active account not found');
+
+      let secretKey: string;
+      if (account.kind === 'tezos') {
+        ({ secretKey } = secret.kind === 'mnemonic'
+          ? await deriveTezosIdentity(secret.value)
+          : await deriveTezosIdentityFromSecretKey(secret.value));
+      } else {
+        secretKey = secret.value;
+      }
+
+      this.unlocked = { account, secretKey };
+      return { session: this.unlocked, upgraded: false, accountId: activeId };
+    }
+
+    // V1 legacy — upgrade to V2 in place
+    const legacy = parseLegacyV1(raw);
+    const { tz1, publicKey, secretKey } = legacy.kind === 'mnemonic'
+      ? await deriveTezosIdentity(legacy.value)
+      : await deriveTezosIdentityFromSecretKey(legacy.value);
+
+    const accountId = tz1;
+    const account: TezosAccount = { kind: 'tezos', id: accountId, tz1, publicKey };
+    const v2Payload: MultiAccountVaultPayload = {
+      version:  2,
+      accounts: [account],
+      active:   accountId,
+      secrets:  { [accountId]: legacy },
+    };
+    await this.vaultStore.save(await encryptJson(v2Payload, password));
+
+    this.unlocked = { account, secretKey };
+    return { session: this.unlocked, upgraded: true, accountId };
   }
 
-  /** Clear the in-memory identity. Persisted vault is untouched. */
   lock(): void {
     this.unlocked = null;
   }
 
-  /** Re-decrypt and return the raw secret (mnemonic or edsk) for user-initiated export. */
-  async exportSecret(password: string): Promise<VaultPayload> {
+  async exportSecret(password: string): Promise<AccountSecret> {
     const vault = await this.vaultStore.load();
     if (vault == null) throw new Error('No wallet found');
-    return decryptVault(vault, password).catch(() => {
+
+    let raw: string;
+    try {
+      raw = await decryptVaultRaw(vault, password);
+    } catch {
       throw new Error('Incorrect password');
-    });
+    }
+
+    const v2 = tryParseV2(raw);
+    if (v2 != null) {
+      const secret = v2.secrets[v2.active];
+      if (secret == null) throw new Error('Vault corrupted: active secret not found');
+      return secret;
+    }
+    return parseLegacyV1(raw);
   }
 }
