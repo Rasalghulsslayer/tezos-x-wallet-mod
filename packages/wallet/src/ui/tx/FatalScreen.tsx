@@ -1,4 +1,4 @@
-import type { FormattedError } from '@/lib/errors';
+import type { FormattedError } from '@/domain/error';
 
 const BUILD_VERSION = '0.5.0';
 

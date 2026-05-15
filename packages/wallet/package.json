@@ -1,7 +1,7 @@
 {
   "name": "@tezosx/wallet",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,12 +11,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@noble/curves": "^2.2.0",
+    "@noble/hashes": "^2.2.0",
     "@scure/bip32": "^2.2.0",
     "@scure/bip39": "^2.2.0",
     "@taquito/rpc": "^24.3.0",
     "@taquito/signer": "^24.3.0",
     "@taquito/taquito": "^24.3.0",
-    "@tezosx/relayer": "^0.4.1",
+    "@tezosx/relayer": "^0.5.0",
     "buffer": "^6.0.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

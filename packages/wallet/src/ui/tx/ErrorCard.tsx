@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { FormattedError } from '@/lib/errors';
+import type { FormattedError } from '@/domain/error';
 
 const COPY_FEEDBACK_MS = 1_600;
 

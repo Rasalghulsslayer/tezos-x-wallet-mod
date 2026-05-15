@@ -1,4 +1,4 @@
-import '@/lib/buffer-shim';
+import '@/shared/buffer-shim';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import './styles.css';

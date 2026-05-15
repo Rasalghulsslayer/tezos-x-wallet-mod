@@ -1,0 +1,126 @@
+import {
+  DAppClient,
+  BeaconEvent,
+  NetworkType,
+  TezosOperationType,
+  type AccountInfo,
+  type MichelineMichelsonV1Expression,
+} from '@airgap/beacon-sdk';
+import type { MichelsonV1Expression } from '@taquito/rpc';
+import { TEZOS_L1_RPC, NAC_CONTRACT } from '../shared/constants.js';
+import type { ITezosWalletClient, WalletPermissions } from '../ports/tezos-wallet-client.js';
+
+const EIP1193_USER_REJECTED = 4001;
+const JSON_RPC_INTERNAL = -32603;
+
+function beaconError(code: number, message: string): Error & { code: number } {
+  const err = new Error(message) as Error & { code: number };
+  err.code = code;
+  return err;
+}
+
+function isUserAbort(err: unknown): boolean {
+  if (err instanceof Error) {
+    const msg = err.message.toLowerCase();
+    return msg.includes('aborted') || msg.includes('rejected') || msg.includes('dismiss');
+  }
+  return false;
+}
+
+export class BeaconClient implements ITezosWalletClient {
+  private readonly client: DAppClient;
+  private accountChangeHandler?: (tz1: string | null) => void;
+
+  constructor() {
+    this.client = new DAppClient({
+      name: 'Tezos X Relayer',
+      network: {
+        type: NetworkType.CUSTOM,
+        name: 'Tezos X Testnet',
+        rpcUrl: TEZOS_L1_RPC,
+      },
+    });
+
+    // Forward Temple account changes to RelayerProvider
+    void this.client.subscribeToEvent(
+      BeaconEvent.ACTIVE_ACCOUNT_SET,
+      (account: AccountInfo | undefined) => {
+        this.accountChangeHandler?.(account?.address ?? null);
+      },
+    );
+  }
+
+  setAccountChangeHandler(cb: (tz1: string | null) => void): void {
+    this.accountChangeHandler = cb;
+  }
+
+  /** Return existing connected account without opening a popup, or null. */
+  async getActiveAccount(): Promise<WalletPermissions | null> {
+    const account = await this.client.getActiveAccount();
+    if (account == null) return null;
+    return { address: account.address, publicKey: account.publicKey ?? '' };
+  }
+
+  /**
+   * Open the Temple Wallet popup to request permissions.
+   * Resolves after user approves; throws EIP-1193 error 4001 on rejection.
+   */
+  async requestPermissions(): Promise<WalletPermissions> {
+    try {
+      // Network is already configured at DAppClient construction.
+      // RequestPermissionInput only accepts { scopes? } — no network override.
+      const result = await this.client.requestPermissions();
+      return { address: result.address, publicKey: result.publicKey ?? '' };
+    } catch (err) {
+      if (isUserAbort(err)) {
+        throw beaconError(EIP1193_USER_REJECTED, 'User rejected the permission request');
+      }
+      throw beaconError(JSON_RPC_INTERNAL, `Beacon requestPermissions failed: ${String(err)}`);
+    }
+  }
+
+  /**
+   * Submit a TRANSACTION operation to the NAC gateway via Temple.
+   * Returns the Michelson runtime operation hash (Base58Check).
+   *
+   * @param michelineArg  Micheline JSON value for the entrypoint parameters
+   */
+  async sendContractCall(
+    entrypoint: string,
+    michelineArg: MichelsonV1Expression,
+    mutezAmount = '0',
+  ): Promise<string> {
+    try {
+      const result = await this.client.requestOperation({
+        operationDetails: [
+          {
+            kind: TezosOperationType.TRANSACTION,
+            amount: mutezAmount,
+            fee: "100000",          // 0.1 XTZ — safe ceiling for cross-runtime ops (Temple re-estimates)
+            gas_limit: "1040000",   // High ceiling for NAC call_evm (Temple simulates & adjusts)
+            storage_limit: "60000", // Allows storage allocation via NAC gateway
+            destination: NAC_CONTRACT,
+            parameters: {
+              entrypoint,
+              value: michelineArg as MichelineMichelsonV1Expression,
+            },
+          },
+        ],
+      });
+      // result.transactionHash is the Michelson runtime opHash
+      const l1OpHash = (result as { transactionHash: string }).transactionHash;
+      console.info('[TezosX Relayer] L1 opHash (Tezos):', l1OpHash);
+      return l1OpHash;
+    } catch (err) {
+      if (isUserAbort(err)) {
+        throw beaconError(EIP1193_USER_REJECTED, 'User rejected the transaction');
+      }
+      throw beaconError(JSON_RPC_INTERNAL, `Beacon sendContractCall failed: ${String(err)}`);
+    }
+  }
+
+  async disconnect(): Promise<void> {
+    await this.client.clearActiveAccount();
+    await this.client.removeAllPeers();
+  }
+}

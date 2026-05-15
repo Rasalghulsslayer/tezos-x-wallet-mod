@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { VaultState } from '@/lib/messages';
-import { sendPopupRequest } from '@/lib/messaging';
-import { EVM_EXPLORER, TEZOS_EXPLORER } from '@/lib/constants';
-import { formatError } from '@/lib/errors';
+import type { VaultState } from '@/shared/messages';
+import { sendPopupRequest } from '@/shared/messaging';
+import { EVM_EXPLORER, TEZOS_EXPLORER } from '@/shared/constants';
+import { formatError } from '@/domain/error';
+import { accountCardVM } from '../view-models/account-card-vm';
 import { TopBar } from '../tx/TopBar';
 import { BottomTabs } from '../tx/BottomTabs';
 import { AccountCard } from '../tx/AccountCard';
@@ -12,13 +13,16 @@ import { Button } from '../tx/Button';
 import { toast } from '../tx/Toast';
 import { ErrorInline } from '../tx/ErrorInline';
 
-type Secret = { kind: 'mnemonic' | 'edsk'; value: string } | null;
+type Secret =
+  | { kind: 'mnemonic'; value: string }
+  | { kind: 'edsk';     value: string }
+  | { kind: 'evm-pk';   value: string };
 
 export function Settings({ state, onLock }: { state: VaultState; onLock: () => void }) {
   const navigate        = useNavigate();
   const [modal, setModal] = useState<'reveal' | null>(null);
   const [pwd, setPwd]     = useState('');
-  const [secret, setSec]  = useState<Secret>(null);
+  const [secret, setSec]  = useState<Secret | null>(null);
   const [err, setErr]     = useState<unknown>(null);
   const [shown, setShown] = useState(false);
   const [loading, setLd]  = useState(false);
@@ -27,7 +31,7 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
     setErr(null);
     setLd(true);
     try {
-      const payload = await sendPopupRequest<{ kind: 'mnemonic' | 'edsk'; value: string }>({ type: 'EXPORT_SEED', password: pwd });
+      const payload = await sendPopupRequest<Secret>({ type: 'EXPORT_SEED', password: pwd });
       setSec(payload);
       setShown(true);
     } catch (e) {
@@ -47,36 +51,56 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
 
   if (state.status !== 'unlocked') return null;
 
+  const vm     = accountCardVM(state);
+  const isEvm  = state.kind === 'evm';
+
   return (
     <div className="tx-page">
       <TopBar title="Settings" />
 
       <div className="tx-page-scroll">
         <div style={{ padding: '12px 16px' }}>
-          <AccountCard variant="unified" tz1={state.tz1} eth={state.evmAlias} testnet />
+          <AccountCard variant="vm" vm={vm} testnet />
         </div>
 
         <div className="tx-section-head"><span className="t">Wallet</span></div>
         <LinkRow icon="link" t="Connected sites" onClick={() => navigate('/connections')} />
-        <LinkRow
-          icon="globe"
-          t="Blockscout (EVM)"
-          sub="EVM explorer (Blockscout)"
-          onClick={() => { window.open(`${EVM_EXPLORER}/address/${state.evmAlias}`, '_blank'); }}
-        />
-        <LinkRow
-          icon="globe"
-          t="tzkt (Michelson runtime)"
-          sub="Tezos explorer"
-          onClick={() => { window.open(`${TEZOS_EXPLORER}/${state.tz1}`, '_blank'); }}
-        />
+
+        {isEvm ? (
+          <LinkRow
+            icon="globe"
+            t="Blockscout (EVM)"
+            sub="EVM explorer"
+            onClick={() => { window.open(`${EVM_EXPLORER}/address/${state.address}`, '_blank'); }}
+          />
+        ) : (
+          <>
+            <LinkRow
+              icon="globe"
+              t="Blockscout (EVM)"
+              sub="EVM explorer · alias"
+              onClick={() => { window.open(`${EVM_EXPLORER}/address/${state.evmAlias}`, '_blank'); }}
+            />
+            <LinkRow
+              icon="globe"
+              t="tzkt (Michelson runtime)"
+              sub="Tezos explorer"
+              onClick={() => { window.open(`${TEZOS_EXPLORER}/${state.tz1}`, '_blank'); }}
+            />
+          </>
+        )}
 
         <div className="tx-section-head"><span className="t">Security</span></div>
-        <LinkRow icon="shield" t="Reveal secret" sub="Recovery phrase or private key" onClick={() => setModal('reveal')} />
+        <LinkRow
+          icon="shield"
+          t="Reveal secret"
+          sub={isEvm ? 'EVM private key' : 'Recovery phrase or private key'}
+          onClick={() => setModal('reveal')}
+        />
         <LinkRow icon="lock" t="Lock wallet" onClick={lock} />
 
         <div className="tx-section-head"><span className="t">About</span></div>
-        <LinkRow icon="info" t="Version" sub="Wallet v0.6.0 · Relayer v0.4.1" />
+        <LinkRow icon="info" t="Version" sub="Wallet v0.7.0 · Relayer v0.5.0" />
         <LinkRow icon="info" t="Network" sub="Tezos X Previewnet" />
 
         <div style={{ height: 16 }} />
@@ -110,9 +134,9 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
             <div style={{ fontSize: 12, color: 'var(--tx-fg-muted)', marginBottom: 16 }}>
               {secret == null
                 ? 'Enter your password. Never share your secret.'
-                : secret.kind === 'mnemonic'
-                  ? 'Your recovery phrase — never share it.'
-                  : 'Your Tezos secret key — never share it.'}
+                : secret.kind === 'mnemonic' ? 'Your recovery phrase — never share it.'
+                : secret.kind === 'edsk'     ? 'Your Tezos secret key — never share it.'
+                : 'Your EVM private key — never share it.'}
             </div>
 
             {secret == null ? (
@@ -150,21 +174,11 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
                     </div>
                   ))}
                 </div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-                  <Button variant="outline" onClick={() => setShown((s) => !s)}>
-                    {shown ? 'Hide' : 'Show'}
-                  </Button>
-                  <Button
-                    variant="accent"
-                    full
-                    onClick={() => {
-                      void navigator.clipboard.writeText(secret.value);
-                      toast('Copied');
-                    }}
-                  >
-                    Copy
-                  </Button>
-                </div>
+                <RevealActions
+                  shown={shown}
+                  onToggle={() => setShown((s) => !s)}
+                  value={secret.value}
+                />
               </>
             ) : (
               <>
@@ -180,23 +194,13 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
                     transition: 'filter 220ms',
                   }}
                 >
-                  {secret.value}
+                  {secret.kind === 'evm-pk' ? '0x' + secret.value : secret.value}
                 </div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-                  <Button variant="outline" onClick={() => setShown((s) => !s)}>
-                    {shown ? 'Hide' : 'Show'}
-                  </Button>
-                  <Button
-                    variant="accent"
-                    full
-                    onClick={() => {
-                      void navigator.clipboard.writeText(secret.value);
-                      toast('Copied');
-                    }}
-                  >
-                    Copy
-                  </Button>
-                </div>
+                <RevealActions
+                  shown={shown}
+                  onToggle={() => setShown((s) => !s)}
+                  value={secret.kind === 'evm-pk' ? '0x' + secret.value : secret.value}
+                />
               </>
             )}
           </div>
@@ -204,6 +208,24 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
       )}
 
       <BottomTabs />
+    </div>
+  );
+}
+
+function RevealActions({ shown, onToggle, value }: { shown: boolean; onToggle: () => void; value: string }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+      <Button variant="outline" onClick={onToggle}>{shown ? 'Hide' : 'Show'}</Button>
+      <Button
+        variant="accent"
+        full
+        onClick={() => {
+          void navigator.clipboard.writeText(value);
+          toast('Copied');
+        }}
+      >
+        Copy
+      </Button>
     </div>
   );
 }

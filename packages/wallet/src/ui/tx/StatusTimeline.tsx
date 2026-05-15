@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { TxStatus } from '@/lib/tx-status';
+import type { TxStatus } from '@/domain/tx-status';
 
 type StepKey   = 'broadcasting' | 'included' | 'finalized';
 type StepState = 'pending' | 'active' | 'done' | 'failed';
@@ -52,7 +52,11 @@ export function StatusTimeline({ status, runtime, startedAt }: {
     if (key === 'broadcasting') return formatAgo(elapsed);
     if (key === 'included' && blockLevel != null) return `block #${blockLevel.toLocaleString()}`;
     if (key === 'included' && state === 'failed')  return 'unreachable';
-    if (key === 'finalized' && confirmations != null) return `${confirmations} confirmation${confirmations === 1 ? '' : 's'}`;
+    if (key === 'finalized' && confirmations != null) {
+      
+      if (confirmations === 0) return runtime === 'l2' ? 'L1-anchored' : 'L1';
+      return `${confirmations} confirmation${confirmations === 1 ? '' : 's'}`;
+    }
     return '—';
   };
 

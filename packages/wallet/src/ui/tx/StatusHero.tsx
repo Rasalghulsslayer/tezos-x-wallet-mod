@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { TxStatus } from '@/lib/tx-status';
-import { FINALIZED_AFTER_BLOCKS } from '@/lib/constants';
+import type { TxStatus } from '@/domain/tx-status';
+import { FINALIZED_AFTER_BLOCKS } from '@/shared/constants';
 
 type Asset = 'XTZ' | 'USDC';
 
