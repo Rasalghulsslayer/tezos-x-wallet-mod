@@ -90,14 +90,7 @@ async function pollL2(realHash: string): Promise<TxStatus | null> {
     return { stage: 'failed', reason: 'Reverted' };
   }
 
-  const headHex = await rpcCall<string>('eth_blockNumber', []);
-  const head = parseInt(headHex, 16);
-  const confirmations = head - blockLevel;
-
-  if (confirmations >= FINALIZED_AFTER_BLOCKS) {
-    return { stage: 'finalized', blockLevel, confirmations };
-  }
-  return { stage: 'included', blockLevel, timestampMs: Date.now() };
+  return { stage: 'finalized', blockLevel, confirmations: 0 };
 }
 
 async function rpcCall<T>(method: string, params: unknown[]): Promise<T> {

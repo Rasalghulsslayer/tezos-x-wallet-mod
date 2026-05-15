@@ -9,6 +9,18 @@ This file is an index of releases. For details (added / changed / fixed / compat
 
 ---
 
+## 2026-05-15
+
+- **`@tezosx/wallet` 0.7.0** — feature minor. **L2 finality is now L1-anchored:** the Send timeline stops waiting for additional L2 blocks beyond inclusion (a heuristic ported from Ethereum mainnet that doesn't apply on Tezos X) and flips to "Finalized" as soon as the EVM receipt is observed — the underlying L2 block was already produced from an L1 commitment. **Symmetric EVM-native accounts end-to-end:** a vault can now hold a secp256k1 account that signs EVM transactions directly. Welcome ships a binary runtime selector (Michelson vs. EVM); Create / Import are kind-aware; Send routes the 4 combinations of source kind × destination address (`tz1 → tz1`, `tz1 → 0x` via NAC gateway, `0x → 0x` native, `0x → tz1` via NAC precompile at `0xff…007`). New `SignatureView` in the approval popup gates `personal_sign` / `eth_signTypedData_v4`. Vault format upgraded in place to V2 multi-account shape (`{ version, accounts, active, secrets }`), with eager session-store migration; 0.6.0 vaults open unchanged on first unlock. Wallet architecture refactored to ports-and-adapters: `domain/`, `ports/`, `use-cases/`, `adapters/{tezos,evm,chrome}/`, `composition/`. Pins `@tezosx/relayer ^0.5.0`. Three signing-layer regressions fixed late in the cycle: noble v2's `sign()` defaulting to `prehash: true` (re-hashed our keccak256 with sha256 → recovered to wrong sender → kernel evicted from mempool), `bytesToHex` no longer assumes a `0x` prefix, `decideRoute` now branches on `account.kind` instead of hardcoding `'michelson'`. → [details](packages/wallet/CHANGELOG.md#070--2026-05-15)
+
+---
+
+## 2026-05-12
+
+- **`@tezosx/relayer` 0.5.0** — feature minor (companion SDK release for the wallet 0.7.0 refactor). **New named entry points** sitting alongside the existing per-file paths: `@tezosx/relayer/tezos` curates the Tezos-consumer surface (`RelayerProvider`, `BeaconClient`, `TezlinkClient`, plus `buildTezosToEvmCall`, `deriveEvmAlias`, `resolveTezosAddress`), `@tezosx/relayer/evm` exposes the EVM-consumer surface for direct precompile usage (`encodeNacTransfer`, `encodeNacCallMichelson`, `buildCrossRuntimeTx`, `buildEvmToTezosCall`, `trackCrossRuntimeStatus`, `NAC_PRECOMPILE_ADDR`, `NAC_RECOMMENDED_GAS`), `@tezosx/relayer/types` re-exports the entire `domain/` and `ports/` layers. Use cases extracted as pure functions under `src/use-cases/`. Domain layer under `src/domain/` holds every runtime-agnostic type and error. Legacy per-file paths continue to resolve via re-exports — wallet 0.6.0 builds unchanged. → [details](packages/relayer/CHANGELOG.md#050--2026-05-12)
+
+---
+
 ## 2026-05-07
 
 - **`@tezosx/wallet` 0.6.0** — feature minor. **Toolbar badge for pending dApp requests:** the extension icon now shows the count of pending approvals (`eth_requestAccounts`, `eth_sendTransaction`); cleared on approve/reject/lock/SW restart, and closing the approval window with the Chrome × is now correctly treated as a reject (was a latent bug). **Live status timeline on the Send "Done" screen:** Broadcasted → Included → Finalized, polling TzKT (L1 native) or the Tezlink EVM JSON-RPC (cross-runtime) every 2–5 s until finality (≥ 2 confirmations), with a "Status unavailable" fallback after a 2-minute timeout. New `lib/badge.ts`, `lib/poller.ts`, `lib/tx-status.ts`, and `ui/tx/StatusTimeline.tsx`. → [details](packages/wallet/CHANGELOG.md#060--2026-05-07)
