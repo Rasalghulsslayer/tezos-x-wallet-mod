@@ -25,3 +25,12 @@ export interface PrecompileCall {
 }
 
 export type CrossRuntimeCall = GatewayCall | PrecompileCall;
+
+/** Read-only snapshot of a pending L1→L2 op (broadcast, not yet resolved). */
+export interface PendingOpView {
+  l1OpHash:      string;
+  evmAlias:      string;
+  to:            string;
+  fromBlock:     string;
+  broadcastedAt: number;
+}

@@ -106,7 +106,7 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
   const filterLabel =
     assetFilter === 'l1' ? 'Michelson runtime' :
     assetFilter === 'l2' ? 'EVM runtime' :
-    'All chains';
+    'All interfaces';
 
   return (
     <div className="tx-page">

@@ -31,3 +31,11 @@ export const TX_POLL_INTERVAL_SLOW_MS = 5_000;
  * show "Status unavailable").
  */
 export const TX_POLL_TIMEOUT_MS = 120_000;
+
+/** Blockscout REST API base (account/txlist endpoint), distinct from the
+ *  human-facing EVM_EXPLORER URL used for click-through links. */
+export const BLOCKSCOUT_API_BASE = 'https://blockscout.previewnet.tezosx.nomadic-labs.com/api';
+
+/** Activity tab pagination + auto-refresh tuning. */
+export const ACTIVITY_PAGE_SIZE        = 25;
+export const ACTIVITY_AUTO_REFRESH_MS  = 30_000;

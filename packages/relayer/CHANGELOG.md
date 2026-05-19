@@ -6,6 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.5.1] — 2026-05-19
+
+### Added
+- **`RelayerProvider.listPendingOps()`** — read-only snapshot of pending L1→L2 ops (broadcast against the NAC gateway, kernel-synthesized EVM hash not yet resolved). Returns a `readonly PendingOpView[]` with `l1OpHash`, `evmAlias`, `to`, `fromBlock`, `broadcastedAt`. Consumed by the wallet 0.8.0 Activity tab to surface "EVM effect pending" rows before TzKT or Blockscout sees the op. The internal `PendingOp` struct is unchanged in shape; a `broadcastedAt: number` field is now captured at submission time for the public view.
+- **`PendingOpView`** type under `domain/cross-runtime.ts`, re-exported from `@tezosx/relayer/tezos` and `@tezosx/relayer/types`.
+
+### Compatibility
+- Additive only. Wallet 0.7.0 and existing third-party consumers build unchanged against this release.
+
+---
+
 ## [0.5.0] — 2026-05-12
 
 ### Added
