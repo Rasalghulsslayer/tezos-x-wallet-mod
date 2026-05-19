@@ -1,6 +1,6 @@
-import { RelayerProvider } from '../../src/provider.js';
-import { BeaconClient }    from '../../src/beacon.js';
-import type { EIP1193Provider, ProviderConnectInfo } from '../../src/types.js';
+import { RelayerProvider } from '../../src/tezos/provider.js';
+import { BeaconClient }    from '../../src/tezos/beacon.js';
+import type { EIP1193Provider, ProviderConnectInfo } from '../../src/domain/eip-1193.js';
 import type { SessionUpdateMessage } from './messages.js';
 
 declare global {
