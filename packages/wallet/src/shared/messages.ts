@@ -4,6 +4,9 @@
  */
 
 import type { RequestArguments } from '@tezosx/relayer/types';
+import type { ActivityFilter, ActivityPage } from '../domain/activity';
+
+export type { ActivityFilter, ActivityPage };
 
 // ── Vault / session state snapshot ────────────────────────────────────────────
 
@@ -73,6 +76,7 @@ export type PopupRequest =
   | { type: 'RESOLVE_TX';    syntheticHash: string }
   | { type: 'LIST_PENDING' }
   | { type: 'LIST_SESSIONS' }
+  | { type: 'LIST_ACTIVITY'; cursor?: string; limit?: number; filter?: ActivityFilter }
   | { type: 'DISCONNECT';    origin: string };
 
 // ── Approve.html → Service Worker ─────────────────────────────────────────────

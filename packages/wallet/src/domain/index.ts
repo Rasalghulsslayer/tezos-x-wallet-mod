@@ -10,3 +10,4 @@ export * from './approval';
 export * from './validation';
 export * from './error';
 export * from './transfer';
+export * from './activity';

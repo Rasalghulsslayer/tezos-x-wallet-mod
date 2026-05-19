@@ -12,6 +12,7 @@ import type {
   ProviderConnectInfo,
 } from '../domain/eip-1193.js';
 import type { EthTransactionRequest } from '../domain/eth-tx.js';
+import type { PendingOpView } from '../domain/cross-runtime.js';
 
 interface RelayerSession {
   tz1Address: string;
@@ -20,11 +21,12 @@ interface RelayerSession {
 }
 
 interface PendingOp {
-  l1OpHash:  string;
-  from:      string;    // EVM alias of the sender
-  to:        string;    // destination address (informational)
-  fromBlock: string;    // 0x-prefixed hex: EVM block number at send time
-  realHash?: string;    // cached real EVM tx hash once resolved
+  l1OpHash:       string;
+  from:           string;    // EVM alias of the sender
+  to:             string;    // destination address (informational)
+  fromBlock:      string;    // 0x-prefixed hex: EVM block number at send time
+  broadcastedAt:  number;    // Date.now() at submission, exposed via listPendingOps
+  realHash?:      string;    // cached real EVM tx hash once resolved
 }
 
 // ── EIP-1193 error codes ───────────────────────────────────────────────────
@@ -249,9 +251,10 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
     // Store for receipt resolution
     this.pendingOps.set(syntheticHash, {
       l1OpHash,
-      from: this.session.evmAlias,
-      to:   tx.to,
+      from:          this.session.evmAlias,
+      to:            tx.to,
       fromBlock,
+      broadcastedAt: Date.now(),
     });
 
     return syntheticHash;
@@ -270,6 +273,22 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
   /** Returns the underlying L1 op hash for a synthetic NAC hash, if any. */
   getPendingL1Hash(syntheticHash: string): string | null {
     return this.pendingOps.get(syntheticHash)?.l1OpHash ?? null;
+  }
+
+  /** Snapshot of currently-pending L1→L2 ops (broadcast, kernel not yet resolved). */
+  listPendingOps(): readonly PendingOpView[] {
+    const out: PendingOpView[] = [];
+    for (const op of this.pendingOps.values()) {
+      if (op.realHash != null) continue;
+      out.push({
+        l1OpHash:      op.l1OpHash,
+        evmAlias:      op.from,
+        to:            op.to,
+        fromBlock:     op.fromBlock,
+        broadcastedAt: op.broadcastedAt,
+      });
+    }
+    return out;
   }
 
   /**

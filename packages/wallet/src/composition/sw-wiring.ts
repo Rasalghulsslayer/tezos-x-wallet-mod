@@ -28,6 +28,7 @@ import { listSessions }            from '../use-cases/list-sessions';
 import { disconnectOrigin }        from '../use-cases/disconnect-origin';
 import { sendTransfer }            from '../use-cases/send-transfer';
 import { resolveTx }               from '../use-cases/resolve-tx';
+import { listActivity }            from '../use-cases/list-activity';
 import { getPendingApproval }      from '../use-cases/get-pending-approval';
 import { resolvePendingApproval }  from '../use-cases/resolve-pending-approval';
 
@@ -143,6 +144,17 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
 
       case 'LIST_SESSIONS':
         return { ok: true, data: await listSessions({ sessionStore: deps.persistentPorts.sessionStore }) };
+
+      case 'LIST_ACTIVITY': {
+        if (deps.state.container == null) {
+          return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+        }
+        const result = await listActivity(
+          { cursor: msg.cursor, limit: msg.limit, filter: msg.filter },
+          { container: deps.state.container },
+        );
+        return { ok: true, data: result };
+      }
 
       case 'DISCONNECT':
         await disconnectOrigin({ origin: msg.origin }, { sessionStore: deps.persistentPorts.sessionStore });

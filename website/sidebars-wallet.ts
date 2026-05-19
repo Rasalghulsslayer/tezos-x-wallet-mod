@@ -24,6 +24,7 @@ const sidebars: SidebarsConfig = {
         'user-flows/import-wallet',
         'user-flows/view-balances',
         'user-flows/send-xtz',
+        'user-flows/activity-tab',
         'user-flows/dapp-approval',
         'user-flows/manage-connections',
         'user-flows/settings',
