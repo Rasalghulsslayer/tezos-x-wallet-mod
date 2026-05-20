@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { VaultState } from '@/shared/messages';
+import type { VaultState, AccountSummary } from '@/shared/messages';
+import type { AccountId } from '@/domain/account';
 import {
   fetchL1XtzBalance,
   fetchXtzBalance,
@@ -12,6 +13,10 @@ import { sendPopupRequest } from '@/shared/messaging';
 import { formatError } from '@/domain/error';
 import { accountCardVM } from '../view-models/account-card-vm';
 import { AccountCard } from '../tx/AccountCard';
+import { AccountSwitcher } from '../tx/AccountSwitcher';
+import { RenameModal } from '../tx/RenameModal';
+import { RemoveAccountModal } from '../tx/RemoveAccountModal';
+import { Identicon } from '../tx/Identicon';
 import { Button, IconBtn } from '../tx/Button';
 import { Icon } from '../tx/Icon';
 import { AssetMark } from '../tx/AssetMark';
@@ -37,6 +42,9 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
   const [bal, setBal]     = useState<Balances | null>(null);
   const [loading, setLd]  = useState(true);
   const [assetFilter, setAssetFilter] = useState<AssetFilter>('all');
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<AccountSummary | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<AccountSummary | null>(null);
 
   const refresh = async () => {
     if (state.status !== 'unlocked') return;
@@ -92,6 +100,37 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
   };
 
   if (state.status !== 'unlocked') return null;
+
+  const sortedAccounts = state.accounts.slice().sort((a, b) => a.createdAt - b.createdAt);
+  const switchable     = sortedAccounts.length >= 2;
+  const activeIdx      = sortedAccounts.findIndex(a => a.id === state.accountId);
+  const activeSummary  = activeIdx >= 0 ? sortedAccounts[activeIdx] : undefined;
+  const activeLabel    = activeSummary?.label?.trim()
+    || (activeSummary != null ? `Account ${activeIdx + 1}` : 'Account');
+  const activeSeed     = activeSummary?.primaryAddress ?? '';
+
+  const setActive = async (id: AccountId) => {
+    setSwitcherOpen(false);
+    if (id === state.accountId) return;
+    try {
+      await sendPopupRequest({ type: 'SET_ACTIVE_ACCOUNT', accountId: id });
+      onChanged();
+    } catch (e) {
+      errorToast({ message: formatError(e).title });
+    }
+  };
+
+  const saveRename = async (label: string) => {
+    if (renameTarget == null) return;
+    await sendPopupRequest({ type: 'RENAME_ACCOUNT', accountId: renameTarget.id, label });
+    onChanged();
+  };
+
+  const confirmRemove = async (password: string) => {
+    if (removeTarget == null) return;
+    await sendPopupRequest({ type: 'REMOVE_ACCOUNT', accountId: removeTarget.id, password });
+    onChanged();
+  };
 
   const vm        = accountCardVM(state);
   const xtzNum    = bal ? parseFloat(bal.xtz)  || 0 : 0;
@@ -149,8 +188,36 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
       />
 
       <div className="tx-page-scroll">
-        <div style={{ padding: '12px 16px 0' }}>
+        <div style={{ padding: '12px 16px 0', position: 'relative' }}>
+          {switchable && (
+            <button
+              type="button"
+              className="tx-account-switcher-trigger"
+              onClick={() => setSwitcherOpen((o) => !o)}
+              aria-haspopup="true"
+              aria-expanded={switcherOpen}
+            >
+              <Identicon seed={activeSeed} />
+              <span className="label">{activeLabel}</span>
+              <Icon name="chevron-down" size={13} color="var(--tx-fg-subtle)" />
+            </button>
+          )}
           <AccountCard variant="vm" vm={vm} />
+          {switcherOpen && (
+            <AccountSwitcher
+              state={state}
+              onClose={() => setSwitcherOpen(false)}
+              onSetActive={(id) => void setActive(id)}
+              onRename={(id) => {
+                setRenameTarget(sortedAccounts.find((a) => a.id === id) ?? null);
+                setSwitcherOpen(false);
+              }}
+              onRemove={(id) => {
+                setRemoveTarget(sortedAccounts.find((a) => a.id === id) ?? null);
+                setSwitcherOpen(false);
+              }}
+            />
+          )}
         </div>
 
         <div style={{ padding: '20px 16px 12px', textAlign: 'center' }}>
@@ -237,6 +304,24 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
       </div>
 
       <BottomTabs />
+
+      {renameTarget != null && (
+        <RenameModal
+          accountId={renameTarget.id}
+          initialLabel={renameTarget.label ?? ''}
+          onClose={() => setRenameTarget(null)}
+          onSaved={saveRename}
+        />
+      )}
+
+      {removeTarget != null && (
+        <RemoveAccountModal
+          account={removeTarget}
+          isLast={state.accounts.length === 1}
+          onClose={() => setRemoveTarget(null)}
+          onConfirmed={confirmRemove}
+        />
+      )}
     </div>
   );
 }
