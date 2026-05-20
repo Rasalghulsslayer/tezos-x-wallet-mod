@@ -119,10 +119,7 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
       }
 
       case 'UNLOCK': {
-        await unlockVault(
-          { password: msg.password },
-          { keyring: deps.keyring, sessionStore: deps.persistentPorts.sessionStore },
-        );
+        await unlockVault({ password: msg.password }, { keyring: deps.keyring });
         deps.rebuildContainer();
         return refreshState();
       }

@@ -27,9 +27,9 @@ function rebuildContainer(): void {
   const { account, secretKey } = unlocked;
   state.container = buildContainer(
     account.kind === 'tezos'
-      ? { kind: 'tezos', accountId: account.id, label: account.label,
+      ? { kind: 'tezos', accountId: account.id, label: account.label, createdAt: account.createdAt,
           tz1: account.tz1, publicKey: account.publicKey, secretKey }
-      : { kind: 'evm', accountId: account.id, label: account.label,
+      : { kind: 'evm', accountId: account.id, label: account.label, createdAt: account.createdAt,
           address: account.address, publicKey: account.publicKey, privateKey: secretKey },
   );
 

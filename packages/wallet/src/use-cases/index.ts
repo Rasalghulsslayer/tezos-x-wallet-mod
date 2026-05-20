@@ -15,3 +15,8 @@ export * from './send-transfer';
 export * from './resolve-tx';
 export * from './get-pending-approval';
 export * from './resolve-pending-approval';
+export * from './add-account';
+export * from './remove-account';
+export * from './set-active-account';
+export * from './rename-account';
+export * from './list-accounts';

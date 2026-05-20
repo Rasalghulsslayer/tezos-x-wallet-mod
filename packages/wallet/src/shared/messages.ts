@@ -5,8 +5,9 @@
 
 import type { RequestArguments } from '@tezosx/relayer/types';
 import type { ActivityFilter, ActivityPage } from '../domain/activity';
+import type { AccountSummary } from '../domain/account';
 
-export type { ActivityFilter, ActivityPage };
+export type { ActivityFilter, ActivityPage, AccountSummary };
 
 // ── Vault / session state snapshot ────────────────────────────────────────────
 
@@ -16,13 +17,15 @@ export type VaultStateUnlocked =
       kind:      'tezos';
       accountId: string;
       tz1:       string;
-      evmAlias:  string;        // alias derived from tz1
+      evmAlias:  string;             // alias derived from tz1
+      accounts:  AccountSummary[];   // every account in the vault, sorted by createdAt ASC
     }
   | {
       status:    'unlocked';
       kind:      'evm';
       accountId: string;
       address:   `0x${string}`;
+      accounts:  AccountSummary[];
     };
 
 export type VaultState =

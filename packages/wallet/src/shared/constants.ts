@@ -39,3 +39,10 @@ export const BLOCKSCOUT_API_BASE = 'https://blockscout.previewnet.tezosx.nomadic
 /** Activity tab pagination + auto-refresh tuning. */
 export const ACTIVITY_PAGE_SIZE        = 25;
 export const ACTIVITY_AUTO_REFRESH_MS  = 30_000;
+
+/** Multi-account caps. */
+export const MAX_ACCOUNTS_PER_VAULT    = 50;
+export const MAX_LABEL_LENGTH          = 32;
+
+/** SW container cache (LRU); each entry ~5–10 KB of JS. */
+export const CONTAINER_CACHE_SIZE      = 16;
