@@ -304,6 +304,16 @@ export class Keyring {
     return this.unlocked?.payload.accounts ?? [];
   }
 
+  /** Resolve the signing key for any account in the unlocked vault, not just the active one. */
+  async getSigningKeyFor(accountId: AccountId): Promise<{ account: Account; secretKey: string }> {
+    const u = this.requireUnlocked();
+    const account = u.payload.accounts.find(a => a.id === accountId);
+    const secret  = u.payload.secrets[accountId];
+    if (account == null || secret == null) throw new AccountNotFoundError(accountId);
+    const secretKey = await deriveSigningKey(account, secret);
+    return { account, secretKey };
+  }
+
   async listAccountSummaries(): Promise<AccountSummary[]> {
     return Promise.all(this.listAccounts().map(async (a) => {
       if (a.kind === 'tezos') {
