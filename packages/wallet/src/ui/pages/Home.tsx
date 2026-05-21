@@ -11,20 +11,17 @@ import { USDC_CONTRACT, FAUCET_URL } from '@/shared/constants';
 import { mutezToXtz, weiToXtz, formatUsdc } from '@/shared/format';
 import { sendPopupRequest } from '@/shared/messaging';
 import { formatError } from '@/domain/error';
-import { accountCardVM } from '../view-models/account-card-vm';
-import { AccountCard } from '../tx/AccountCard';
+import { AccountHeader } from '../tx/AccountHeader';
 import { AccountSwitcher } from '../tx/AccountSwitcher';
 import { RenameModal } from '../tx/RenameModal';
 import { RemoveAccountModal } from '../tx/RemoveAccountModal';
-import { Identicon } from '../tx/Identicon';
-import { Button, IconBtn } from '../tx/Button';
+import { IconBtn } from '../tx/Button';
 import { Icon } from '../tx/Icon';
 import { AssetMark } from '../tx/AssetMark';
-import { ChainPill } from '../tx/ChainPill';
 import { TopBar } from '../tx/TopBar';
 import { BottomTabs } from '../tx/BottomTabs';
 import { Badge } from '../tx/Badge';
-import { toast, errorToast } from '../tx/Toast';
+import { errorToast } from '../tx/Toast';
 
 interface Balances {
   /** Native XTZ balance for the active runtime (mutez for tz1, wei for 0x). */
@@ -39,9 +36,10 @@ const isSidePanel = new URLSearchParams(window.location.search).get('mode') === 
 
 export function Home({ state, onChanged }: { state: VaultState; onChanged: () => void }) {
   const navigate = useNavigate();
-  const [bal, setBal]     = useState<Balances | null>(null);
-  const [loading, setLd]  = useState(true);
-  const [assetFilter, setAssetFilter] = useState<AssetFilter>('all');
+  const [bal, setBal]                   = useState<Balances | null>(null);
+  const [loading, setLd]                = useState(true);
+  const [assetFilter, setAssetFilter]   = useState<AssetFilter>('all');
+  const [balanceHidden, setBalanceHidden] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<AccountSummary | null>(null);
   const [removeTarget, setRemoveTarget] = useState<AccountSummary | null>(null);
@@ -53,9 +51,6 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
       const xtzAddress = state.kind === 'tezos' ? state.tz1     : state.address;
       const evmAddress = state.kind === 'tezos' ? state.evmAlias : state.address;
 
-      // Tezos accounts: native XTZ lives on L1; the EVM alias never holds
-      // native XTZ (AliasForwarder re-routes it back). EVM-native accounts:
-      // native XTZ on L2 via eth_getBalance.
       const xtzFetch = state.kind === 'tezos'
         ? fetchL1XtzBalance(xtzAddress).then(mutezToXtz)
         : fetchXtzBalance(xtzAddress).then(weiToXtz);
@@ -103,11 +98,20 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
 
   const sortedAccounts = state.accounts.slice().sort((a, b) => a.createdAt - b.createdAt);
   const switchable     = sortedAccounts.length >= 2;
-  const activeIdx      = sortedAccounts.findIndex(a => a.id === state.accountId);
+  const activeIdx      = sortedAccounts.findIndex((a) => a.id === state.accountId);
   const activeSummary  = activeIdx >= 0 ? sortedAccounts[activeIdx] : undefined;
   const activeLabel    = activeSummary?.label?.trim()
     || (activeSummary != null ? `Account ${activeIdx + 1}` : 'Account');
-  const activeSeed     = activeSummary?.primaryAddress ?? '';
+
+  const xtzNum     = bal ? parseFloat(bal.xtz)  || 0 : 0;
+  const usdcNum    = bal ? parseFloat(bal.usdc) || 0 : 0;
+  const fmtBalance = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+  const fmtUsdc    = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const isEvm      = state.kind === 'evm';
+  const xtzChain: 'l1' | 'l2' = isEvm ? 'l2' : 'l1';
+
+  const xtzVisible  = assetFilter === 'all' || assetFilter === xtzChain;
+  const usdcVisible = assetFilter === 'all' || assetFilter === 'l2';
 
   const setActive = async (id: AccountId) => {
     setSwitcherOpen(false);
@@ -131,21 +135,6 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
     await sendPopupRequest({ type: 'REMOVE_ACCOUNT', accountId: removeTarget.id, password });
     onChanged();
   };
-
-  const vm        = accountCardVM(state);
-  const xtzNum    = bal ? parseFloat(bal.xtz)  || 0 : 0;
-  const usdcNum   = bal ? parseFloat(bal.usdc) || 0 : 0;
-  const fmt2      = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const isEvm     = state.kind === 'evm';
-  const xtzChain: 'l1' | 'l2' = isEvm ? 'l2' : 'l1';
-
-  const cycleFilter = () => {
-    setAssetFilter((f) => f === 'all' ? 'l1' : f === 'l1' ? 'l2' : 'all');
-  };
-  const filterLabel =
-    assetFilter === 'l1' ? 'Michelson runtime' :
-    assetFilter === 'l2' ? 'EVM runtime' :
-    'All interfaces';
 
   return (
     <div className="tx-page">
@@ -188,21 +177,14 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
       />
 
       <div className="tx-page-scroll">
-        <div style={{ padding: '12px 16px 0', position: 'relative' }}>
-          {switchable && (
-            <button
-              type="button"
-              className="tx-account-switcher-trigger"
-              onClick={() => setSwitcherOpen((o) => !o)}
-              aria-haspopup="true"
-              aria-expanded={switcherOpen}
-            >
-              <Identicon seed={activeSeed} />
-              <span className="label">{activeLabel}</span>
-              <Icon name="chevron-down" size={13} color="var(--tx-fg-subtle)" />
-            </button>
-          )}
-          <AccountCard variant="vm" vm={vm} />
+        <div style={{ position: 'relative' }}>
+          <AccountHeader
+            state={state}
+            displayLabel={activeLabel}
+            onSwitcherOpen={switchable ? () => setSwitcherOpen(true) : undefined}
+            onAddAccount={!switchable ? () => navigate('/accounts/add') : undefined}
+          />
+
           {switcherOpen && (
             <AccountSwitcher
               state={state}
@@ -216,91 +198,128 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
                 setRemoveTarget(sortedAccounts.find((a) => a.id === id) ?? null);
                 setSwitcherOpen(false);
               }}
+              onAdd={() => {
+                setSwitcherOpen(false);
+                navigate('/accounts/add');
+              }}
             />
           )}
         </div>
 
-        <div style={{ padding: '20px 16px 12px', textAlign: 'center' }}>
-          <div className="tx-kicker" style={{ marginBottom: 8 }}>Total XTZ</div>
-          <div
-            style={{
-              fontSize: 40,
-              fontWeight: 500,
-              letterSpacing: '-0.03em',
-              lineHeight: 1.05,
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            <span>{bal ? fmt2(xtzNum) : '—'}</span>
-            <span style={{ color: 'var(--tx-fg-muted)', fontWeight: 400, marginLeft: 6 }}>XTZ</span>
+        <div className="tx-home-balance">
+          <div className="kicker">Balance</div>
+          <div className="num">
+            <span>{balanceHidden ? '••••••' : (bal ? fmtBalance(xtzNum) : '—')}</span>
+            <span className="unit">XTZ</span>
           </div>
+          <button
+            type="button"
+            className="hide-toggle"
+            onClick={() => setBalanceHidden((h) => !h)}
+            aria-label={balanceHidden ? 'Show balance' : 'Hide balance'}
+          >
+            <Icon name={balanceHidden ? 'eye-off' : 'eye'} size={11} />
+            {balanceHidden ? 'Show' : 'Hide'}
+          </button>
         </div>
 
-        <div style={{ padding: '4px 16px 16px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-          <Button variant="outline" onClick={() => navigate('/send')} leftIcon={<Icon name="send" size={16} />}>
+        <div className="tx-home-actions">
+          <button type="button" onClick={() => navigate('/send')}>
+            <span className="ico"><Icon name="arrow-up-right" size={14} /></span>
             Send
-          </Button>
-          <Button variant="outline" onClick={() => navigate('/receive')} leftIcon={<Icon name="arrow-down-left" size={16} />}>
+          </button>
+          <button type="button" onClick={() => navigate('/receive')}>
+            <span className="ico"><Icon name="arrow-down-left" size={14} /></span>
             Receive
-          </Button>
-          <Button
-            variant="outline"
-            leftIcon={<Icon name="plus" size={16} />}
-            onClick={() => {
-              window.open(FAUCET_URL, '_blank');
-              toast('Opening faucet');
-            }}
-          >
-            Faucet
-          </Button>
+          </button>
         </div>
 
-        <div className="tx-section-head">
-          <span className="t">Assets</span>
-          <span className="a" onClick={cycleFilter} role="button" title="Filter by runtime — click to cycle">
-            {filterLabel}
-          </span>
-        </div>
-        <div style={{ padding: '0 8px' }}>
-          {(assetFilter === 'all' || assetFilter === xtzChain) && (
-            <div className="tx-row">
-              <AssetMark asset="xtz" />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="tx-row-primary">Tezos</div>
-                <div className="tx-row-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <ChainPill chain={xtzChain} /> <span className="tx-subtle">XTZ</span>
-                </div>
-              </div>
-              <div className="tx-row-right">
-                <div className="amt">{bal ? fmt2(xtzNum) : '—'}</div>
-              </div>
-            </div>
-          )}
-          {(assetFilter === 'all' || assetFilter === 'l2') && (
-            <div className="tx-row">
-              <AssetMark asset="usdc" />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="tx-row-primary">USD Coin</div>
-                <div className="tx-row-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <ChainPill chain="l2" /> <span className="tx-subtle">USDC</span>
-                </div>
-              </div>
-              <div className="tx-row-right">
-                <div className="amt">{bal ? fmt2(usdcNum) : '—'}</div>
-              </div>
-            </div>
-          )}
-        </div>
+        <button
+          type="button"
+          className="tx-home-faucet"
+          onClick={() => window.open(FAUCET_URL, '_blank', 'noopener,noreferrer')}
+        >
+          <span className="ico"><Icon name="info" size={11} /></span>
+          Need test XTZ? Faucet
+          <Icon name="external-link" size={10} />
+        </button>
 
-        <div className="tx-section-head">
-          <span className="t">Recent activity</span>
-          <span className="a" onClick={() => navigate('/activity')}>See all</span>
-        </div>
-        <div style={{ padding: '12px 16px 24px', textAlign: 'center' }}>
-          <div style={{ fontSize: 12, color: 'var(--tx-fg-muted)' }}>
-            {loading ? 'Loading…' : 'No activity yet.'}
+        <div className="tx-home-assets-head">
+          <span className="kicker">Assets</span>
+          <div className="tx-home-assets-seg" role="tablist" aria-label="Asset filter">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={assetFilter === 'all'}
+              className={assetFilter === 'all' ? 'on' : ''}
+              onClick={() => setAssetFilter('all')}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={assetFilter === 'l1'}
+              className={assetFilter === 'l1' ? 'on' : ''}
+              onClick={() => setAssetFilter('l1')}
+            >
+              <span className="sw l1" aria-hidden />L1
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={assetFilter === 'l2'}
+              className={assetFilter === 'l2' ? 'on' : ''}
+              onClick={() => setAssetFilter('l2')}
+            >
+              <span className="sw l2" aria-hidden />L2
+            </button>
           </div>
         </div>
+
+        {xtzVisible && (
+          <div className="tx-home-asset-row">
+            <div className="glyph-wrap">
+              <AssetMark asset="xtz" />
+              <span className="runtime-pip" aria-hidden>
+                <span className={`core ${xtzChain}`} />
+              </span>
+            </div>
+            <div className="body">
+              <div className="nm">XTZ</div>
+              <div className="runtime">{isEvm ? 'EVM runtime' : 'Michelson runtime'}</div>
+            </div>
+            <div className="amt">
+              <div className="v">{balanceHidden ? '••••' : (bal ? fmtBalance(xtzNum) : '—')}</div>
+            </div>
+          </div>
+        )}
+
+        {usdcVisible && (
+          <div className="tx-home-asset-row">
+            <div className="glyph-wrap">
+              <AssetMark asset="usdc" />
+              <span className="runtime-pip" aria-hidden>
+                <span className="core l2" />
+              </span>
+            </div>
+            <div className="body">
+              <div className="nm">USDC</div>
+              <div className="runtime">EVM runtime</div>
+            </div>
+            <div className="amt">
+              <div className="v">{balanceHidden ? '••••' : (bal ? fmtUsdc(usdcNum) : '—')}</div>
+            </div>
+          </div>
+        )}
+
+        {!loading && !xtzVisible && !usdcVisible && (
+          <div style={{ padding: 32, textAlign: 'center', color: 'var(--tx-fg-muted)', fontSize: 12 }}>
+            No assets on this runtime.
+          </div>
+        )}
+
+        <div style={{ height: 24 }} />
       </div>
 
       <BottomTabs />

@@ -1,5 +1,8 @@
-export const COUNTER_ADDRESS = '0x3af54710DC3bdc73922F3435876396372DDC18Fc';
-export const TEZLINK_EVM_RPC = 'https://demo.txpark.nomadic-labs.com/rpc';
+import { TEZLINK_EVM_RPC } from './network';
+
+export { TEZLINK_EVM_RPC };
+
+export const COUNTER_ADDRESS = '0xf07D1d13d2B88348A5b77FD1A691209BA34093fC';
 
 export const SELECTORS = {
   increment: '0xd09de08a',
@@ -23,9 +26,9 @@ export async function readCounter(): Promise<bigint> {
       params: [{ to: COUNTER_ADDRESS, data: SELECTORS.retrieve }, 'latest'],
     }),
   });
-  const json = await res.json() as { result: string };
+  const json = await res.json() as { result?: string; error?: { message: string } };
+  if (json.error) throw new Error(json.error.message);
   const raw = json.result;
-  // '0x' or '0x0' means zero (or contract not deployed)
   if (!raw || raw === '0x') return BigInt(0);
   return BigInt(raw);
 }

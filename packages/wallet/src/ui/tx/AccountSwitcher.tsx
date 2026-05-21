@@ -1,29 +1,22 @@
 /**
- * AccountSwitcher: popover anchored under the AccountCard. Lists every account
- * (active on top, rest by createdAt ASC); tap a row to switch; pencil → rename;
- * trash → remove (last-account guard surfaces a tooltip). The "Add account"
- * footer is gated behind MA3B_LIVE until MA3b ships the /accounts/add route.
+ * AccountSwitcher: popover anchored under the AccountCard. Active row hoisted
+ * to the top, others sorted by createdAt ASC; tap a row to switch, settings →
+ * rename, ✕ → remove (last-account guard disables the button). "Add account"
+ * footer renders when an `onAdd` handler is provided (i.e. in switch mode from
+ * Home — not in pick mode used by Settings → Reveal Secret).
  */
 
 import { useEffect, useRef } from 'react';
 import type { VaultStateUnlocked } from '../../shared/messages';
 import type { AccountId } from '../../domain/account';
-import { Identicon } from './Identicon';
 import { Icon } from './Icon';
-import { accountSwitcherVM, type AccountRowVM } from '../view-models/account-switcher-vm';
-
-const MA3B_LIVE = false;
+import { AccountSwitcherRow } from './AccountSwitcherRow';
+import { accountSwitcherVM } from '../view-models/account-switcher-vm';
 
 export type SwitcherMode = 'switch' | 'pick';
 
 export function AccountSwitcher({
-  state,
-  mode = 'switch',
-  onClose,
-  onSetActive,
-  onRename,
-  onRemove,
-  onAdd,
+  state, mode = 'switch', onClose, onSetActive, onRename, onRemove, onAdd,
 }: {
   state:        VaultStateUnlocked;
   mode?:        SwitcherMode;
@@ -56,9 +49,16 @@ export function AccountSwitcher({
 
   return (
     <div className="tx-account-switcher" ref={wrapRef} role="dialog" aria-label="Accounts">
-      <Row vm={vm.active} onSetActive={onSetActive} onRename={onRename} onRemove={onRemove} isLast={total === 1} showActions={showActions} />
+      <AccountSwitcherRow
+        vm={vm.active}
+        onSetActive={onSetActive}
+        onRename={onRename}
+        onRemove={onRemove}
+        isLast={total === 1}
+        showActions={showActions}
+      />
       {vm.others.map((row) => (
-        <Row
+        <AccountSwitcherRow
           key={row.id}
           vm={row}
           onSetActive={onSetActive}
@@ -69,75 +69,11 @@ export function AccountSwitcher({
         />
       ))}
 
-      {showActions && MA3B_LIVE && (
+      {showActions && onAdd != null && (
         <button className="tx-account-switcher-foot" onClick={onAdd} type="button">
           <Icon name="plus" size={14} />
           <span>Add account</span>
         </button>
-      )}
-    </div>
-  );
-}
-
-function Row({
-  vm, onSetActive, onRename, onRemove, isLast, showActions,
-}: {
-  vm:          AccountRowVM;
-  onSetActive: (accountId: AccountId) => void;
-  onRename?:   (accountId: AccountId) => void;
-  onRemove?:   (accountId: AccountId) => void;
-  isLast:      boolean;
-  showActions: boolean;
-}) {
-  return (
-    <div
-      className={`tx-account-switcher-row${vm.isActive ? ' active' : ''}`}
-      role="button"
-      tabIndex={0}
-      onClick={() => onSetActive(vm.id)}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSetActive(vm.id); }}
-    >
-      <div className={`ident ${vm.kindLabel === 'Michelson' ? 'l1' : 'l2'}`}>
-        <Identicon seed={vm.identitySeed} />
-      </div>
-
-      <div className="body">
-        <div className="label">
-          <span className="t">{vm.displayLabel}</span>
-          {vm.isActive && <span className="active-dot" aria-label="Active" />}
-        </div>
-        <div className="meta">
-          <span className="kind">{vm.kindLabel}</span>
-          <span className="sep">·</span>
-          <span className="addr">{vm.primaryAddress}</span>
-        </div>
-      </div>
-
-      {showActions && (
-        <div className="actions" onClick={(e) => e.stopPropagation()}>
-          {onRename && (
-            <button
-              className="tx-account-switcher-action"
-              type="button"
-              aria-label={`Rename ${vm.displayLabel}`}
-              onClick={() => onRename(vm.id)}
-            >
-              <Icon name="settings" size={13} />
-            </button>
-          )}
-          {onRemove && (
-            <button
-              className="tx-account-switcher-action danger"
-              type="button"
-              aria-label={`Remove ${vm.displayLabel}`}
-              disabled={isLast}
-              title={isLast ? 'Cannot remove the last account' : undefined}
-              onClick={() => { if (!isLast) onRemove(vm.id); }}
-            >
-              <Icon name="x" size={13} />
-            </button>
-          )}
-        </div>
       )}
     </div>
   );

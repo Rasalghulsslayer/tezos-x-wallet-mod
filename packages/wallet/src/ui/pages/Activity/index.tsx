@@ -1,13 +1,8 @@
 /**
- * Activity page: paginated, filterable feed of merged TzKT (L1) + Blockscout
- * (EVM) ops with cross-runtime dedup performed in the listActivity use case.
- *
- * The page is presentation/orchestration only — all merging/dedup/cursoring
- * lives in the use case; the page composes `ActivityRow` and friends, manages
- * filter state, holds a "pending buffer" for items found by the auto-refresh
- * poll (promoted to visible state only when the user clicks the "N new" pill),
- * and handles the load-more cursor. No fetch, no chrome.* — everything goes
- * through `sendPopupRequest` / `startPoller` from `shared/`.
+ * Activity page — orchestrator. Holds the rendered items + cursor + pending
+ * buffer + filter state; auto-refresh poll buffers new items behind a pill
+ * for the user to merge in. The list rendering and day-grouping live in
+ * ActivityList; pure helpers in helpers.ts.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -18,19 +13,15 @@ import { ACTIVITY_AUTO_REFRESH_MS, ACTIVITY_PAGE_SIZE } from '@/shared/constants
 import { sendPopupRequest } from '@/shared/messaging';
 import { startPoller } from '@/shared/poller';
 import { formatError } from '@/domain/error';
-import { activityRowVM } from '../view-models/activity-vm';
-import { TopBar } from '../tx/TopBar';
-import { BottomTabs } from '../tx/BottomTabs';
-import { ActivityRow } from '../tx/ActivityRow';
-import { ActivityFilters, type DirectionFilter, type RuntimeFilter } from '../tx/ActivityFilters';
-import { ActivityNewPill } from '../tx/ActivityNewPill';
-import { ActivityStaleBand } from '../tx/ActivityStaleBand';
-import { IconBtn } from '../tx/Button';
-import { Icon } from '../tx/Icon';
-import { errorToast } from '../tx/Toast';
-
-type DayGroup = 'Today' | 'Yesterday' | 'Earlier';
-const DAY_ORDER: readonly DayGroup[] = ['Today', 'Yesterday', 'Earlier'];
+import { TopBar } from '../../tx/TopBar';
+import { BottomTabs } from '../../tx/BottomTabs';
+import { ActivityFilters, type DirectionFilter, type RuntimeFilter } from '../../tx/ActivityFilters';
+import { ActivityNewPill } from '../../tx/ActivityNewPill';
+import { ActivityStaleBand } from '../../tx/ActivityStaleBand';
+import { IconBtn } from '../../tx/Button';
+import { Icon } from '../../tx/Icon';
+import { errorToast } from '../../tx/Toast';
+import { ActivityList } from './ActivityList';
 
 function buildFilter(direction: DirectionFilter, runtime: RuntimeFilter): ActivityFilter | undefined {
   const f: ActivityFilter = {};
@@ -60,7 +51,6 @@ export function Activity({ state }: { state: VaultState }) {
   const renderedIdsRef = useRef(renderedIds);
   renderedIdsRef.current = renderedIds;
 
-  // Initial fetch + refetch when the filter changes.
   useEffect(() => {
     if (state.status !== 'unlocked') return;
     let cancelled = false;
@@ -85,7 +75,6 @@ export function Activity({ state }: { state: VaultState }) {
     return () => { cancelled = true; };
   }, [state.status, filter]);
 
-  // Auto-refresh: new items go to the pending buffer; pill promotes them.
   useEffect(() => {
     if (state.status !== 'unlocked') return;
     const handle = startPoller<ActivityPage>({
@@ -219,69 +208,4 @@ export function Activity({ state }: { state: VaultState }) {
       <BottomTabs />
     </div>
   );
-}
-
-function ActivityList({
-  items, cursor, loadingMore, onLoadMore,
-}: {
-  items:       ActivityItem[];
-  cursor:      string | undefined;
-  loadingMore: boolean;
-  onLoadMore:  () => void;
-}) {
-  const nowMs   = Date.now();
-  const grouped = useMemo(() => groupByDay(items, nowMs), [items, nowMs]);
-
-  return (
-    <div style={{ padding: '0 8px 8px' }}>
-      {DAY_ORDER.map((group) => {
-        const groupItems = grouped[group];
-        if (groupItems.length === 0) return null;
-        return (
-          <div key={group}>
-            <div className="tx-activity-group-head">{group}</div>
-            {groupItems.map((item) => {
-              const vm = activityRowVM(item, nowMs);
-              return (
-                <ActivityRow
-                  key={vm.id}
-                  vm={vm}
-                  onPrimaryClick={() => { if (vm.primaryUrl !== '') window.open(vm.primaryUrl, '_blank', 'noopener,noreferrer'); }}
-                  onSecondaryClick={vm.secondaryUrl != null
-                    ? () => window.open(vm.secondaryUrl, '_blank', 'noopener,noreferrer')
-                    : undefined}
-                />
-              );
-            })}
-          </div>
-        );
-      })}
-      {cursor != null ? (
-        <div
-          className={`tx-activity-foot${loadingMore ? '' : ' tappable'}`}
-          onClick={loadingMore ? undefined : onLoadMore}
-          role={loadingMore ? undefined : 'button'}
-          tabIndex={loadingMore ? undefined : 0}
-          onKeyDown={(e) => { if (!loadingMore && e.key === 'Enter') onLoadMore(); }}
-        >
-          {loadingMore && <span className="spin" aria-hidden />}
-          <span>{loadingMore ? 'Loading more…' : 'Show older activity'}</span>
-        </div>
-      ) : items.length > 0 && (
-        <div className="tx-activity-foot end">— end —</div>
-      )}
-    </div>
-  );
-}
-
-function groupByDay(items: ActivityItem[], nowMs: number): Record<DayGroup, ActivityItem[]> {
-  const startOfToday = new Date(nowMs).setHours(0, 0, 0, 0);
-  const dayMs        = 24 * 60 * 60 * 1000;
-  const out: Record<DayGroup, ActivityItem[]> = { Today: [], Yesterday: [], Earlier: [] };
-  for (const item of items) {
-    if      (item.timestamp >= startOfToday)         out.Today.push(item);
-    else if (item.timestamp >= startOfToday - dayMs) out.Yesterday.push(item);
-    else                                             out.Earlier.push(item);
-  }
-  return out;
 }

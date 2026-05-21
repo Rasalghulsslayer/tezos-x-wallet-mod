@@ -1,5 +1,4 @@
 import { Toaster } from 'sonner';
-import Script from 'next/script';
 import type { Metadata } from 'next';
 import './globals.css';
 
@@ -20,7 +19,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
-        <Script src="http://localhost:8080/dist/relayer.iife.js" strategy="beforeInteractive" />
         {children}
         <Toaster theme="dark" position="bottom-right" richColors />
       </body>

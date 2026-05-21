@@ -27,6 +27,24 @@ let cachedConstants: { value: FeeConstants; at: number } | null = null;
 /** Bytes added to `est.opSize` to cover the 64-byte signature + zarith shift. */
 const OP_SIZE_MARGIN_BYTES = 96;
 
+/**
+ * Beacon-style ceilings for NAC `call_evm` operations. Tezlink's run_operation
+ * rejects simulation with `tezlink_error` when default gas budgets are too low
+ * for the EVM sub-call. Submitting directly with these ceilings (matching the
+ * Beacon path) lets the kernel allocate what it needs.
+ */
+const CALL_EVM_GAS_LIMIT     = 1_040_000;
+const CALL_EVM_STORAGE_LIMIT = 60_000;
+const CALL_EVM_FEE_MUTEZ     = 100_000;
+
+function isTezlinkSimError(err: unknown): boolean {
+  const e = err as { message?: string; errors?: unknown };
+  const msg = e.message ?? '';
+  if (msg.includes('tezlink_error')) return true;
+  const errs = JSON.stringify(e.errors ?? '');
+  return errs.includes('tezlink_error');
+}
+
 async function getFeeConstants(): Promise<FeeConstants> {
   const now = Date.now();
   if (cachedConstants && now - cachedConstants.at < CONSTANTS_TTL_MS) {
@@ -121,24 +139,50 @@ export class TezosSigner implements TezosSignerPort {
     }
   }
 
+  private async submitWithFixedCeilings(params: TransferParams): Promise<string> {
+    const op = await this.toolkit.contract.transfer({
+      ...params,
+      fee:          CALL_EVM_FEE_MUTEZ,
+      gasLimit:     CALL_EVM_GAS_LIMIT,
+      storageLimit: CALL_EVM_STORAGE_LIMIT,
+    });
+    return op.hash;
+  }
+
   async sendContractCall(
     entrypoint:   string,
     michelineArg: MichelsonV1Expression,
     mutezAmount = '0',
   ): Promise<string> {
+    const params: TransferParams = {
+      to:        NAC_CONTRACT,
+      amount:    Number(mutezAmount),
+      mutez:     true,
+      parameter: { entrypoint, value: michelineArg },
+    };
+
     try {
-      const hash = await this.transferWithKernelAwareFees({
-        to:        NAC_CONTRACT,
-        amount:    Number(mutezAmount),
-        mutez:     true,
-        parameter: { entrypoint, value: michelineArg },
-      });
+      const hash = await this.transferWithKernelAwareFees(params);
       console.info('[TezosX Wallet] L1 opHash:', hash);
       return hash;
     } catch (err) {
       const e = err as { errors?: unknown[]; message?: string; name?: string };
-      console.error('[TezosX Wallet] Taquito transfer failed',
+      console.error('[TezosX Wallet] Taquito estimate failed',
         { name: e.name, message: e.message, errors: e.errors, raw: err });
+
+      if (entrypoint === 'call_evm' && isTezlinkSimError(err)) {
+        console.warn('[TezosX Wallet] retrying call_evm with fixed ceilings (Beacon-style fallback)');
+        try {
+          const hash = await this.submitWithFixedCeilings(params);
+          console.info('[TezosX Wallet] L1 opHash (fallback):', hash);
+          return hash;
+        } catch (retryErr) {
+          const r = retryErr as { errors?: unknown[]; message?: string; name?: string };
+          console.error('[TezosX Wallet] fallback submit failed',
+            { name: r.name, message: r.message, errors: r.errors, raw: retryErr });
+          throw retryErr;
+        }
+      }
       throw err;
     }
   }

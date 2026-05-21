@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AccountId } from '../../domain/account';
 import { MAX_LABEL_LENGTH } from '../../shared/constants';
+import { ModalBackdrop } from './ModalBackdrop';
 
 export function RenameModal({
   accountId,
@@ -13,10 +14,10 @@ export function RenameModal({
   onClose:      () => void;
   onSaved:      (label: string) => Promise<void>;
 }) {
-  const [label,   setLabel]   = useState(initialLabel);
-  const [saving,  setSaving]  = useState(false);
-  const [error,   setError]   = useState<string | null>(null);
-  const inputRef              = useRef<HTMLInputElement>(null);
+  const [label,  setLabel]  = useState(initialLabel);
+  const [saving, setSaving] = useState(false);
+  const [error,  setError]  = useState<string | null>(null);
+  const inputRef            = useRef<HTMLInputElement>(null);
 
   useEffect(() => { inputRef.current?.focus(); inputRef.current?.select(); }, []);
 
@@ -36,7 +37,7 @@ export function RenameModal({
   };
 
   return (
-    <Backdrop onDismiss={onClose}>
+    <ModalBackdrop onDismiss={onClose}>
       <div className="tx-modal" role="dialog" aria-label="Rename account">
         <div className="tx-modal-title">Rename account</div>
         <input
@@ -59,19 +60,6 @@ export function RenameModal({
         </div>
         <input type="hidden" value={accountId} />
       </div>
-    </Backdrop>
-  );
-}
-
-function Backdrop({ children, onDismiss }: { children: React.ReactNode; onDismiss: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onDismiss(); } };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onDismiss]);
-  return (
-    <div className="tx-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onDismiss(); }}>
-      {children}
-    </div>
+    </ModalBackdrop>
   );
 }

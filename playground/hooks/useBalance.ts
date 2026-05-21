@@ -1,30 +1,55 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { TZKT_API_BASE } from '@/lib/network';
 
-export function useBalance(evmAlias: string | null): bigint | null {
+const REFRESH_MS = 8000;
+const MUTEZ_TO_WEI_FACTOR = 1_000_000_000_000n;
+
+async function fetchTz1Balance(tz1: string): Promise<bigint | null> {
+  try {
+    const res = await fetch(`${TZKT_API_BASE}/v1/accounts/${tz1}/balance`);
+    if (!res.ok) return null;
+    const mutez = await res.json() as number;
+    return BigInt(Math.floor(mutez)) * MUTEZ_TO_WEI_FACTOR;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchEvmBalance(address: string): Promise<bigint | null> {
+  if (typeof window === 'undefined' || !window.ethereum) return null;
+  try {
+    const hex = await window.ethereum.request({
+      method: 'eth_getBalance',
+      params: [address, 'latest'],
+    }) as string;
+    return BigInt(hex);
+  } catch {
+    return null;
+  }
+}
+
+export function useBalance(tz1Address: string | null, evmAddress: string | null): bigint | null {
   const [balance, setBalance] = useState<bigint | null>(null);
 
   useEffect(() => {
-    if (!evmAlias || !window.ethereum) {
-      setBalance(null);
-      return;
-    }
+    if (!tz1Address && !evmAddress) { setBalance(null); return; }
 
-    const fetchBalance = async () => {
-      try {
-        const hex = await window.ethereum!.request({
-          method: 'eth_getBalance',
-          params: [evmAlias, 'latest'],
-        }) as string;
-        setBalance(BigInt(hex));
-      } catch {}
+    let cancelled = false;
+    const fetchOnce = async () => {
+      const next = tz1Address != null
+        ? await fetchTz1Balance(tz1Address)
+        : evmAddress != null
+          ? await fetchEvmBalance(evmAddress)
+          : null;
+      if (!cancelled) setBalance(next);
     };
 
-    fetchBalance();
-    const id = setInterval(fetchBalance, 5000);
-    return () => clearInterval(id);
-  }, [evmAlias]);
+    void fetchOnce();
+    const id = setInterval(() => void fetchOnce(), REFRESH_MS);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [tz1Address, evmAddress]);
 
   return balance;
 }

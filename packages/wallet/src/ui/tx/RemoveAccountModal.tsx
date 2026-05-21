@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AccountSummary } from '../../shared/messages';
 import { shortAddr } from '../../shared/format';
+import { ModalBackdrop } from './ModalBackdrop';
 
 export function RemoveAccountModal({
   account,
@@ -38,7 +39,7 @@ export function RemoveAccountModal({
     : shortAddr(account.primaryAddress);
 
   return (
-    <Backdrop onDismiss={onClose}>
+    <ModalBackdrop onDismiss={onClose}>
       <div className="tx-modal" role="dialog" aria-label="Remove account">
         <div className="tx-modal-title">Remove “{displayName}”?</div>
         <div className="tx-modal-detail">
@@ -71,19 +72,6 @@ export function RemoveAccountModal({
           </button>
         </div>
       </div>
-    </Backdrop>
-  );
-}
-
-function Backdrop({ children, onDismiss }: { children: React.ReactNode; onDismiss: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onDismiss(); } };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onDismiss]);
-  return (
-    <div className="tx-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onDismiss(); }}>
-      {children}
-    </div>
+    </ModalBackdrop>
   );
 }
