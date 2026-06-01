@@ -192,7 +192,7 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
 
   private async handleNetVersion(): Promise<string> {
     const chainId = await this.handleChainId();
-    return String(parseInt(chainId, 16));
+    return BigInt(chainId).toString();
   }
 
   private async handleCall(args: RequestArguments): Promise<string> {

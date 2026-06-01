@@ -49,7 +49,7 @@ export class EvmProvider extends EventEmitter implements EIP1193Provider {
 
       case 'net_version': {
         const chainId = await this.request({ method: 'eth_chainId' }) as string;
-        return String(parseInt(chainId, 16));
+        return BigInt(chainId).toString();
       }
 
       case 'eth_sendTransaction':
