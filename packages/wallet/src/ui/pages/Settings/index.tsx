@@ -97,6 +97,7 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
         <div className="tx-section-head"><span className="t">Wallet</span></div>
         <LinkRow icon="link" t="Connected sites" onClick={() => navigate('/connections')} />
         <LinkRow icon="plus" t="Add account" sub="Create or import another account" onClick={() => navigate('/accounts/add')} />
+        <LinkRow icon="wallet" t="Manage tokens" sub="Add or remove custom ERC-20" onClick={() => navigate('/tokens')} />
 
         {isEvm ? (
           <LinkRow

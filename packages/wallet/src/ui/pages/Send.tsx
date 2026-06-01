@@ -18,7 +18,8 @@ import { signingSourceAddress } from '../view-models/account-card-vm';
 import { Button } from '../tx/Button';
 import { Icon } from '../tx/Icon';
 import { TopBar } from '../tx/TopBar';
-import { AssetMark } from '../tx/AssetMark';
+import { AssetSelector, type AssetOption } from '../tx/AssetSelector';
+import { XTZ_L1_ASSET, XTZ_L2_ASSET, USDC_ASSET } from '@/domain/asset';
 import { ChainPill } from '../tx/ChainPill';
 import { Line } from '../tx/Line';
 import { RoutingCard } from '../tx/RoutingCard';
@@ -387,46 +388,27 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
       <TopBar title="Send" onBack={back} />
       <div className="tx-page-scroll" style={{ padding: '4px 16px 16px' }}>
         <div className="tx-kicker" style={{ padding: '8px 0' }}>Asset</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 18 }}>
-          <button
-            className={`tx-btn ${asset === 'XTZ' ? 'outline' : 'ghost'}`}
-            onClick={() => setAsset('XTZ')}
-            style={{
-              height: 56,
-              justifyContent: 'flex-start',
-              padding: '0 12px',
-              boxShadow: asset === 'XTZ' ? 'inset 0 0 0 1px var(--tx-purple)' : undefined,
-            }}
-          >
-            <AssetMark asset="xtz" size="sm" />
-            <div style={{ textAlign: 'left', marginLeft: 4 }}>
-              <div style={{ fontSize: 13 }}>XTZ</div>
-              <div style={{ fontSize: 11, color: 'var(--tx-fg-muted)', fontWeight: 400 }}>Native asset</div>
-            </div>
-          </button>
-          <button
-            className={`tx-btn ${asset === 'USDC' ? 'outline' : 'ghost'}`}
-            disabled={isEvmSource}
-            onClick={() => !isEvmSource && setAsset('USDC')}
-            style={{
-              height: 56,
-              justifyContent: 'flex-start',
-              padding: '0 12px',
-              opacity: isEvmSource ? 0.5 : 1,
-              cursor: isEvmSource ? 'not-allowed' : 'pointer',
-              boxShadow: asset === 'USDC' ? 'inset 0 0 0 1px var(--tx-cyan)' : undefined,
-            }}
-            title={isEvmSource ? 'USDC sends from EVM accounts are coming in a follow-up release.' : undefined}
-          >
-            <AssetMark asset="usdc" size="sm" />
-            <div style={{ textAlign: 'left', marginLeft: 4 }}>
-              <div style={{ fontSize: 13 }}>USDC</div>
-              <div style={{ fontSize: 11, color: 'var(--tx-fg-muted)', fontWeight: 400 }}>
-                {isEvmSource ? 'Soon · EVM-source' : 'ERC-20 · EVM runtime'}
-              </div>
-            </div>
-          </button>
-        </div>
+        {(() => {
+          const xtzAsset = state.kind === 'tezos' ? XTZ_L1_ASSET : XTZ_L2_ASSET;
+          const options: AssetOption[] = [
+            { asset: xtzAsset, subLabel: 'Native asset' },
+            {
+              asset:    USDC_ASSET,
+              subLabel: isEvmSource ? 'Soon · EVM-source' : 'ERC-20 · EVM runtime',
+              disabled: isEvmSource,
+              title:    isEvmSource ? 'USDC sends from EVM accounts are coming in a follow-up release.' : undefined,
+            },
+          ];
+          const selected = asset === 'XTZ' ? xtzAsset : USDC_ASSET;
+          return (
+            <AssetSelector
+              options={options}
+              selected={selected}
+              onSelect={(a) => setAsset(a.kind === 'xtz' ? 'XTZ' : 'USDC')}
+              onAddToken={() => navigate('/tokens/add')}
+            />
+          );
+        })()}
 
         <div className="tx-kicker" style={{ padding: '0 0 8px' }}>Recipient</div>
         <input

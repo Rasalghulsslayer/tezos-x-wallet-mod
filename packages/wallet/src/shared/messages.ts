@@ -88,7 +88,10 @@ export type PopupRequest =
   | { type: 'REMOVE_ACCOUNT';     accountId: AccountId; password: string }
   | { type: 'SET_ACTIVE_ACCOUNT'; accountId: AccountId }
   | { type: 'RENAME_ACCOUNT';     accountId: AccountId; label: string }
-  | { type: 'LIST_ACCOUNTS' };
+  | { type: 'LIST_ACCOUNTS' }
+  | { type: 'ADD_CUSTOM_TOKEN';    address: string; tryAnyway?: boolean }
+  | { type: 'REMOVE_CUSTOM_TOKEN'; address: string }
+  | { type: 'LIST_REGISTERED_TOKENS' };
 
 // ── Approve.html → Service Worker ─────────────────────────────────────────────
 

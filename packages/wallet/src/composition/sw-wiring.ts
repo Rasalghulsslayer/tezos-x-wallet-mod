@@ -39,6 +39,10 @@ import { removeAccount }           from '../use-cases/remove-account';
 import { setActiveAccount }        from '../use-cases/set-active-account';
 import { renameAccount }           from '../use-cases/rename-account';
 import { listAccounts }            from '../use-cases/list-accounts';
+import { addCustomToken }          from '../use-cases/add-custom-token';
+import { removeCustomToken }       from '../use-cases/remove-custom-token';
+import { listRegisteredTokens }    from '../use-cases/list-registered-tokens';
+import { TEZLINK_EVM_RPC }         from '@tezosx/relayer/constants';
 
 export interface SwState {
   container: Container | null;
@@ -246,6 +250,40 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
         }
         const result = await listAccounts({ keyring: deps.keyring });
         return { ok: true, data: result };
+      }
+
+      case 'ADD_CUSTOM_TOKEN': {
+        const unlocked = deps.keyring.getUnlocked();
+        if (unlocked == null) return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+        const token = await addCustomToken(
+          { accountId: unlocked.account.id, address: msg.address, tryAnyway: msg.tryAnyway },
+          { tokenStore: deps.persistentPorts.tokenStore, rpcUrl: TEZLINK_EVM_RPC },
+        );
+        // Rebuild the container so EvmActivityFetcher's tokenList closure
+        // picks up the new token on its next poll.
+        await deps.rebuildContainer();
+        return { ok: true, data: token };
+      }
+
+      case 'REMOVE_CUSTOM_TOKEN': {
+        const unlocked = deps.keyring.getUnlocked();
+        if (unlocked == null) return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+        await removeCustomToken(
+          { accountId: unlocked.account.id, address: msg.address },
+          { tokenStore: deps.persistentPorts.tokenStore },
+        );
+        await deps.rebuildContainer();
+        return { ok: true };
+      }
+
+      case 'LIST_REGISTERED_TOKENS': {
+        const unlocked = deps.keyring.getUnlocked();
+        if (unlocked == null) return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+        const tokens = await listRegisteredTokens(
+          { accountId: unlocked.account.id },
+          { tokenStore: deps.persistentPorts.tokenStore },
+        );
+        return { ok: true, data: tokens };
       }
 
       default:
