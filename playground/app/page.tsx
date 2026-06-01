@@ -13,7 +13,7 @@ import { useBalance } from '@/hooks/useBalance';
 
 export default function Home() {
   const relayer = useRelayer();
-  const balance = useBalance(relayer.evmAlias);
+  const balance = useBalance(relayer.tz1Address, relayer.evmAlias);
   const [transactions, setTransactions] = useState<TxEntry[]>([]);
 
   const addTx = useCallback((label: string, hash: string) => {
@@ -49,6 +49,8 @@ export default function Home() {
             isConnecting={relayer.isConnecting}
             tz1Address={relayer.tz1Address}
             evmAlias={relayer.evmAlias}
+            activeInfo={relayer.activeInfo}
+            providers={relayer.providers}
             onConnect={relayer.connect}
             onDisconnect={relayer.disconnect}
           />

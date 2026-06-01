@@ -1,90 +1,126 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { useEip6963 } from './useEip6963';
 
 interface RelayerState {
-  isConnected: boolean;
-  tz1Address: string | null;
-  evmAlias: string | null;
-  chainId: string | null;
+  isConnected:  boolean;
+  tz1Address:   string | null;
+  evmAlias:     string | null;
+  chainId:      string | null;
   isConnecting: boolean;
+  activeInfo:   Eip6963ProviderInfo | null;
 }
 
 interface TransactionRequest {
-  to: string;
-  data?: string;
+  to:     string;
+  data?:  string;
   value?: string;
 }
 
+const FALLBACK_INFO: Eip6963ProviderInfo = {
+  uuid: 'window-ethereum',
+  name: 'Browser wallet',
+  rdns: 'window.ethereum',
+  icon: '',
+};
+
+function isMethodNotFound(err: unknown): boolean {
+  const e = err as { code?: number; message?: string } | undefined;
+  return e?.code === -32601 || (typeof e?.message === 'string' && /method not found|unsupported/i.test(e.message));
+}
+
 export function useRelayer() {
-  const [state, setState] = useState<RelayerState>({
+  const eip6963Providers = useEip6963();
+
+  const providers = useMemo<Eip6963ProviderDetail[]>(() => {
+    const list = [...eip6963Providers];
+    if (typeof window !== 'undefined' && window.ethereum != null && list.length === 0) {
+      list.push({ info: FALLBACK_INFO, provider: window.ethereum });
+    }
+    return list;
+  }, [eip6963Providers]);
+
+  const [active, setActive] = useState<EIP1193Provider | null>(null);
+  const [state, setState]   = useState<RelayerState>({
     isConnected: false,
-    tz1Address: null,
-    evmAlias: null,
-    chainId: null,
+    tz1Address:  null,
+    evmAlias:    null,
+    chainId:     null,
     isConnecting: false,
+    activeInfo:  null,
   });
 
   useEffect(() => {
-    const fetchChainId = async () => {
-      if (!window.ethereum) return;
-      try {
-        const id = await window.ethereum.request({ method: 'eth_chainId' }) as string;
-        setState(s => ({ ...s, chainId: id }));
-      } catch {}
+    if (active == null) return;
+    const onAccountsChanged = (...args: unknown[]) => {
+      const accs = args[0] as string[];
+      if (!accs || accs.length === 0) {
+        setActive(null);
+        setState({ isConnected: false, tz1Address: null, evmAlias: null, chainId: null, isConnecting: false, activeInfo: null });
+      } else {
+        setState((s) => ({ ...s, evmAlias: accs[0] }));
+      }
     };
+    const onChainChanged = (...args: unknown[]) => {
+      setState((s) => ({ ...s, chainId: args[0] as string }));
+    };
+    active.on('accountsChanged', onAccountsChanged);
+    active.on('chainChanged',    onChainChanged);
+    return () => {
+      active.removeListener('accountsChanged', onAccountsChanged);
+      active.removeListener('chainChanged',    onChainChanged);
+    };
+  }, [active]);
 
-    if (typeof window !== 'undefined' && window.ethereum) {
-      fetchChainId();
-    } else {
-      const onInit = () => fetchChainId();
-      window.addEventListener('ethereum#initialized', onInit);
-      return () => window.removeEventListener('ethereum#initialized', onInit);
-    }
-  }, []);
-
-  const connect = useCallback(async () => {
-    if (!window.ethereum) {
-      toast.error('Relayer not injected — reload the page');
+  const connect = useCallback(async (detail?: Eip6963ProviderDetail) => {
+    const target = detail ?? providers[0];
+    if (target == null) {
+      toast.error('No wallet detected — install Tezos X Wallet or another EIP-1193 wallet');
       return;
     }
-    setState(s => ({ ...s, isConnecting: true }));
+    setState((s) => ({ ...s, isConnecting: true }));
     try {
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' }) as string[];
-      const evmAlias = accounts[0];
+      const accounts = await target.provider.request({ method: 'eth_requestAccounts' }) as string[];
+      const evmAlias = accounts[0] ?? null;
 
-      const tezAccounts = await window.ethereum.request({ method: 'tez_getAccounts' }) as string[];
-      const tz1Address = tezAccounts[0] ?? null;
+      let tz1Address: string | null = null;
+      try {
+        const tezAccounts = await target.provider.request({ method: 'tez_getAccounts' }) as string[];
+        tz1Address = tezAccounts?.[0] ?? null;
+      } catch (e) {
+        if (!isMethodNotFound(e)) throw e;
+      }
 
-      const chainId = await window.ethereum.request({ method: 'eth_chainId' }) as string;
+      const chainId = await target.provider.request({ method: 'eth_chainId' }) as string;
 
-      setState({ isConnected: true, evmAlias, tz1Address, chainId, isConnecting: false });
-      toast.success('Connected to Temple');
+      setActive(target.provider);
+      setState({ isConnected: true, evmAlias, tz1Address, chainId, isConnecting: false, activeInfo: target.info });
+      toast.success(`Connected to ${target.info.name}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Connection failed';
       toast.error(msg);
-      setState(s => ({ ...s, isConnecting: false }));
+      setState((s) => ({ ...s, isConnecting: false }));
     }
-  }, []);
+  }, [providers]);
 
   const disconnect = useCallback(async () => {
-    if (!window.ethereum) return;
-    try {
-      await window.ethereum.request({ method: 'wallet_revokePermissions' });
-    } catch {}
-    setState({ isConnected: false, tz1Address: null, evmAlias: null, chainId: null, isConnecting: false });
+    if (active != null) {
+      try {
+        await active.request({ method: 'wallet_revokePermissions' });
+      } catch {}
+    }
+    setActive(null);
+    setState({ isConnected: false, tz1Address: null, evmAlias: null, chainId: null, isConnecting: false, activeInfo: null });
     toast.info('Disconnected');
-  }, []);
+  }, [active]);
 
   const sendTransaction = useCallback(async (tx: TransactionRequest): Promise<string> => {
-    if (!window.ethereum) throw new Error('Wallet not connected');
-    const hash = await window.ethereum.request({
-      method: 'eth_sendTransaction',
-      params: [tx],
-    }) as string;
+    if (active == null) throw new Error('Wallet not connected');
+    const hash = await active.request({ method: 'eth_sendTransaction', params: [tx] }) as string;
     return hash;
-  }, []);
+  }, [active]);
 
-  return { ...state, connect, disconnect, sendTransaction };
+  return { ...state, providers, connect, disconnect, sendTransaction };
 }

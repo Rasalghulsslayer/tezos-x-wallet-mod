@@ -13,6 +13,7 @@ import { Activity }    from './pages/Activity';
 import { Connections } from './pages/Connections';
 import { Settings }    from './pages/Settings';
 import { Receive }     from './pages/Receive';
+import { AddAccount }  from './pages/AddAccount';
 import { ToastHost }   from './tx/Toast';
 import { ExperimentalBanner } from './tx/ExperimentalBanner';
 import { FatalScreen } from './tx/FatalScreen';
@@ -82,6 +83,7 @@ function Gate() {
       <Route path="/activity"    element={<Activity    state={state} />} />
       <Route path="/connections" element={<Connections state={state}   onChanged={refresh} />} />
       <Route path="/settings"    element={<Settings    state={state}   onLock={refresh} />} />
+      <Route path="/accounts/add" element={<AddAccount  state={state}   onChanged={refresh} />} />
       <Route path="*"            element={<Navigate to="/" replace />} />
     </Routes>
   );

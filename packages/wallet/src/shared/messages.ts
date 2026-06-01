@@ -5,8 +5,9 @@
 
 import type { RequestArguments } from '@tezosx/relayer/types';
 import type { ActivityFilter, ActivityPage } from '../domain/activity';
+import type { AccountSummary, AccountKind, AccountId, AddAccountSource } from '../domain/account';
 
-export type { ActivityFilter, ActivityPage };
+export type { ActivityFilter, ActivityPage, AccountSummary, AddAccountSource };
 
 // ── Vault / session state snapshot ────────────────────────────────────────────
 
@@ -16,13 +17,15 @@ export type VaultStateUnlocked =
       kind:      'tezos';
       accountId: string;
       tz1:       string;
-      evmAlias:  string;        // alias derived from tz1
+      evmAlias:  string;             // alias derived from tz1
+      accounts:  AccountSummary[];   // every account in the vault, sorted by createdAt ASC
     }
   | {
       status:    'unlocked';
       kind:      'evm';
       accountId: string;
       address:   `0x${string}`;
+      accounts:  AccountSummary[];
     };
 
 export type VaultState =
@@ -36,6 +39,7 @@ export interface PendingConnection {
   kind:      'connect';
   requestId: string;
   origin:    string;
+  accountId: AccountId;        // pinned at enqueue time; resolves through this account's container
   createdAt: number;
 }
 
@@ -43,6 +47,7 @@ export interface PendingTransaction {
   kind:         'transaction';
   requestId:    string;
   origin:       string;
+  accountId:    AccountId;
   to:           string;
   value:        string;
   data:         string;
@@ -54,6 +59,7 @@ export interface PendingSignature {
   kind:       'signature';
   requestId:  string;
   origin:     string;
+  accountId:  AccountId;
   message:    string;          // raw hex string sent by the dApp
   decoded?:   string;          // best-effort utf-8 decode for display
   createdAt:  number;
@@ -71,13 +77,18 @@ export type PopupRequest =
   | { type: 'IMPORT_EVM_PRIVKEY'; privateKey: string; password: string }   // EVM
   | { type: 'UNLOCK';        password: string }
   | { type: 'LOCK' }
-  | { type: 'EXPORT_SEED';   password: string }
+  | { type: 'EXPORT_SEED';   password: string; accountId?: AccountId }
   | { type: 'SEND_TX';       to: string; amount: string; asset: 'XTZ' | 'USDC' }
   | { type: 'RESOLVE_TX';    syntheticHash: string }
   | { type: 'LIST_PENDING' }
   | { type: 'LIST_SESSIONS' }
   | { type: 'LIST_ACTIVITY'; cursor?: string; limit?: number; filter?: ActivityFilter }
-  | { type: 'DISCONNECT';    origin: string };
+  | { type: 'DISCONNECT';    origin: string }
+  | { type: 'ADD_ACCOUNT';        kind: AccountKind; source: AddAccountSource; label?: string }
+  | { type: 'REMOVE_ACCOUNT';     accountId: AccountId; password: string }
+  | { type: 'SET_ACTIVE_ACCOUNT'; accountId: AccountId }
+  | { type: 'RENAME_ACCOUNT';     accountId: AccountId; label: string }
+  | { type: 'LIST_ACCOUNTS' };
 
 // ── Approve.html → Service Worker ─────────────────────────────────────────────
 

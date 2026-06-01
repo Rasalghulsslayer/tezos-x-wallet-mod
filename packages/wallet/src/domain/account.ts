@@ -1,6 +1,7 @@
 /**
- * Account discriminated union, AccountId, AccountKind. Account is a union of
- * TezosAccount (tz1 + ed25519 key material) and EvmAccount (0x + secp256k1).
+ * Account discriminated union (TezosAccount | EvmAccount), AccountId, AccountKind.
+ * AccountId is a UUID v4 from 0.9.0; legacy address-as-id values are migrated
+ * to UUIDs on first unlock (see Keyring.unlock).
  */
 
 export type AccountKind = 'tezos' | 'evm';
@@ -13,6 +14,7 @@ export interface TezosAccount {
   label?:    string;
   tz1:       string;
   publicKey: string;
+  createdAt: number;
 }
 
 export interface EvmAccount {
@@ -21,6 +23,22 @@ export interface EvmAccount {
   label?:    string;
   address:   `0x${string}`;
   publicKey: `0x${string}`;
+  createdAt: number;
 }
 
 export type Account = TezosAccount | EvmAccount;
+
+export type AddAccountSource =
+  | { source: 'fresh' }
+  | { source: 'mnemonic'; mnemonic:   string }
+  | { source: 'edsk';     edsk:       string }
+  | { source: 'privkey';  privateKey: string };
+
+export interface AccountSummary {
+  id:                AccountId;
+  kind:              AccountKind;
+  label?:            string;
+  primaryAddress:    string;
+  secondaryAddress?: string;
+  createdAt:         number;
+}

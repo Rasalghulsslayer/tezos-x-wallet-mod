@@ -8,6 +8,8 @@
 import type { Keyring } from '../background/keyring';
 import type { ApprovalQueue } from '../background/approval-queue';
 import type { Container, PersistentPorts } from './container';
+import type { ContainerCache } from './container-cache';
+import { ensureContainerFor } from './container-builder';
 import type {
   ApproveRequest,
   ContentPush,
@@ -16,6 +18,7 @@ import type {
   WalletResponse,
 } from '../shared/messages';
 import type { StoredSession } from '../ports/session-store';
+import { AccountNotFoundError } from '../domain/vault';
 
 import { getState }                from '../use-cases/get-state';
 import { createAccount }           from '../use-cases/create-account';
@@ -31,6 +34,11 @@ import { resolveTx }               from '../use-cases/resolve-tx';
 import { listActivity }            from '../use-cases/list-activity';
 import { getPendingApproval }      from '../use-cases/get-pending-approval';
 import { resolvePendingApproval }  from '../use-cases/resolve-pending-approval';
+import { addAccount }              from '../use-cases/add-account';
+import { removeAccount }           from '../use-cases/remove-account';
+import { setActiveAccount }        from '../use-cases/set-active-account';
+import { renameAccount }           from '../use-cases/rename-account';
+import { listAccounts }            from '../use-cases/list-accounts';
 
 export interface SwState {
   container: Container | null;
@@ -42,7 +50,8 @@ export interface SwDeps {
   approvalQueue:    ApprovalQueue;
   persistentPorts:  PersistentPorts;
   state:            SwState;
-  rebuildContainer: () => void;
+  containerCache:   ContainerCache;
+  rebuildContainer: () => Promise<void>;
   broadcastEvent:   (push: ContentPush) => Promise<void>;
 }
 
@@ -87,7 +96,7 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
 
       case 'CREATE_WALLET': {
         await createAccount({ mnemonic: msg.mnemonic, password: msg.password }, { keyring: deps.keyring });
-        deps.rebuildContainer();
+        await deps.rebuildContainer();
         return refreshState();
       }
 
@@ -96,7 +105,7 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
           { source: 'mnemonic', mnemonic: msg.mnemonic, password: msg.password },
           { keyring: deps.keyring },
         );
-        deps.rebuildContainer();
+        await deps.rebuildContainer();
         return refreshState();
       }
 
@@ -105,7 +114,7 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
           { source: 'edsk', edsk: msg.edsk, password: msg.password },
           { keyring: deps.keyring },
         );
-        deps.rebuildContainer();
+        await deps.rebuildContainer();
         return refreshState();
       }
 
@@ -114,16 +123,13 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
           { source: 'evm-privkey', privateKey: msg.privateKey, password: msg.password },
           { keyring: deps.keyring },
         );
-        deps.rebuildContainer();
+        await deps.rebuildContainer();
         return refreshState();
       }
 
       case 'UNLOCK': {
-        await unlockVault(
-          { password: msg.password },
-          { keyring: deps.keyring, sessionStore: deps.persistentPorts.sessionStore },
-        );
-        deps.rebuildContainer();
+        await unlockVault({ password: msg.password }, { keyring: deps.keyring });
+        await deps.rebuildContainer();
         return refreshState();
       }
 
@@ -131,11 +137,12 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
         lockVault({ keyring: deps.keyring, approvalQueue: deps.approvalQueue });
         deps.state.container = null;
         deps.state.evmAlias  = null;
+        deps.containerCache.clear();
         return { ok: true };
       }
 
       case 'EXPORT_SEED': {
-        const secret = await exportSecret({ password: msg.password }, { keyring: deps.keyring });
+        const secret = await exportSecret({ password: msg.password, accountId: msg.accountId }, { keyring: deps.keyring });
         return { ok: true, data: secret };
       }
 
@@ -182,6 +189,65 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
         return { ok: true, data: result };
       }
 
+      case 'ADD_ACCOUNT': {
+        if (deps.keyring.getUnlocked() == null) {
+          return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+        }
+        const result = await addAccount(
+          { kind: msg.kind, source: msg.source, label: msg.label },
+          { keyring: deps.keyring },
+        );
+        return { ok: true, data: result };
+      }
+
+      case 'REMOVE_ACCOUNT': {
+        const unlocked = deps.keyring.getUnlocked();
+        if (unlocked == null) return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+        const wasActive = unlocked.account.id === msg.accountId;
+        await removeAccount({ accountId: msg.accountId, password: msg.password }, { keyring: deps.keyring });
+        deps.containerCache.evict(msg.accountId);
+        if (wasActive) {
+          aliasCache.value = null;
+          await deps.rebuildContainer();
+          const response = await refreshState();
+          if (deps.state.evmAlias != null) {
+            await broadcastAccountsChanged(deps.state.evmAlias, deps);
+          }
+          return response;
+        }
+        return refreshState();
+      }
+
+      case 'SET_ACTIVE_ACCOUNT': {
+        const unlocked = deps.keyring.getUnlocked();
+        if (unlocked == null) return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+        if (unlocked.account.id === msg.accountId) return refreshState();
+        await setActiveAccount({ accountId: msg.accountId }, { keyring: deps.keyring });
+        aliasCache.value = null;
+        await deps.rebuildContainer();
+        const response = await refreshState();
+        if (deps.state.evmAlias != null) {
+          await broadcastAccountsChanged(deps.state.evmAlias, deps);
+        }
+        return response;
+      }
+
+      case 'RENAME_ACCOUNT': {
+        if (deps.keyring.getUnlocked() == null) {
+          return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+        }
+        await renameAccount({ accountId: msg.accountId, label: msg.label }, { keyring: deps.keyring });
+        return refreshState();
+      }
+
+      case 'LIST_ACCOUNTS': {
+        if (deps.keyring.getUnlocked() == null) {
+          return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+        }
+        const result = await listAccounts({ keyring: deps.keyring });
+        return { ok: true, data: result };
+      }
+
       default:
         return { ok: false, code: JSON_RPC_METHOD_NOT_FOUND, message: `Unknown popup request type` };
     }
@@ -223,11 +289,15 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
     method === 'personal_sign'         ||
     method === 'eth_signTypedData_v4';
 
+  let pinnedAccountId: string | undefined;
+
   if (needsApproval) {
     const unlocked = deps.keyring.getUnlocked();
     if (unlocked == null) {
       return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
     }
+
+    const accountId = unlocked.account.id;
 
     let pending: Parameters<typeof deps.approvalQueue.enqueue>[0];
     if (method === 'eth_requestAccounts') {
@@ -235,6 +305,7 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
         kind:      'connect',
         requestId: msg.requestId,
         origin:    msg.origin,
+        accountId,
         createdAt: Date.now(),
       };
     } else if (method === 'eth_sendTransaction') {
@@ -242,6 +313,7 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
         kind:      'transaction',
         requestId: msg.requestId,
         origin:    msg.origin,
+        accountId,
         to:        (msg.args.params as { to: string }[])[0]?.to ?? '',
         value:     (msg.args.params as { value?: string }[])[0]?.value ?? '0x0',
         data:      (msg.args.params as { data?: string }[])[0]?.data ?? '0x',
@@ -254,6 +326,7 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
         kind:      'signature',
         requestId: msg.requestId,
         origin:    msg.origin,
+        accountId,
         message:   rawHex,
         decoded:   tryDecodeUtf8(rawHex),
         createdAt: Date.now(),
@@ -265,25 +338,40 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
     if (decision === 'reject') {
       return { ok: false, code: EIP_USER_REJECTED, message: 'User rejected the request' };
     }
+    pinnedAccountId = pending.accountId;
   }
 
-  if (deps.state.container == null) {
+  let container = deps.state.container;
+  if (pinnedAccountId != null) {
+    try {
+      container = await ensureContainerFor(pinnedAccountId, {
+        keyring:         deps.keyring,
+        containerCache:  deps.containerCache,
+        onProviderEvent: deps.broadcastEvent,
+      });
+    } catch (err) {
+      if (err instanceof AccountNotFoundError) {
+        return { ok: false, code: EIP_USER_REJECTED, message: 'The signing account was removed before approval' };
+      }
+      throw err;
+    }
+  }
+  if (container == null) {
     return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
   }
 
   try {
-    const result = await deps.state.container.provider.request(msg.args);
+    const result = await container.provider.request(msg.args);
 
-    if (method === 'eth_requestAccounts') {
-      const unlocked = deps.keyring.getUnlocked();
-      if (unlocked != null && Array.isArray(result) && typeof result[0] === 'string') {
-        const { account } = unlocked;
+    if (method === 'eth_requestAccounts' && pinnedAccountId != null) {
+      const account = deps.keyring.listAccounts().find(a => a.id === pinnedAccountId);
+      if (account != null && Array.isArray(result) && typeof result[0] === 'string') {
         const session: StoredSession = {
           origin:      msg.origin,
-          accountId:   account.id,
+          accountId:   pinnedAccountId,
           tz1Address:  account.kind === 'tezos' ? account.tz1 : '',
           evmAlias:    result[0],
-          chainId:     await deps.state.container.provider.request({ method: 'eth_chainId' }) as string,
+          chainId:     await container.provider.request({ method: 'eth_chainId' }) as string,
           connectedAt: Date.now(),
         };
         await deps.persistentPorts.sessionStore.upsert(session);
@@ -296,6 +384,10 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
     const e = err as { code?: number; message?: string };
     return { ok: false, code: e.code ?? JSON_RPC_INTERNAL, message: e.message ?? 'Internal error' };
   }
+}
+
+async function broadcastAccountsChanged(alias: string, deps: SwDeps): Promise<void> {
+  await deps.broadcastEvent({ type: 'PROVIDER_EVENT', event: 'accountsChanged', data: [alias] });
 }
 
 /** Best-effort utf-8 decode for a hex-encoded signing payload. Returns

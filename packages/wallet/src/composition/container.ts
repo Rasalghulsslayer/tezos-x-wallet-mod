@@ -33,16 +33,18 @@ export type UnlockedSecrets =
       tz1:        string;
       publicKey:  string;
       secretKey:  string;
-      accountId?: AccountId;
+      accountId:  AccountId;
       label?:     string;
+      createdAt:  number;
     }
   | {
       kind:       'evm';
       address:    `0x${string}`;
       publicKey:  `0x${string}`;
       privateKey: string;
-      accountId?: AccountId;
+      accountId:  AccountId;
       label?:     string;
+      createdAt:  number;
     };
 
 export interface ActivitySources {
@@ -77,10 +79,11 @@ export function buildContainer(secrets: UnlockedSecrets): Container {
   if (secrets.kind === 'tezos') {
     const account: TezosAccount = {
       kind:      'tezos',
-      id:        secrets.accountId ?? secrets.tz1,
+      id:        secrets.accountId,
       label:     secrets.label,
       tz1:       secrets.tz1,
       publicKey: secrets.publicKey,
+      createdAt: secrets.createdAt,
     };
     const signer   = new TezosSigner(account, secrets.secretKey);
     const provider = new RelayerProvider(signer);
@@ -99,10 +102,11 @@ export function buildContainer(secrets: UnlockedSecrets): Container {
 
   const account: EvmAccount = {
     kind:      'evm',
-    id:        secrets.accountId ?? secrets.address,
+    id:        secrets.accountId,
     label:     secrets.label,
     address:   secrets.address,
     publicKey: secrets.publicKey,
+    createdAt: secrets.createdAt,
   };
   const signer   = new EvmSigner(account, secrets.privateKey);
   const provider = new EvmProvider(signer, TEZLINK_EVM_RPC);

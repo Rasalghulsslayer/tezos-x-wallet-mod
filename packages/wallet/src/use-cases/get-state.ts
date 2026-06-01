@@ -1,7 +1,8 @@
 /**
  * getState: produces the current VaultState (empty / locked / unlocked-tezos
  * / unlocked-evm) for the popup. Resolves the EVM alias on first call after
- * a Tezos-account unlock and caches it via deps.evmAliasCache.
+ * a Tezos-account unlock and caches it via deps.evmAliasCache. Returns the
+ * full accounts summary list so the popup can render the switcher.
  */
 
 import { deriveEvmAlias } from '@tezosx/relayer/utils/derive';
@@ -21,6 +22,9 @@ export async function getState(deps: GetStateDeps): Promise<VaultState> {
   if (unlocked == null) return { status: 'locked' };
 
   const { account } = unlocked;
+  const summaries   = (await deps.keyring.listAccountSummaries())
+    .slice()
+    .sort((a, b) => a.createdAt - b.createdAt);
 
   if (account.kind === 'tezos') {
     const alias = deps.evmAliasCache.value ?? await deriveEvmAlias(account.tz1);
@@ -31,6 +35,7 @@ export async function getState(deps: GetStateDeps): Promise<VaultState> {
       accountId: account.id,
       tz1:       account.tz1,
       evmAlias:  alias,
+      accounts:  summaries,
     };
   }
 
@@ -40,5 +45,6 @@ export async function getState(deps: GetStateDeps): Promise<VaultState> {
     kind:      'evm',
     accountId: account.id,
     address:   account.address,
+    accounts:  summaries,
   };
 }

@@ -22,6 +22,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'user-flows/create-wallet',
         'user-flows/import-wallet',
+        'user-flows/multi-account',
         'user-flows/view-balances',
         'user-flows/send-xtz',
         'user-flows/activity-tab',

@@ -9,6 +9,12 @@ This file is an index of releases. For details (added / changed / fixed / compat
 
 ---
 
+## 2026-05-21
+
+- **`@tezosx/wallet` 0.9.0** — feature minor. **Multi-account vaults end-to-end:** a single vault now holds N accounts (cap 50) of any mix of Tezos and EVM kinds. From an unlocked vault the user can add (Create or Import) without re-entering the password, switch active, rename, and remove. The v2 vault shape from 0.7.0 is the canonical home — no format migration needed. AccountIds switch to UUID v4 (decouples identity from address; two accounts derived from the same key are now deliberately allowed). MetaMask-style dApp semantics (Model A) — an active switch broadcasts EIP-1193 `accountsChanged` to every connected origin. Pending approvals stay pinned to the accountId they were enqueued under; the Approve popup renders an AccountChip showing which account will sign. Settings gains a per-account Reveal Secret picker and the Connections page gains an "All accounts / This account" filter persisted in `chrome.storage.local`. New `domain/vault.ts` houses pure mutation helpers; the Keyring is now an orchestrator (crypto + persistence + unlock cache). Container cache (LRU, size 16) memoises Container instances per accountId for sub-50ms switches; the cache is also consulted on the pinned-container resolution path. No relayer change. → [details](packages/wallet/CHANGELOG.md#090--2026-05-21)
+
+---
+
 ## 2026-05-19
 
 - **`@tezosx/wallet` 0.8.0** — feature minor. **Functional Activity tab:** merges TzKT (tz1 L1 ops) and Blockscout (EVM txs) into one feed, dedupes cross-runtime `tz1 → 0x` ops via `l1OpHashToEvmHash`, overlays pending L1→L2 ops from `RelayerProvider.listPendingOps`, drops AliasForwarder self-transfers by default. Auto-refresh every 30 s uses a Twitter-style "N new activity · refresh" pill rather than overwriting the rendered list — user controls when their context updates. Filter chips (direction + runtime). Cursor-based pagination across both sources, opaque to the UI. **Vitest test runner** lands for the first time with 44 unit tests pinning the merge algorithm, the precompile-input decoder, the cursor round-trip, and the row VM projection. Pins `@tezosx/relayer ^0.5.0` (resolves to 0.5.1). → [details](packages/wallet/CHANGELOG.md#080--2026-05-19)

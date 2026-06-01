@@ -6,6 +6,63 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.9.0] — 2026-05-21
+
+### Added
+- **Multi-account vaults, end-to-end.** A single vault now holds N accounts (cap: `MAX_ACCOUNTS_PER_VAULT = 50`) of any mix of Tezos and EVM kinds. From an unlocked vault the user can add a new account (Create or Import, Tezos or EVM) without re-entering the password, switch active, rename inline, and remove with a password-gated confirm. The v2 vault shape introduced in 0.7.0 (`{ version: 2, accounts, active, secrets }`) is the canonical home for all of this — no format migration was needed; previously-unused fields are now exercised.
+- **AccountId scheme: UUID v4 from 0.9.0.** Previous releases used the address as the accountId (`tz1…` or `0x…`). 0.9.0 generates a fresh `crypto.randomUUID()` per account at creation, decoupling identity from address. Two accounts derived from the same key material are now deliberately allowed (a yellow Continue-anyway warning surfaces at AddAccount import time). No migration ships — the wallet is pre-launch and the previous behaviour was acceptable to break.
+- **`domain/vault.ts`** (new) — pure home for `AccountSecret`, `MultiAccountVaultPayload`, the three error classes (`MaxAccountsReachedError`, `CannotRemoveLastAccountError`, `AccountNotFoundError`), and the four pure mutation functions (`addAccountToPayload`, `removeAccountFromPayload`, `setActiveOnPayload`, `renameOnPayload`). The Keyring delegates "given this payload and this request, what is the next payload" to these helpers and handles only crypto + persistence + the in-memory unlock cache.
+- **`Keyring` extensions.** `addTezosAccount`, `addEvmAccount`, `removeAccount`, `setActiveAccount`, `renameAccount`, `exportSecretFor(accountId)`, `listAccounts`, `listAccountSummaries`, `getSigningKeyFor(accountId)`. The `UnlockedKeyring` shape now caches the decrypted payload + the user's password in SW memory while unlocked — that's the trust trade-off (same as MetaMask) that lets add / remove / setActive / rename run without re-prompting; evicted on `lock()` and SW death.
+- **`composition/container-cache.ts`** (new) — LRU keyed by accountId, default size `CONTAINER_CACHE_SIZE = 16` (covers a power user with up to ~15 accounts swapped frequently without rebuild thrash). Used by `service-worker.ts`'s rebuild path and by the EIP-1193 handler's pinned-container lookup.
+- **`composition/container-builder.ts`** (new) — `ensureContainerFor(accountId, deps)` cache-or-build helper that also attaches the `accountsChanged` / `chainChanged` / `connect` / `disconnect` provider listeners exactly once per cached container.
+- **`Keyring.getSigningKeyFor`** lets the SW build a container for a non-active account on demand — used when an Approve popup resolves a pending request that was enqueued under an account the user has since switched away from.
+- **5 new popup messages.** `ADD_ACCOUNT`, `REMOVE_ACCOUNT`, `SET_ACTIVE_ACCOUNT`, `RENAME_ACCOUNT`, `LIST_ACCOUNTS`. `EXPORT_SEED` grows an optional `accountId`. `PendingRequest` variants each gain `accountId` (captured at enqueue time from `keyring.getUnlocked().account.id`).
+- **Model A dApp semantics (MetaMask-style).** The active account is wallet-wide. `setActiveAccount` and `removeAccount` (of the active) broadcast EIP-1193 `accountsChanged([<new 0x>])` to every connected origin via the existing `broadcastEvent` helper. Connected dApps re-resolve who they're talking to. The wallet does NOT support sticky-per-origin (Model B) in 0.9.0 — it was rejected as premature for the previewnet phase.
+- **Pending approval pinning.** A pending dApp approval enqueued under account A survives a switch to account B; the Approve popup signs through A's container regardless of the currently-active selector. If A has been removed between enqueue and resolution, the popup renders a danger ErrorCard and offers a Close-only action bar (the EIP-1193 caller receives `code 4001`).
+- **`AccountHeader`** (new) — single component that combines the active account display + chevron-to-open-switcher, replacing the previous identicon/label-duplicating chip-above-card layout. Tezos accounts surface both the tz1 and the EVM alias side-by-side; EVM-native accounts surface only the 0x. Renders an inline "+" affordance when the vault holds exactly one account so AddAccount is reachable without entering the switcher first.
+- **`AccountSwitcher` popover.** Lists every account with the active row hoisted on top and the rest sorted by `createdAt` ASC. Tap a row to switch; settings → rename modal; ✕ → remove modal (the last-account button is disabled with a tooltip). An "Add account" footer row links to the new `/accounts/add` route. Closes on outside-click / Escape. A `mode: 'pick'` variant is reused by Settings → Reveal Secret as a read-only account picker.
+- **`/accounts/add` route.** A 4-stage flow — kind picker (Tezos / EVM) → source picker (Create / Import) → input (blurred-reveal for fresh; mnemonic+edsk toggle or hex privkey for import) → optional label + Confirm. Confirm rounds through `ADD_ACCOUNT` then `SET_ACTIVE_ACCOUNT` and navigates Home. Import paths derive the address client-side and surface a yellow Continue-anyway warning when the derived address collides with an existing entry.
+- **`AccountChip`** — compact "Signing with: <label> · 0x…" chip rendered at the top of every Approve popup view. When the currently-active account differs from the pinned one a muted footnote reminds the user they don't need to switch — approving signs with the pinned account regardless.
+- **`RenameModal` / `RemoveAccountModal`** — single text input rename (cap `MAX_LABEL_LENGTH = 32`, empty string clears the label) and password-gated remove with a back-up reminder and a last-account guard.
+- **Settings → Reveal Secret picker.** When the vault holds ≥ 2 accounts, the Reveal flow now opens an inline account picker (read-only `AccountSwitcher` in pick mode) before the password gate. Single-account vaults skip straight to the existing password flow.
+- **Settings → Add account.** Top-level link making `/accounts/add` discoverable without entering the switcher (relevant for single-account vaults).
+- **Connections page filter.** A new top-of-page segmented control ("All accounts" / "This account") appears when ≥ 2 accounts exist. Each session row gains an account meta line — "<label> · <truncated addr>" — derived from `state.accounts` at render time. Sessions whose accountId no longer maps to a known account are flagged "Removed account" in danger colour. The filter pref persists in `chrome.storage.local` under `connectionsViewFilter`.
+
+### Changed
+- **AccountId values.** Existing 0.7.x / 0.8.x vault accounts had `id === address`; from 0.9.0 every newly created or imported account gets a `crypto.randomUUID()`. No migration ships — the wallet is pre-launch.
+- **`VaultStateUnlocked` grows `accounts: AccountSummary[]`** so the popup can render a switcher without an extra round-trip.
+- **`getState`** projects the full account summary list (sorted by `createdAt` ASC) alongside the active account's existing fields. The popup consumes `accounts` for the switcher and `accountId / tz1 / evmAlias / address` for the active surface.
+- **`unlock-vault.ts`** is now a one-liner — V1 → V2 and session-remap branches were removed (no migration in 0.9.0).
+- **`Account` shape** gains `createdAt: number` (ms epoch, captured at creation). The view models use it to derive the "Account N" fallback label and to sort the switcher list.
+- **Settings → About** now reads `Wallet v0.9.0 · Relayer v0.5.1`.
+- **`shared/constants.ts`** gains `MAX_ACCOUNTS_PER_VAULT = 50`, `MAX_LABEL_LENGTH = 32`, `CONTAINER_CACHE_SIZE = 16`.
+
+### Compatibility
+- **No relayer change required.** Wallet 0.9.0 builds against `@tezosx/relayer ^0.5.0` (resolves to whatever's latest in the 0.5.x line) — `ITezosWalletClient` is unchanged.
+- **Pre-launch break.** Vaults created on 0.7.x / 0.8.x do not migrate. The wallet has no real users yet (previewnet phase only).
+- **Additive elsewhere.** Existing dApp connection semantics are unchanged from MetaMask's perspective; `accountsChanged` broadcasts now fire on user-initiated active-account switches in addition to the SDK-initiated cases.
+
+### Manual test plan (relevant scenarios)
+1. With a single account in the vault: AccountHeader shows no chevron; the inline "+" opens `/accounts/add`. Switcher is unreachable from Home. Settings → Add account also reaches `/accounts/add`.
+2. AddAccount → Tezos → Create: 12-word mnemonic appears blurred → "Tap to reveal" → "I've saved it" gate. After Confirm, the new account is active; Home re-renders with the new identicon and alias.
+3. AddAccount → Tezos → Import → mnemonic: paste a valid 12-word mnemonic; the new account appears with the correct tz1. Active flips to it.
+4. AddAccount → Tezos → Import → edsk: paste a valid edsk; same as above.
+5. AddAccount → EVM → Create: 32-byte private key appears blurred → reveal → ack → optional label → Confirm. The new EVM account is active.
+6. AddAccount → EVM → Import → privkey: paste a 64-character hex key (with or without `0x` prefix); the new EVM account appears with the correct address.
+7. AddAccount duplicate-import: re-enter the secret of an existing account. A yellow warning appears with the existing label and a Continue-anyway checkbox. Continuing creates a deliberate duplicate (UUID v4 ids allow it).
+8. With two+ accounts: AccountHeader shows the chevron. Tap → switcher opens with the active row hoisted on top. Tap a non-active row → switch happens; if a dApp tab is open with a connected origin, the dApp's `window.ethereum` fires `accountsChanged` (visible in DevTools console of that tab).
+9. Rename: open the switcher, tap settings on any row → modal → type "Trading" → save → the chip and the switcher row now show "Trading".
+10. Remove (non-active): switcher → ✕ → password gate → confirm → account disappears.
+11. Remove (active): same flow; the keyring auto-switches to the next createdAt-ASC peer BEFORE the deletion (atomic single-write); `accountsChanged` fires; Home re-renders with the new active.
+12. Remove (last): the ✕ button is disabled (tooltip "Cannot remove the last account").
+13. dApp approval pinning: connect dApp X with account A; immediately switch active to B; dApp X sends `eth_sendTransaction`. The Approve popup opens with an AccountChip pinned to A and a muted footnote ("you don't need to switch — approving signs with this account regardless"). Approving signs through A's container; B is unaffected.
+14. Remove an account with a pending approval: the next time the Approve popup queries `GET_PENDING`, it auto-rejects (code 4001) and renders a danger card with a Close-only action bar.
+15. Settings → Reveal Secret with two+ accounts: picker shows all; pick an account; password gate; reveal succeeds for the picked account. Back button returns to the picker.
+16. Connections page with two accounts: connect dApp X with A, switch to B, connect dApp Y with B. The filter shows "All accounts" by default — both rows visible with their accountId meta. Toggle to "This account" with B active → only Y is shown. Reload the popup (lock + unlock) → filter selection persists.
+17. Container cache: from the SW DevTools console, `chrome.runtime.sendMessage({ type: 'SET_ACTIVE_ACCOUNT', accountId: '<id>' })` repeatedly between two accounts. Each switch < 50 ms after the first build (cached).
+
+---
+
 ## [0.8.0] — 2026-05-19
 
 ### Added

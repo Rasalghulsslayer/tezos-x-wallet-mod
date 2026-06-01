@@ -1,0 +1,17 @@
+import type { Pick, Stage } from './types';
+
+export function stageTitle(stage: Stage, pick: Pick | null): string {
+  if (stage === 'pick') return 'Add account';
+  if (pick == null)     return 'Add account';
+  const op = pick.source === 'fresh' ? 'New' : 'Import';
+  const k  = pick.kind === 'tezos' ? 'Tezos' : 'EVM';
+  if (stage === 'input')   return `${op} ${k} account`;
+  return pick.source === 'fresh' ? 'Confirm new account' : 'Confirm import';
+}
+
+export function stageHeadline(pick: Pick): string {
+  if (pick.source === 'fresh') {
+    return pick.kind === 'tezos' ? 'Your recovery phrase' : 'Your private key';
+  }
+  return pick.kind === 'tezos' ? 'Recovery phrase or edsk' : 'EVM private key';
+}
