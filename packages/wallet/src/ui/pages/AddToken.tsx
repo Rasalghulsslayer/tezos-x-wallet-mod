@@ -48,8 +48,6 @@ export function AddToken({ state }: { state: VaultState }) {
     void sendPopupRequest<RegisteredToken[]>({ type: 'LIST_REGISTERED_TOKENS' }).then(setExisting).catch(() => {});
   }, [state.status]);
 
-  if (state.status !== 'unlocked') return null;
-
   const isValidShape = EVM_ADDR_RE.test(address.trim());
   const stageIdx     = stage === 'paste' ? 0 : stage === 'confirm' ? 1 : 2;
 
@@ -130,6 +128,8 @@ export function AddToken({ state }: { state: VaultState }) {
     () => isValidShape ? `${EVM_EXPLORER}/address/${address.trim().toLowerCase()}` : '',
     [address, isValidShape],
   );
+
+  if (state.status !== 'unlocked') return null;
 
   return (
     <div className="tx-page">
