@@ -5,7 +5,8 @@
 
 import type { ProviderRpcError } from '../domain/eip-1193.js';
 
-const JSON_RPC_INTERNAL = -32603;
+// EIP-1193 transport-loss code: the provider could not reach the chain.
+const EIP1193_DISCONNECTED = 4900;
 
 function makeRpcError(code: number, message: string, data?: unknown): ProviderRpcError {
   const err = new Error(message) as ProviderRpcError;
@@ -27,11 +28,11 @@ export async function jsonRpc<T>(
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
     });
   } catch (err) {
-    throw makeRpcError(JSON_RPC_INTERNAL, `Network error calling ${method}: ${String(err)}`);
+    throw makeRpcError(EIP1193_DISCONNECTED, `Network error calling ${method}: ${String(err)}`);
   }
 
   if (!res.ok) {
-    throw makeRpcError(JSON_RPC_INTERNAL, `HTTP ${res.status} from ${url} (${method})`);
+    throw makeRpcError(EIP1193_DISCONNECTED, `HTTP ${res.status} from ${url} (${method})`);
   }
 
   const json = (await res.json()) as {
