@@ -30,8 +30,6 @@ import { STAGES, type Pick, type Preview, type Stage, type TzMode } from './type
 export function AddAccount({ state, onChanged }: { state: VaultState; onChanged: () => void }) {
   const navigate = useNavigate();
 
-  if (state.status !== 'unlocked') return null;
-
   const [stage, setStage] = useState<Stage>('pick');
   const [pick,  setPick]  = useState<Pick | null>(null);
 
@@ -64,8 +62,10 @@ export function AddAccount({ state, onChanged }: { state: VaultState; onChanged:
   const [discardOpen, setDiscardOpen] = useState(false);
 
   const sortedAccounts = useMemo(
-    () => state.accounts.slice().sort((a, b) => a.createdAt - b.createdAt),
-    [state.accounts],
+    () => (state.status === 'unlocked'
+      ? state.accounts.slice().sort((a, b) => a.createdAt - b.createdAt)
+      : []),
+    [state],
   );
   const nextSeq = sortedAccounts.length + 1;
 
@@ -262,6 +262,8 @@ export function AddAccount({ state, onChanged }: { state: VaultState; onChanged:
 
   const continueOk = isCreate ? acksComplete : importContinueOk;
   const capReached = sortedAccounts.length >= MAX_ACCOUNTS_PER_VAULT;
+
+  if (state.status !== 'unlocked') return null;
 
   return (
     <div className="tx-page" style={{ position: 'relative' }}>
