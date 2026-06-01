@@ -340,8 +340,30 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
     devLog.info('[TezosX Relayer] scanning blocks for real EVM tx…');
     const realHash = await this.resolveRealHash(syntheticHash);
     if (realHash == null) {
-      devLog.info('[TezosX Relayer] real tx not mined yet, returning null');
-      return null;
+      // Per EIP-1474, a submitted-but-unmined tx is "pending" — a tx object
+      // with blockNumber: null — not `null` (which means "unknown hash" and
+      // makes ethers/viem pollers abort or throw). Synthesise a pending tx
+      // from the stored op so tx.wait() keeps polling.
+      devLog.info('[TezosX Relayer] real tx not mined yet, returning pending tx object');
+      const op = this.pendingOps.get(syntheticHash)!;
+      return {
+        hash:             syntheticHash,
+        blockHash:        null,
+        blockNumber:      null,
+        transactionIndex: null,
+        from:             op.from,
+        to:               op.to,
+        value:            '0x0',
+        gas:              '0x0',
+        gasPrice:         '0x0',
+        input:            '0x',
+        nonce:            '0x0',
+        type:             '0x2',
+        chainId:          this.session?.chainId ?? '0x0',
+        v:                '0x0',
+        r:                '0x0',
+        s:                '0x0',
+      };
     }
 
     devLog.info('[TezosX Relayer] proxying getTransactionByHash with real hash →', realHash);
