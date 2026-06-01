@@ -87,6 +87,7 @@ function tezosContainer(tezos: ActivityFetcher, evm: ActivityFetcher, pendingOps
     activitySources: { tezos, evm, pendingOps },
     vaultStore:      {} as Container['vaultStore'],
     sessionStore:    {} as Container['sessionStore'],
+    tokenStore:      {} as Container['tokenStore'],
     notifications:   {} as Container['notifications'],
   };
 }
@@ -99,6 +100,7 @@ function evmAccountContainer(evm: ActivityFetcher): Container {
     activitySources: { evm },
     vaultStore:      {} as Container['vaultStore'],
     sessionStore:    {} as Container['sessionStore'],
+    tokenStore:      {} as Container['tokenStore'],
     notifications:   {} as Container['notifications'],
   };
 }

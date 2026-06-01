@@ -6,7 +6,9 @@ import { dispatch, type SwDeps } from '../sw-wiring';
 import type { ContentPush, PopupRequest, AccountSummary } from '../../shared/messages';
 import type { VaultStore, EncryptedVault } from '../../ports/vault-store';
 import type { SessionStore, StoredSession } from '../../ports/session-store';
+import type { TokenStore } from '../../ports/token-store';
 import type { NotificationPort } from '../../ports/notification-port';
+import type { RegisteredToken } from '../../domain/token';
 
 class MemoryVault implements VaultStore {
   private v: EncryptedVault | undefined;
@@ -20,6 +22,20 @@ class MemorySessions implements SessionStore {
   async list() { return Array.from(this.map.values()); }
   async upsert(s: StoredSession) { this.map.set(s.origin, s); }
   async remove(origin: string) { this.map.delete(origin); }
+  async clear() { this.map.clear(); }
+}
+
+class MemoryTokens implements TokenStore {
+  private map = new Map<string, RegisteredToken[]>();
+  async list(accountId: string) { return this.map.get(accountId) ?? []; }
+  async upsert(accountId: string, t: RegisteredToken) {
+    const list = this.map.get(accountId) ?? [];
+    const idx  = list.findIndex(x => x.address.toLowerCase() === t.address.toLowerCase());
+    this.map.set(accountId, idx === -1 ? [...list, t] : list.map((x, i) => i === idx ? t : x));
+  }
+  async remove(accountId: string, address: string) {
+    this.map.set(accountId, (this.map.get(accountId) ?? []).filter(t => t.address.toLowerCase() !== address.toLowerCase()));
+  }
   async clear() { this.map.clear(); }
 }
 
@@ -49,7 +65,7 @@ async function setupHarness(): Promise<Harness> {
   const deps: SwDeps = {
     keyring,
     approvalQueue:  new ApprovalQueue(stubNotifications),
-    persistentPorts: { vaultStore: new MemoryVault(), sessionStore, notifications: stubNotifications },
+    persistentPorts: { vaultStore: new MemoryVault(), sessionStore, tokenStore: new MemoryTokens(), notifications: stubNotifications },
     state:          { container: null, evmAlias: null },
     containerCache: new ContainerCache(),
     rebuildContainer: async () => { rebuilds++; },

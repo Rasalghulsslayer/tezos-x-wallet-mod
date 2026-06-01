@@ -25,6 +25,8 @@ import type { ActivityFetcher } from '../ports/activity-fetcher';
 import type { VaultStore } from '../ports/vault-store';
 import type { SessionStore } from '../ports/session-store';
 import type { NotificationPort } from '../ports/notification-port';
+import type { TokenStore } from '../ports/token-store';
+import { ChromeTokenStore } from '../adapters/chrome/chrome-token-store';
 import type { TezosAccount, EvmAccount, AccountId } from '../domain/account';
 
 export type UnlockedSecrets =
@@ -60,20 +62,23 @@ export interface Container {
   activitySources:  ActivitySources;
   vaultStore:       VaultStore;
   sessionStore:     SessionStore;
+  tokenStore:       TokenStore;
   notifications:    NotificationPort;
 }
 
 export interface PersistentPorts {
   vaultStore:    VaultStore;
   sessionStore:  SessionStore;
+  tokenStore:    TokenStore;
   notifications: NotificationPort;
 }
 
 const vaultStore:    VaultStore       = new ChromeVaultStore();
 const sessionStore:  SessionStore     = new ChromeSessionStore();
+const tokenStore:    TokenStore       = new ChromeTokenStore();
 const notifications: NotificationPort = new ChromeNotificationPort();
 
-export const persistentPorts: PersistentPorts = { vaultStore, sessionStore, notifications };
+export const persistentPorts: PersistentPorts = { vaultStore, sessionStore, tokenStore, notifications };
 
 export function buildContainer(secrets: UnlockedSecrets): Container {
   if (secrets.kind === 'tezos') {
@@ -96,7 +101,7 @@ export function buildContainer(secrets: UnlockedSecrets): Container {
         evm:         new EvmActivityFetcher(),
         pendingOps:  () => provider.listPendingOps(),
       },
-      vaultStore, sessionStore, notifications,
+      vaultStore, sessionStore, tokenStore, notifications,
     };
   }
 
@@ -115,6 +120,6 @@ export function buildContainer(secrets: UnlockedSecrets): Container {
     provider,
     balanceFetcher:  new EvmBalanceFetcher(),
     activitySources: { evm: new EvmActivityFetcher() },
-    vaultStore, sessionStore, notifications,
+    vaultStore, sessionStore, tokenStore, notifications,
   };
 }
