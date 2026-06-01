@@ -9,6 +9,7 @@ import type {
   ActivityFetcherPage,
 } from '../../ports/activity-fetcher';
 import type { Container } from '../../composition/container';
+import { XTZ_L1_ASSET, XTZ_L2_ASSET } from '../../domain/asset';
 
 // Mock the relayer's l1OpHashToEvmHash so the dedup is deterministic.
 vi.mock('@tezosx/relayer/tezos', () => ({
@@ -28,7 +29,7 @@ function tzTransfer(over: Partial<ActivityTransferItem> = {}): ActivityTransferI
     direction:    'sent',
     runtime:      'l1',
     counterparty: 'tz1Other',
-    asset:        'XTZ',
+    asset:        XTZ_L1_ASSET,
     amount:       '1000000',
     timestamp:    1_700_000_000_000,
     status:       'confirmed',
@@ -44,7 +45,7 @@ function tzCrossRuntime(opHash: string, ts = 1_700_000_000_000): ActivityTransfe
     direction:    'sent',
     runtime:      'l1',
     counterparty: '0xRecipient',
-    asset:        'XTZ',
+    asset:        XTZ_L1_ASSET,
     amount:       '1000000',
     timestamp:    ts,
     status:       'confirmed',
@@ -60,7 +61,7 @@ function evmTransfer(over: Partial<ActivityTransferItem> = {}): ActivityTransfer
     direction:    'received',
     runtime:      'l2',
     counterparty: '0xPeer',
-    asset:        'XTZ',
+    asset:        XTZ_L2_ASSET,
     amount:       '2000000000000000000',
     timestamp:    1_700_000_000_500,
     status:       'confirmed',
@@ -241,7 +242,7 @@ describe('listActivity', () => {
       direction:    'sent',
       runtime:      'cross-runtime',
       counterparty: 'tz1Dest',
-      asset:        'XTZ',
+      asset:        XTZ_L2_ASSET,
       amount:       '1000000000000000000',
       timestamp:    3000,
       status:       'confirmed',

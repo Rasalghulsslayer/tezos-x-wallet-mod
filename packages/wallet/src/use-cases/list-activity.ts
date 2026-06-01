@@ -19,6 +19,7 @@ import {
   type ActivityPage,
   type ActivityTransferItem,
 } from '../domain/activity';
+import { XTZ_L1_ASSET } from '../domain/asset';
 import type { ActivityFetcher, ActivityFetcherPage } from '../ports/activity-fetcher';
 import type { Container } from '../composition/container';
 
@@ -210,7 +211,7 @@ export async function listActivity(
       direction:    'sent',
       runtime:      'cross-runtime',
       counterparty: p.to,
-      asset:        'XTZ',
+      asset:        XTZ_L1_ASSET,
       amount:       '0',                                      // unknown until TzKT surfaces the op
       timestamp:    p.broadcastedAt,
       status:       'pending',

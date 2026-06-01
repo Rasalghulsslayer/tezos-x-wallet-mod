@@ -29,5 +29,9 @@ export interface AssetBalance {
   amount: bigint;
 }
 
+/** Canonical XtzAsset values. `amount` is in mutez when L1, wei when L2. */
+export const XTZ_L1_ASSET: XtzAsset = { kind: 'xtz', symbol: 'XTZ', decimals: 6,  runtime: 'michelson' };
+export const XTZ_L2_ASSET: XtzAsset = { kind: 'xtz', symbol: 'XTZ', decimals: 18, runtime: 'evm' };
+
 /** @deprecated CT1 legacy alias — removed in CT4 once USDC is re-modelled. */
 export type AssetId = 'XTZ' | 'USDC';

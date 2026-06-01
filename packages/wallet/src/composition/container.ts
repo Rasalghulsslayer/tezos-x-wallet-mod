@@ -92,13 +92,14 @@ export function buildContainer(secrets: UnlockedSecrets): Container {
     };
     const signer   = new TezosSigner(account, secrets.secretKey);
     const provider = new RelayerProvider(signer);
+    const tokenList = () => tokenStore.list(account.id);
     return {
       signer,
       provider,
       balanceFetcher:  new TezosBalanceFetcher(),
       activitySources: {
         tezos:       new TezosActivityFetcher(),
-        evm:         new EvmActivityFetcher(),
+        evm:         new EvmActivityFetcher(undefined, tokenList),
         pendingOps:  () => provider.listPendingOps(),
       },
       vaultStore, sessionStore, tokenStore, notifications,
@@ -113,13 +114,14 @@ export function buildContainer(secrets: UnlockedSecrets): Container {
     publicKey: secrets.publicKey,
     createdAt: secrets.createdAt,
   };
-  const signer   = new EvmSigner(account, secrets.privateKey);
-  const provider = new EvmProvider(signer, TEZLINK_EVM_RPC);
+  const signer    = new EvmSigner(account, secrets.privateKey);
+  const provider  = new EvmProvider(signer, TEZLINK_EVM_RPC);
+  const tokenList = () => tokenStore.list(account.id);
   return {
     signer,
     provider,
     balanceFetcher:  new EvmBalanceFetcher(),
-    activitySources: { evm: new EvmActivityFetcher() },
+    activitySources: { evm: new EvmActivityFetcher(undefined, tokenList) },
     vaultStore, sessionStore, tokenStore, notifications,
   };
 }
