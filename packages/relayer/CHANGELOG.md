@@ -6,6 +6,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.5.2] — 2026-06-02
+
+Security patch. Closes audit C3 (the only Critical-rated finding in the 2026-06-01 security audit). Ships alongside `@tezosx/wallet` 0.10.2.
+
+### Security
+- **`eth_getTransactionReceipt` no longer fabricates a `status: 0x1` receipt for unresolved cross-runtime transactions (audit C3).** When the real EVM hash of a tz1 → 0x cross-runtime op could not be resolved within the polling window, [`RelayerProvider.handleGetTransactionReceipt`](src/tezos/provider.ts) previously fell through to `buildSyntheticReceipt(...)` which returned a hardcoded success receipt. A dApp polling the receipt and crediting on `status == 0x1` could be silently mis-credited — there was no real on-chain evidence of the transfer. The provider now returns `null` per the JSON-RPC spec for not-yet-mined transactions; ethers/viem `tx.wait()` continues polling. Pairs with the 0.5.x `eth_getTransactionByHash` fix that returns a pending-tx object instead of `null` so the two methods stay consistent.
+
+### Removed
+- **`buildSyntheticReceipt`** export from `@tezosx/relayer/tezos`. Was the only consumer of the forged-success path; no internal callers remain. `l1OpHashToEvmHash` (still used by the wallet's `list-activity` for cross-runtime dedup) stays in [`use-cases/build-synthetic-receipt.ts`](src/use-cases/build-synthetic-receipt.ts) — the file name is now slightly historical but the rename can ride a future cleanup.
+
+### Compatibility
+- **No public API removed besides `buildSyntheticReceipt`.** No third-party SDK consumer is known to use that export; the function was internal to the wallet's relayer path. The wallet 0.10.2 pin (`^0.5.0`) picks up this patch automatically.
+- **dApp polling behaviour.** dApps using ethers/viem `tx.wait()` were already tolerant of `null` receipts (they're EIP-1474-compliant). dApps that strict-checked `status === '0x1'` against a synthetic receipt to credit users were, by definition, vulnerable to the bug — this patch closes that path; they will now correctly wait for a real receipt.
+
+---
+
 ## [0.5.1] — 2026-05-19
 
 ### Added

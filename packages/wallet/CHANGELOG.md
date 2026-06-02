@@ -6,6 +6,33 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.10.2] — 2026-06-02
+
+Security patch. Three audit findings closed at the wallet ↔ dApp boundary plus an infrastructure gap that was letting regressions through CI. Pairs with `@tezosx/relayer` 0.5.2 (which carries the synthetic-receipt fix). No vault format change, no message-type change.
+
+### Security
+- **`eth_accounts` no longer discloses the active address to unconnected origins (audit F3 / EXT-4).** Per EIP-1193, `eth_accounts` must return `[]` before the user has accepted a connection. Until now the wallet returned `[address]` to any page that asked, regardless of session state — a fingerprinting + de-anonymisation vector. The SW dispatch in [`composition/sw-wiring.ts`](packages/wallet/src/composition/sw-wiring.ts) now short-circuits `eth_accounts` before reaching the provider: if the requesting origin has no row in `sessionStore`, the SW returns `[]`; otherwise it returns the session's pinned `evmAlias`. Mirrors the behaviour already present on the Tezos-account path at `relayer/src/tezos/provider.ts:106`. `eth_requestAccounts` is unchanged — it still goes through the approval flow which is what writes the session.
+- **Synthetic-receipt forging removed (audit C3, the only Critical-rated finding).** When a cross-runtime tx's real EVM hash could not be resolved within the timeout window, `RelayerProvider.eth_getTransactionReceipt` previously fell through to `buildSyntheticReceipt(...)` which fabricated `status: '0x1'` (success). A merchant or dApp that polls the receipt and credits on `status == 0x1` was at risk of crediting for a transfer the wallet had no real evidence of. The provider now returns `null` per the JSON-RPC spec (which permits `null` for not-yet-mined transactions); ethers/viem callers keep polling, no credit happens until a real receipt is observed. Pairs with the 0.10.1-era fix to `eth_getTransactionByHash` (which also returns a pending-tx object rather than `null`) so the two RPC methods stay consistent. `buildSyntheticReceipt` was the last consumer of `EthTransactionReceipt` in that module and has been deleted; `l1OpHashToEvmHash` stays where it is.
+
+### Fixed
+- **CI now runs the wallet test suite (audit Test gap — biggest infra issue).** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) previously had 7 jobs (lint, 3 typechecks, 3 builds) and zero invocations of vitest. Regressions on the 153 existing wallet tests were landing silently. A new `test-wallet` job runs `npm run test -w @tezosx/wallet`, and `build-wallet` now depends on it — a failing test blocks the build. To keep the multi-account cap test (audit Q0: 49 sequential PBKDF2-200k iterations) within budget on the default GitHub Actions runner, [`vitest.config.ts`](packages/wallet/vitest.config.ts) now sets `testTimeout: 30_000` (up from the 5 s default).
+
+### Added
+- **4 regression tests** in [`composition/__tests__/sw-wiring-multi-account.test.ts`](packages/wallet/src/composition/__tests__/sw-wiring-multi-account.test.ts) pinning the `eth_accounts` session-gating behaviour: returns `[]` for an origin with no session; returns the session's `evmAlias` for a connected origin; returns `[]` for a different origin even when another origin has a session; returns EIP-1193 code `4100` when the wallet is locked. Suite total: 17 files, 157 tests, ~3.4 s.
+
+### Compatibility
+- **No vault, message, or storage change.** The fix lives entirely in the dispatch layer (wallet) and in one return-value change (relayer).
+- **dApps that depended on the synthetic `status: 0x1` receipt for unresolved cross-runtime tx will now see `null` instead.** This is the correct JSON-RPC semantic for not-yet-mined receipts; ethers/viem `tx.wait()` polls happily through `null`. Any dApp that was treating a synthetic receipt as a final success was, by definition, mis-crediting — this patch closes that path.
+- Relayer pin in the wallet stays at `^0.5.0`; the `0.5.2` patch is picked up automatically.
+
+### Manual test plan
+1. Load the unpacked `dist/`. Open a test page that has never connected and run `await window.ethereum.request({ method: 'eth_accounts' })` in the DevTools console — returns `[]`. Click Connect, approve, run again — returns `[<your evm alias>]`.
+2. From the SW DevTools console after a production-mode build (`import.meta.env.DEV === false`), search the log stream during an EVM send — no `rawSigned` line (the dev-only log gate from PR #64 still applies).
+3. Trigger a `tz1 → 0x` cross-runtime send and close the popup before kernel synthesis completes. Have a polling dApp call `eth_getTransactionReceipt(<synthetic hash>)` — receives `null` (not a forged success receipt).
+4. Open a PR. CI runs `test-wallet` — green on 157 tests; `build-wallet` waits on it.
+
+---
+
 ## [0.10.1] — 2026-06-02
 
 ### Changed

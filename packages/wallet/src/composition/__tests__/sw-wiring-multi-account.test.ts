@@ -184,3 +184,64 @@ describe('sw-wiring multi-account dispatch', () => {
     expect(h.keyring.getUnlocked()!.account.id).toBe(firstId);
   });
 });
+
+describe('sw-wiring eth_accounts session gating (audit F3 / EXT-4)', () => {
+  let h: Harness;
+  beforeEach(async () => { h = await setupHarness(); });
+
+  const ethAccounts = (deps: SwDeps, origin: string) =>
+    dispatch(
+      { type: 'ETHEREUM_REQUEST', origin, requestId: 'req-1', args: { method: 'eth_accounts' } },
+      fakeSender,
+      deps,
+    );
+
+  it('returns [] for an origin with no session', async () => {
+    const res = await ethAccounts(h.deps, 'https://attacker.example');
+    expect(res.ok).toBe(true);
+    if (!res.ok) throw new Error('unreachable');
+    expect(res.data).toEqual([]);
+  });
+
+  it("returns the session's evmAlias when the origin is connected", async () => {
+    const sessionStore = h.deps.persistentPorts.sessionStore;
+    await sessionStore.upsert({
+      origin:      'https://connected.example',
+      accountId:   h.keyring.getUnlocked()!.account.id,
+      tz1Address:  'tz1Sample00000000000000000000000000',
+      evmAlias:    '0xabcdef0123456789abcdef0123456789abcdef01',
+      chainId:     '0x1f4f0',
+      connectedAt: Date.now(),
+    });
+
+    const res = await ethAccounts(h.deps, 'https://connected.example');
+    expect(res.ok).toBe(true);
+    if (!res.ok) throw new Error('unreachable');
+    expect(res.data).toEqual(['0xabcdef0123456789abcdef0123456789abcdef01']);
+  });
+
+  it('returns [] for a different origin even when another origin has a session', async () => {
+    const sessionStore = h.deps.persistentPorts.sessionStore;
+    await sessionStore.upsert({
+      origin:      'https://app-a.example',
+      accountId:   h.keyring.getUnlocked()!.account.id,
+      tz1Address:  '',
+      evmAlias:    '0xa000000000000000000000000000000000000000',
+      chainId:     '0x1f4f0',
+      connectedAt: Date.now(),
+    });
+
+    const res = await ethAccounts(h.deps, 'https://app-b.example');
+    expect(res.ok).toBe(true);
+    if (!res.ok) throw new Error('unreachable');
+    expect(res.data).toEqual([]);
+  });
+
+  it('returns 4100 (unauthorised) when the wallet is locked', async () => {
+    h.keyring.lock();
+    const res = await ethAccounts(h.deps, 'https://any.example');
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('unreachable');
+    expect(res.code).toBe(4100);
+  });
+});

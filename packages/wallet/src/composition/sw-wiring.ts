@@ -332,6 +332,19 @@ function handleApproveRequest(msg: ApproveRequest, deps: SwDeps): WalletResponse
 async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promise<WalletResponse> {
   const method = msg.args.method;
 
+  // EIP-1193 requires `eth_accounts` to return [] for origins that have not
+  // connected. The wallet's per-origin session, written on `eth_requestAccounts`
+  // approval, is the authoritative source — gate at the SW layer so the
+  // provider doesn't disclose the active address to unconnected pages.
+  if (method === 'eth_accounts') {
+    if (deps.keyring.getUnlocked() == null) {
+      return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+    }
+    const sessions = await deps.persistentPorts.sessionStore.list();
+    const session  = sessions.find((s) => s.origin === msg.origin);
+    return { ok: true, data: session == null ? [] : [session.evmAlias] };
+  }
+
   const needsApproval =
     method === 'eth_requestAccounts'   ||
     method === 'eth_sendTransaction'   ||

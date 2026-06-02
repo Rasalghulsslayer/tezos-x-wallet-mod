@@ -2,7 +2,7 @@ import EventEmitter from 'eventemitter3';
 import { TezlinkClient } from './tezlink.js';
 import { buildTezosToEvmCall } from '../use-cases/build-tezos-to-evm-call.js';
 import { deriveEvmAlias } from '../use-cases/derive-alias.js';
-import { l1OpHashToEvmHash, buildSyntheticReceipt } from '../use-cases/build-synthetic-receipt.js';
+import { l1OpHashToEvmHash } from '../use-cases/build-synthetic-receipt.js';
 import { findRealHash } from '../use-cases/resolve-synthetic-hash.js';
 import { devLog } from '../shared/log.js';
 import type { ITezosWalletClient } from '../ports/tezos-wallet-client.js';
@@ -392,9 +392,10 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
       if (realReceipt != null) return realReceipt;
     }
 
-    // Last resort: synthetic receipt so dApps don't hang indefinitely.
-    devLog.warn('[TezosX Relayer] real tx not found, returning synthetic receipt →', syntheticHash);
-    return buildSyntheticReceipt(syntheticHash, pending.from, pending.to);
+    // Per JSON-RPC spec, `eth_getTransactionReceipt` returns `null` for
+    // transactions that have been submitted but not yet mined.
+    devLog.warn('[TezosX Relayer] real tx not found, returning null →', syntheticHash);
+    return null;
   }
 
   private async handleDisconnect(): Promise<null> {
