@@ -3,7 +3,7 @@
  * No I/O; consumed by `use-cases/list-activity.ts` and the UI view-model.
  */
 
-import type { AssetId } from './asset';
+import type { Asset } from './asset';
 
 export type ActivityDirection = 'sent' | 'received' | 'self';
 export type ActivityStatus    = 'pending' | 'confirmed' | 'failed';
@@ -28,7 +28,7 @@ export interface ActivityTransferItem {
   direction:     ActivityDirection;
   runtime:       ActivityRuntime;
   counterparty:  string;
-  asset:         AssetId;
+  asset:         Asset;
   amount:        string;
   timestamp:     number;
   status:        ActivityStatus;

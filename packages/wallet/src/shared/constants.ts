@@ -19,8 +19,16 @@ export const TZKT_API_BASE = 'https://api.previewnet.tezosx.tzkt.io';
  */
 export const BADGE_BG_COLOR = '#a78bfa';
 
-/** Number of confirmations to consider a transaction finalized. */
-export const FINALIZED_AFTER_BLOCKS = 2;
+/**
+ * Tenderbake finality on Tezos L1: a block is final after 2 attestation
+ * rounds. Used by the L1 status poller (pollL1 in shared/tx-status.ts).
+ *
+ * Note: this constant is NOT used for L2 EVM finality — that path relies
+ * on the `finalized` block tag from the Tezlink EVM RPC, which tracks the
+ * actual L1 inclusion finality of L2 blocks (per Thomas Letan's feedback
+ * on 2026-05-15, #techrel-tezosx-mvp).
+ */
+export const TEZOS_L1_FINALITY_BLOCKS = 2;
 
 /** Polling cadence for tx status, in milliseconds. */
 export const TX_POLL_INTERVAL_FAST_MS = 2_000;

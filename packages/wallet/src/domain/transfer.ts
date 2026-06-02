@@ -5,14 +5,14 @@
  */
 
 import type { Account } from './account';
-import type { AssetId } from './asset';
+import type { Asset } from './asset';
 import type { RuntimeId } from './chain';
 import { detectRuntime } from './validation';
 
 export interface TransferRequest {
   fromAccountId: string;
   toAddress:     string;
-  asset:         AssetId;
+  asset:         Asset;
   amount:        bigint;
   memo?:         string;
 }

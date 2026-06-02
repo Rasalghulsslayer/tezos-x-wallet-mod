@@ -12,6 +12,8 @@ import { setActiveAccount } from '../set-active-account';
 import { renameAccount } from '../rename-account';
 import { listAccounts } from '../list-accounts';
 import type { VaultStore, EncryptedVault } from '../../ports/vault-store';
+import type { TokenStore } from '../../ports/token-store';
+import type { RegisteredToken } from '../../domain/token';
 
 class MemoryVaultStore implements VaultStore {
   private vault: EncryptedVault | undefined;
@@ -20,19 +22,34 @@ class MemoryVaultStore implements VaultStore {
   async clear()                         { this.vault = undefined; }
 }
 
+class MemoryTokenStore implements TokenStore {
+  private map = new Map<string, RegisteredToken[]>();
+  async list(id: string)                 { return this.map.get(id) ?? []; }
+  async upsert(id: string, t: RegisteredToken) {
+    const list = this.map.get(id) ?? [];
+    const i = list.findIndex(x => x.address.toLowerCase() === t.address.toLowerCase());
+    this.map.set(id, i === -1 ? [...list, t] : list.map((x, j) => j === i ? t : x));
+  }
+  async remove(id: string, addr: string) {
+    this.map.set(id, (this.map.get(id) ?? []).filter(t => t.address.toLowerCase() !== addr.toLowerCase()));
+  }
+  async clear() { this.map.clear(); }
+}
+
 const PASSWORD = 'correct-horse-battery';
 
-async function setupWithOneTezosAccount(): Promise<{ keyring: Keyring; firstId: string }> {
-  const keyring = new Keyring(new MemoryVaultStore());
+async function setupWithOneTezosAccount(): Promise<{ keyring: Keyring; tokenStore: TokenStore; firstId: string }> {
+  const keyring    = new Keyring(new MemoryVaultStore());
+  const tokenStore = new MemoryTokenStore();
   await keyring.create(PASSWORD);
   const firstId = keyring.getUnlocked()!.account.id;
-  return { keyring, firstId };
+  return { keyring, tokenStore, firstId };
 }
 
 describe('addAccount use case', () => {
   it('appends a fresh Tezos account; active unchanged; secret returned for blurred reveal', async () => {
-    const { keyring, firstId } = await setupWithOneTezosAccount();
-    const result = await addAccount({ kind: 'tezos', source: { source: 'fresh' } }, { keyring });
+    const { keyring, tokenStore, firstId } = await setupWithOneTezosAccount();
+    const result = await addAccount({ kind: 'tezos', source: { source: 'fresh' } }, { keyring, tokenStore });
     expect(result.account.kind).toBe('tezos');
     expect(result.accountId).not.toBe(firstId);
     expect(result.secret).toMatch(/\w+( \w+){11}/); // 12-word mnemonic
@@ -41,8 +58,8 @@ describe('addAccount use case', () => {
   });
 
   it('appends a fresh EVM account', async () => {
-    const { keyring, firstId } = await setupWithOneTezosAccount();
-    const result = await addAccount({ kind: 'evm', source: { source: 'fresh' } }, { keyring });
+    const { keyring, tokenStore, firstId } = await setupWithOneTezosAccount();
+    const result = await addAccount({ kind: 'evm', source: { source: 'fresh' } }, { keyring, tokenStore });
     expect(result.account.kind).toBe('evm');
     expect(result.secret).toMatch(/^0x[0-9a-f]{64}$/i);
     expect(keyring.listAccounts()).toHaveLength(2);
@@ -50,37 +67,37 @@ describe('addAccount use case', () => {
   });
 
   it('appends an EVM account from a privkey (no returned secret)', async () => {
-    const { keyring } = await setupWithOneTezosAccount();
+    const { keyring, tokenStore } = await setupWithOneTezosAccount();
     const priv  = '0x4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318';
-    const r     = await addAccount({ kind: 'evm', source: { source: 'privkey', privateKey: priv } }, { keyring });
+    const r     = await addAccount({ kind: 'evm', source: { source: 'privkey', privateKey: priv } }, { keyring, tokenStore });
     expect(r.secret).toBeUndefined();
     expect(keyring.listAccounts().find(a => a.id === r.accountId)?.kind).toBe('evm');
   });
 
   it('throws MaxAccountsReachedError at the cap', async () => {
-    const { keyring } = await setupWithOneTezosAccount();
+    const { keyring, tokenStore } = await setupWithOneTezosAccount();
     for (let i = 1; i < MAX_ACCOUNTS_PER_VAULT; i++) {
-      await addAccount({ kind: 'evm', source: { source: 'fresh' } }, { keyring });
+      await addAccount({ kind: 'evm', source: { source: 'fresh' } }, { keyring, tokenStore });
     }
     expect(keyring.listAccounts()).toHaveLength(MAX_ACCOUNTS_PER_VAULT);
     await expect(
-      addAccount({ kind: 'evm', source: { source: 'fresh' } }, { keyring })
+      addAccount({ kind: 'evm', source: { source: 'fresh' } }, { keyring, tokenStore })
     ).rejects.toBeInstanceOf(MaxAccountsReachedError);
   });
 });
 
 describe('removeAccount use case', () => {
   it('removes a non-active account; active unchanged', async () => {
-    const { keyring, firstId } = await setupWithOneTezosAccount();
-    const { accountId: secondId } = await addAccount({ kind: 'evm', source: { source: 'fresh' } }, { keyring });
+    const { keyring, tokenStore, firstId } = await setupWithOneTezosAccount();
+    const { accountId: secondId } = await addAccount({ kind: 'evm', source: { source: 'fresh' } }, { keyring, tokenStore });
     await removeAccount({ accountId: secondId, password: PASSWORD }, { keyring });
     expect(keyring.listAccounts()).toHaveLength(1);
     expect(keyring.getUnlocked()!.payload.active).toBe(firstId);
   });
 
   it('removes the active account; active flips to the next createdAt-ASC peer', async () => {
-    const { keyring, firstId } = await setupWithOneTezosAccount();
-    const { accountId: secondId } = await addAccount({ kind: 'evm', source: { source: 'fresh' } }, { keyring });
+    const { keyring, tokenStore, firstId } = await setupWithOneTezosAccount();
+    const { accountId: secondId } = await addAccount({ kind: 'evm', source: { source: 'fresh' } }, { keyring, tokenStore });
     await removeAccount({ accountId: firstId, password: PASSWORD }, { keyring });
     expect(keyring.listAccounts().map(a => a.id)).toEqual([secondId]);
     expect(keyring.getUnlocked()!.payload.active).toBe(secondId);
@@ -95,8 +112,8 @@ describe('removeAccount use case', () => {
   });
 
   it('throws on wrong password (vault unchanged)', async () => {
-    const { keyring, firstId } = await setupWithOneTezosAccount();
-    const { accountId: secondId } = await addAccount({ kind: 'evm', source: { source: 'fresh' } }, { keyring });
+    const { keyring, tokenStore, firstId } = await setupWithOneTezosAccount();
+    const { accountId: secondId } = await addAccount({ kind: 'evm', source: { source: 'fresh' } }, { keyring, tokenStore });
     await expect(
       removeAccount({ accountId: secondId, password: 'wrong-password' }, { keyring })
     ).rejects.toThrow(/Incorrect password/);
@@ -107,8 +124,8 @@ describe('removeAccount use case', () => {
 
 describe('setActiveAccount use case', () => {
   it('flips the active account', async () => {
-    const { keyring, firstId } = await setupWithOneTezosAccount();
-    const { accountId: secondId } = await addAccount({ kind: 'evm', source: { source: 'fresh' } }, { keyring });
+    const { keyring, tokenStore, firstId } = await setupWithOneTezosAccount();
+    const { accountId: secondId } = await addAccount({ kind: 'evm', source: { source: 'fresh' } }, { keyring, tokenStore });
     await setActiveAccount({ accountId: secondId }, { keyring });
     expect(keyring.getUnlocked()!.payload.active).toBe(secondId);
     expect(keyring.getUnlocked()!.account.id).toBe(secondId);
@@ -159,9 +176,9 @@ describe('renameAccount use case', () => {
 
 describe('listAccounts use case', () => {
   it('returns AccountSummary[] sorted by createdAt ASC, with secondaryAddress for Tezos accounts', async () => {
-    const { keyring } = await setupWithOneTezosAccount();
-    await addAccount({ kind: 'evm',   source: { source: 'fresh' } }, { keyring });
-    await addAccount({ kind: 'tezos', source: { source: 'fresh' } }, { keyring });
+    const { keyring, tokenStore } = await setupWithOneTezosAccount();
+    await addAccount({ kind: 'evm',   source: { source: 'fresh' } }, { keyring, tokenStore });
+    await addAccount({ kind: 'tezos', source: { source: 'fresh' } }, { keyring, tokenStore });
     const summaries = await listAccounts({ keyring });
 
     expect(summaries).toHaveLength(3);

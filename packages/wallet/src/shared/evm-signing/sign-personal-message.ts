@@ -7,6 +7,21 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { keccak256 } from './keccak';
 import { bytesToHex, concatBytes, hexToBytes } from './bytes';
 
+/**
+ * Normalise a `personal_sign` data parameter to the exact bytes to sign.
+ *
+ * Per EIP-191 / MetaMask convention the parameter is hex-encoded bytes, so a
+ * `0x…` value is decoded to its bytes (NOT treated as a UTF-8 string). This is
+ * what makes the signed bytes match what the approval UI shows, which likewise
+ * hex-decodes the payload for display. A non-hex value is signed as UTF-8.
+ */
+export function normalizePersonalSignMessage(param: string): Uint8Array {
+  const isHex = param.startsWith('0x')
+    && param.length % 2 === 0
+    && /^0x[0-9a-fA-F]*$/.test(param);
+  return isHex ? hexToBytes(param) : new TextEncoder().encode(param);
+}
+
 export function signPersonalMessage(
   message:       string | Uint8Array,
   privateKeyHex: string,

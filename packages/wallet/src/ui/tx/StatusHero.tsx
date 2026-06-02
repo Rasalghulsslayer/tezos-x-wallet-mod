@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import type { TxStatus } from '@/domain/tx-status';
-import { FINALIZED_AFTER_BLOCKS } from '@/shared/constants';
-
-type Asset = 'XTZ' | 'USDC';
+import type { Asset } from '@/domain/asset';
+import { TEZOS_L1_FINALITY_BLOCKS } from '@/shared/constants';
 
 interface Props {
   status:  TxStatus;
@@ -20,11 +19,11 @@ export function StatusHero({ status, runtime, amount, asset, to }: Props) {
       <div>
         <h2 className="tx-status-hero-title">{titleFor(status)}</h2>
         <div className="tx-status-hero-amt">
-          <span className="num">{amount}</span> {asset} → {to}
+          <span className="num">{amount}</span> {asset.symbol} → {to}
         </div>
         <div className="tx-status-hero-route">{routeFor(status, runtime)}</div>
       </div>
-      <EtaChip status={status} />
+      <EtaChip status={status} runtime={runtime} />
     </div>
   );
 }
@@ -105,7 +104,7 @@ function glyphFor(variant: Variant) {
   );
 }
 
-function EtaChip({ status }: { status: TxStatus }) {
+function EtaChip({ status, runtime }: { status: TxStatus; runtime: 'l1' | 'l2' }) {
   const startedAt = useStartedAt();
   if (status.stage === 'unavailable' || status.stage === 'failed') return null;
 
@@ -114,8 +113,10 @@ function EtaChip({ status }: { status: TxStatus }) {
     status.stage === 'included'  ? 'included'  :
                                    'broadcasting';
   const text =
-    status.stage === 'finalized' ? `${status.confirmations} confirmation${status.confirmations === 1 ? '' : 's'} · ${formatElapsed(startedAt)} total`
-    : status.stage === 'included' ? `Finalizing · ${maxConfirmations(status.blockLevel)} / ${FINALIZED_AFTER_BLOCKS} confirmations`
+    status.stage === 'finalized' ? finalizedText(status, runtime, startedAt)
+    : status.stage === 'included' ? (runtime === 'l2'
+        ? `Finalizing · waiting on L1 inclusion`
+        : `Finalizing · 1 / ${TEZOS_L1_FINALITY_BLOCKS} attestations`)
     : 'Usually included in ~10 s';
 
   return (
@@ -136,8 +137,16 @@ function formatElapsed(startedAt: number): string {
   return s < 60 ? `${s} s` : `${Math.round(s / 60)} min`;
 }
 
-/** While in 'included' stage we don't know the actual confirmations count
- *  yet (the poller fires only on stage transition); show a conservative 1. */
-function maxConfirmations(_blockLevel: number): number {
-  return 1;
+function finalizedText(
+  status:    Extract<TxStatus, { stage: 'finalized' }>,
+  runtime:   'l1' | 'l2',
+  startedAt: number,
+): string {
+  if (runtime === 'l2') {
+    // L2 finality = inclusion in a finalised L1 block. The "X confirmations"
+    // framing of Ethereum mainnet doesn't apply on Tezos X.
+    return `Final on L1 · ${formatElapsed(startedAt)} total`;
+  }
+  const n = status.confirmations ?? TEZOS_L1_FINALITY_BLOCKS;
+  return `${n} attestation${n === 1 ? '' : 's'} · ${formatElapsed(startedAt)} total`;
 }

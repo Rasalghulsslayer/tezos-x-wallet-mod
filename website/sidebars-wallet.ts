@@ -25,6 +25,7 @@ const sidebars: SidebarsConfig = {
         'user-flows/multi-account',
         'user-flows/view-balances',
         'user-flows/send-xtz',
+        'user-flows/custom-tokens',
         'user-flows/activity-tab',
         'user-flows/dapp-approval',
         'user-flows/manage-connections',

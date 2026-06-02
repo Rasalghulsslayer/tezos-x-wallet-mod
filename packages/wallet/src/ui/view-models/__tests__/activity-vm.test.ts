@@ -7,14 +7,21 @@ import type {
   ActivitySignatureItem,
 } from '../../../domain/activity';
 
+import { XTZ_L1_ASSET, XTZ_L2_ASSET, type Erc20Asset } from '../../../domain/asset';
+
 const baseLinks = { primary: { explorer: 'tzkt' as const, url: 'https://tzkt/op' } };
+
+const USDC_ASSET: Erc20Asset = {
+  kind: 'erc20', address: '0xd77420f73b4612a7a99dba8c2afd30a1886b0344',
+  symbol: 'USDC', name: 'USD Coin', decimals: 6, runtime: 'evm',
+};
 
 describe('activityRowVM', () => {
   it('projects a sent L1 transfer', () => {
     const ts = Date.now() - 60_000;
     const item: ActivityTransferItem = {
       id: 'l1:1', kind: 'transfer', direction: 'sent', runtime: 'l1',
-      counterparty: 'tz1SampleAddressOf36CharsLong00000000', asset: 'XTZ', amount: '1000000',
+      counterparty: 'tz1SampleAddressOf36CharsLong00000000', asset: XTZ_L1_ASSET, amount: '1000000',
       timestamp: ts, status: 'confirmed', links: baseLinks,
     };
     const vm = activityRowVM(item, ts + 60_000);
@@ -35,7 +42,7 @@ describe('activityRowVM', () => {
     const ts = Date.now();
     const item: ActivityTransferItem = {
       id: 'l2:0xff', kind: 'transfer', direction: 'received', runtime: 'l2',
-      counterparty: '0x3136abc0000000000000000000000000000000e4', asset: 'XTZ',
+      counterparty: '0x3136abc0000000000000000000000000000000e4', asset: XTZ_L2_ASSET,
       amount: '500000000000000000', // 0.5 XTZ in wei
       timestamp: ts, status: 'confirmed',
       links: { primary: { explorer: 'blockscout', url: 'https://blockscout/tx/0xff' } },
@@ -52,7 +59,7 @@ describe('activityRowVM', () => {
     const ts = Date.now();
     const item: ActivityTransferItem = {
       id: 'x:opCR', kind: 'transfer', direction: 'sent', runtime: 'cross-runtime',
-      counterparty: '0x6ce4Peer000000000000000000000000000006e1c', asset: 'XTZ', amount: '1000000',
+      counterparty: '0x6ce4Peer000000000000000000000000000006e1c', asset: XTZ_L1_ASSET, amount: '1000000',
       timestamp: ts, status: 'confirmed',
       links: {
         primary:   { explorer: 'tzkt',       url: 'https://tzkt/opCR' },
@@ -71,7 +78,7 @@ describe('activityRowVM', () => {
     const ts = Date.now();
     const item: ActivityTransferItem = {
       id: 'x:opET', kind: 'transfer', direction: 'sent', runtime: 'cross-runtime',
-      counterparty: 'tz1SomeDestinationAddress00000000000', asset: 'XTZ', amount: '1000000000000000000',
+      counterparty: 'tz1SomeDestinationAddress00000000000', asset: XTZ_L2_ASSET, amount: '1000000000000000000',
       timestamp: ts, status: 'confirmed',
       links: { primary: { explorer: 'blockscout', url: 'https://blockscout/tx/0xab' } },
       crossRuntime: { direction: 'evm-to-tezos', l1OpHash: 'opET', l2TxHash: '0xab', evmEffectStatus: 'confirmed' },
@@ -87,7 +94,7 @@ describe('activityRowVM', () => {
     const ts = Date.now() - 22_000;
     const item: ActivityTransferItem = {
       id: 'l1:p', kind: 'transfer', direction: 'sent', runtime: 'cross-runtime',
-      counterparty: 'tz1Sv7DestAddress000000000000000000u8Ri', asset: 'USDC', amount: '2500000',
+      counterparty: 'tz1Sv7DestAddress000000000000000000u8Ri', asset: USDC_ASSET, amount: '2500000',
       timestamp: ts, status: 'pending',
       links: baseLinks,
       crossRuntime: { direction: 'evm-to-tezos', l1OpHash: 'opP', evmEffectStatus: 'pending' },
@@ -101,7 +108,7 @@ describe('activityRowVM', () => {
     const ts = Date.now() - 25 * 60 * 60 * 1000; // ~yesterday
     const item: ActivityTransferItem = {
       id: 'l1:f', kind: 'transfer', direction: 'sent', runtime: 'l1',
-      counterparty: 'tz1Recipient00000000000000000000000xZSx', asset: 'XTZ', amount: '1000000',
+      counterparty: 'tz1Recipient00000000000000000000000xZSx', asset: XTZ_L1_ASSET, amount: '1000000',
       timestamp: ts, status: 'failed', links: baseLinks,
     };
     const vm = activityRowVM(item, ts + 25 * 60 * 60 * 1000);

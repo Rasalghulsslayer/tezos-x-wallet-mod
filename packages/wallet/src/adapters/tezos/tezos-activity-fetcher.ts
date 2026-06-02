@@ -16,6 +16,7 @@ import type {
   ActivityTransferItem,
   ActivityUnknownItem,
 } from '../../domain/activity';
+import { XTZ_L1_ASSET } from '../../domain/asset';
 
 interface TzktAccountAddress { address: string }
 
@@ -99,7 +100,7 @@ export class TezosActivityFetcher implements ActivityFetcher {
         direction,
         runtime:   'l1',
         counterparty,
-        asset:     'XTZ',
+        asset:     XTZ_L1_ASSET,
         amount:    String(op.amount ?? 0),
         timestamp,
         status,
@@ -117,7 +118,7 @@ export class TezosActivityFetcher implements ActivityFetcher {
         direction:    op.sender.address === holder ? 'sent' : 'received',
         runtime:      'l1',
         counterparty,
-        asset:        'XTZ',
+        asset:        XTZ_L1_ASSET,
         amount:       String(op.amount ?? 0),
         timestamp,
         status,

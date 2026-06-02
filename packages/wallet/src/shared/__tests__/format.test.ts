@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatTokenAmount, formatUsdc, mutezToXtz, weiToXtz } from '../format';
+import { formatTokenAmount, mutezToXtz, weiToXtz } from '../format';
 
 describe('formatTokenAmount', () => {
   it('handles 6 decimals (USDC pattern)', () => {
@@ -40,11 +40,6 @@ describe('formatTokenAmount', () => {
 });
 
 describe('legacy wrappers (regression)', () => {
-  it('formatUsdc behaves identically to the previous 6-decimal implementation', () => {
-    expect(formatUsdc('0x' + (250n * 10n ** 6n).toString(16))).toBe('250');
-    expect(formatUsdc('0x' + (12345n * 10n ** 3n).toString(16))).toBe('12.345');
-  });
-
   it('mutezToXtz handles the L1 6-decimal case', () => {
     expect(mutezToXtz('1000000')).toBe('1');
     expect(mutezToXtz('1500000')).toBe('1.5');

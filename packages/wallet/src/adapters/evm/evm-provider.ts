@@ -12,6 +12,7 @@ import type {
 } from '@tezosx/relayer/types';
 import type { EvmSigner } from './evm-signer';
 import { devLog } from '../../shared/log';
+import { normalizePersonalSignMessage } from '../../shared/evm-signing';
 
 const JSON_RPC_INVALID_PARAMS = -32602;
 
@@ -57,7 +58,9 @@ export class EvmProvider extends EventEmitter implements EIP1193Provider {
 
       case 'personal_sign': {
         const params  = args.params as [string, string];
-        const message = params[0];
+        // EIP-191: params[0] is hex-encoded bytes — decode before signing so
+        // the signed bytes match what the approval UI displays (#17).
+        const message = normalizePersonalSignMessage(params[0]);
         return this.signer.signPersonalMessage(message);
       }
 

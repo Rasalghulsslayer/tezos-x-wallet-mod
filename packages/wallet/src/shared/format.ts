@@ -38,13 +38,6 @@ export function weiToXtz(weiHex: string): string {
   return formatTokenAmount(mutez.toString(), 6);
 }
 
-/** Format 6-decimals USDC (raw uint256 hex) into a human string.
- *  @deprecated Use `formatTokenAmount(rawHex, asset.decimals)` instead.
- *  Kept during the CT1–CT4 migration; removed in CT4. */
-export function formatUsdc(rawHex: string): string {
-  return formatTokenAmount(rawHex, 6);
-}
-
 /** Pretty chain label ("0x1f094 · 127124"). */
 export function chainLabel(chainId: string): string {
   if (!chainId) return '—';

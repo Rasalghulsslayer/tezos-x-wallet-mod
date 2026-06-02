@@ -97,6 +97,7 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
         <div className="tx-section-head"><span className="t">Wallet</span></div>
         <LinkRow icon="link" t="Connected sites" onClick={() => navigate('/connections')} />
         <LinkRow icon="plus" t="Add account" sub="Create or import another account" onClick={() => navigate('/accounts/add')} />
+        <LinkRow icon="wallet" t="Manage tokens" sub="Add or remove custom ERC-20" onClick={() => navigate('/tokens')} />
 
         {isEvm ? (
           <LinkRow
@@ -132,7 +133,7 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
         <LinkRow icon="lock" t="Lock wallet" onClick={lock} />
 
         <div className="tx-section-head"><span className="t">About</span></div>
-        <LinkRow icon="info" t="Version" sub="Wallet v0.9.0 · Relayer v0.5.1" />
+        <LinkRow icon="info" t="Version" sub="Wallet v0.10.1 · Relayer v0.5.1" />
         <LinkRow icon="info" t="Network" sub="Tezos X Previewnet" />
 
         <div style={{ height: 16 }} />
