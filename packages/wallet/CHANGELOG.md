@@ -6,6 +6,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.10.1] — 2026-06-02
+
+### Changed
+- **L2 transaction finality now uses the `finalized` block tag** on the Tezlink EVM RPC instead of a 2-confirmation heuristic. Per Thomas Letan's feedback (`#techrel-tezosx-mvp`, 2026-05-15), the deciding factor for L2 finality on Tezos X is **L1 inclusion**, not L2 block count above the tx — L2 blocks above the tx provide no additional guarantee beyond the L1 finality of the block they share. `pollL2` in `shared/tx-status.ts` now polls `eth_getBlockByNumber("finalized", false)` and considers the tx finalised when `txBlockNumber <= finalizedBlockLevel`. The `TxStatus['finalized']` shape gains an optional `finalizedBlockLevel` field for the L2 branch; the L1 branch keeps `confirmations` (the Tenderbake attestation delta).
+- **L1 transaction finality is unchanged** — `head.level - op.level >= 2` is canonical for Tenderbake (a Tezos L1 block is final after 2 attestation rounds). The check now lives behind the renamed constant `TEZOS_L1_FINALITY_BLOCKS = 2` with an inline comment explaining its scope so the next reader doesn't conflate the L1 model with the L2 model.
+- **Renamed `FINALIZED_AFTER_BLOCKS` → `TEZOS_L1_FINALITY_BLOCKS`** in `shared/constants.ts`. The old name implied it applied to both runtimes; the new name pins it to L1 Tezos.
+- **StatusTimeline and StatusHero copy adapted.** The L2 final step now reads "Finalized on L1" / "final on L1" / "Final on L1 · X total" — sentiment is "this L2 block is in a finalised L1 block", not "this L2 block has N successors". The L1 final step shows "attestations" instead of "confirmations" (Tenderbake terminology). The in-progress L2 chip reads "Finalizing · waiting on L1 inclusion".
+- **"All / L1 / L2" segmented filter dropped from Home's Assets section.** Per Thomas's reply in the same thread: the runtime is already visible per asset row via `ChainPill`, the header filter was redundant and reinforced a two-chains mental model that Tezos X explicitly does not have. The "Assets" kicker stays; the filter and its `assetFilter` state are gone.
+
+### Added
+- **`shared/__tests__/tx-status.test.ts`** — 7 cases pinning the new L2 finality model (tx at N vs finalised N − 1 / N / N + 5; revert path) plus a regression for the unchanged L1 Tenderbake path (included / finalised at 2 attestations / failed-status pass-through).
+
+### Compatibility
+- **Wire-compatible.** No vault format change, no storage key change, no message-type change. The `TxStatus` shape gains an optional field on the `finalized` branch (`finalizedBlockLevel`) — existing consumers that only read `blockLevel` continue to work.
+- **RPC requirement.** The Tezlink EVM RPC must respond to `eth_getBlockByNumber("finalized", false)`. Verified against `https://evm.previewnet.tezosx.nomadic-labs.com` on 2026-06-02 — the endpoint returns a real block whose number trails `latest` by a small margin (≈ 4 blocks observed), which matches the documented semantic.
+
+---
+
 ## [0.10.0] — 2026-06-02
 
 ### Added
