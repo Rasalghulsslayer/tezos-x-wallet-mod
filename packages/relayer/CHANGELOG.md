@@ -6,6 +6,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.5.3] — 2026-06-02
+
+Ships alongside `@tezosx/wallet` 0.11.0.
+
+### Changed
+- **`findRealHash` now correlates kernel-synthesized EVM txs by `from === alias` plus nonce ordering**, instead of the previous `from || to === alias` predicate. With two concurrent cross-runtime ops to/from the same alias, the prior matcher could attach the wrong real EVM hash to the wrong synthetic hash; the new matcher filters strictly on `from`, sorts per-block candidates by nonce ascending, and claims the lowest un-claimed one. `EvmTxSummary` gains an optional `nonce` field. (Persisting `claimedHashes` across `RelayerProvider` restarts is queued for a follow-up.)
+
+### Removed
+- **Remote 4byte.directory selector lookup in [`buildTezosToEvmCall`](src/use-cases/build-tezos-to-evm-call.ts).** Selectors are now resolved against the local `KNOWN_SIGNATURES` allow-list (14 entries covering ERC-20 + NAC entrypoints) — unknown selectors throw `UnknownSelectorError`. The function is now sync internally; `buildTezosToEvmCall` itself remains async for public-API stability.
+
+### Added
+- **`UnknownSelectorError`** and **`SubMutezPrecisionError`** (`src/use-cases/build-tezos-to-evm-call.ts`), exported from `@tezosx/relayer/tezos`. The first replaces the silent "fall back to raw selector hex" behaviour; the second guards against wei values whose `% 10^12` remainder would be silently floor-divided to mutez. Both are translated to EIP-1193 `-32602` by `RelayerProvider`.
+
+### Compatibility
+- **`buildTezosToEvmCall` may now throw** on unknown selectors and sub-mutez wei amounts where it previously fell through to a malformed call or a silent truncation. Callers in `RelayerProvider` already catch and translate. Third-party SDK consumers using the pure helper directly should add the same translation.
+- **`buildSyntheticReceipt` remains removed** (deleted in 0.5.2); `l1OpHashToEvmHash` stays.
+
+---
+
 ## [0.5.2] — 2026-06-02
 
 Security patch. Closes audit C3 (the only Critical-rated finding in the 2026-06-01 security audit). Ships alongside `@tezosx/wallet` 0.10.2.

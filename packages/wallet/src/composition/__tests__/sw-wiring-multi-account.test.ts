@@ -185,7 +185,7 @@ describe('sw-wiring multi-account dispatch', () => {
   });
 });
 
-describe('sw-wiring eth_accounts session gating (audit F3 / EXT-4)', () => {
+describe('sw-wiring eth_accounts session gating', () => {
   let h: Harness;
   beforeEach(async () => { h = await setupHarness(); });
 
@@ -240,6 +240,56 @@ describe('sw-wiring eth_accounts session gating (audit F3 / EXT-4)', () => {
   it('returns 4100 (unauthorised) when the wallet is locked', async () => {
     h.keyring.lock();
     const res = await ethAccounts(h.deps, 'https://any.example');
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('unreachable');
+    expect(res.code).toBe(4100);
+  });
+});
+
+describe('sw-wiring signature-method session gating', () => {
+  let h: Harness;
+  beforeEach(async () => { h = await setupHarness(); });
+
+  const personalSign = (deps: SwDeps, origin: string) =>
+    dispatch(
+      {
+        type: 'ETHEREUM_REQUEST', origin, requestId: 'req-sig-1',
+        args: { method: 'personal_sign', params: ['0xdeadbeef', '0x' + '0'.repeat(40)] },
+      },
+      fakeSender,
+      deps,
+    );
+
+  it('rejects personal_sign with 4100 when origin has no session', async () => {
+    const res = await personalSign(h.deps, 'https://attacker.example');
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('unreachable');
+    expect(res.code).toBe(4100);
+  });
+
+  it('rejects eth_sendTransaction with 4100 when origin has no session', async () => {
+    const res = await dispatch(
+      {
+        type: 'ETHEREUM_REQUEST', origin: 'https://attacker.example', requestId: 'req-tx-1',
+        args: { method: 'eth_sendTransaction', params: [{ to: '0x' + '1'.repeat(40), value: '0x0', data: '0x' }] },
+      },
+      fakeSender,
+      h.deps,
+    );
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('unreachable');
+    expect(res.code).toBe(4100);
+  });
+
+  it('rejects eth_signTypedData_v4 with 4100 when origin has no session', async () => {
+    const res = await dispatch(
+      {
+        type: 'ETHEREUM_REQUEST', origin: 'https://attacker.example', requestId: 'req-std-1',
+        args: { method: 'eth_signTypedData_v4', params: ['0x' + '0'.repeat(40), '{}'] },
+      },
+      fakeSender,
+      h.deps,
+    );
     expect(res.ok).toBe(false);
     if (res.ok) throw new Error('unreachable');
     expect(res.code).toBe(4100);

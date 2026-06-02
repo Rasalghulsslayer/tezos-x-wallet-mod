@@ -17,6 +17,7 @@ export function TxView({
   ctx:     AccountContext | null;
 }) {
   const hostname = useMemo(() => hostnameOf(pending.origin), [pending.origin]);
+  const cross    = pending.crossRuntime;
 
   return (
     <div className="tx-approval">
@@ -31,6 +32,7 @@ export function TxView({
 
         <ModerateRisk msg="Review the recipient and amount before signing." />
 
+        <div className="tx-kicker" style={{ marginTop: 14, marginBottom: 6 }}>dApp intent</div>
         <div className="tx-card" style={{ padding: 0 }}>
           <Line label="To"    value={truncAddr(pending.to, 8)} />
           <div className="tx-divider" />
@@ -38,6 +40,31 @@ export function TxView({
           <div className="tx-divider" />
           <Line label="Data"  value={pending.data === '0x' ? '(empty)' : truncAddr(pending.data, 10)} />
         </div>
+
+        {cross != null && (
+          <>
+            <div className="tx-kicker" style={{ marginTop: 16, marginBottom: 6 }}>
+              What you actually sign
+            </div>
+            <div className="tx-card tx-cross-card" style={{ padding: 0 }}>
+              <Line label="Michelson target" value={truncAddr(cross.michelsonTarget, 6)} />
+              <div className="tx-divider" />
+              <Line label="Entrypoint"       value={cross.entrypoint} />
+              {cross.decodedSelector != null && (
+                <>
+                  <div className="tx-divider" />
+                  <Line label="Selector" value={cross.decodedSelector} />
+                </>
+              )}
+              <div className="tx-divider" />
+              <Line label="Debit (mutez)"   value={cross.mutezValue} />
+            </div>
+            <div className="tx-cross-note">
+              Your tz1 signs an L1 operation that the kernel forwards to the EVM
+              runtime — cross-runtime via NAC gateway.
+            </div>
+          </>
+        )}
       </div>
 
       <div className="tx-action-bar" style={{ gap: 8 }}>

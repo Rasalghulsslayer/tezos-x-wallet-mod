@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import type { VaultState } from '../shared/messages';
-import { sendPopupRequest } from '../shared/messaging';
+import { sendPopupRequest, SW_SESSION_LOST_EVENT } from '../shared/messaging';
 import { makeError } from '../domain/error';
 import { Welcome }     from './pages/Welcome';
 import { Create }      from './pages/Create';
@@ -47,6 +47,17 @@ function Gate() {
   };
 
   useEffect(() => { void refresh(); }, []);
+
+  // The SW restarts on its own schedule (MV3 idle eviction, long-running calls
+  // like cross-runtime sign + resolve). When it comes back its keyring is
+  // empty, so a popup operation issued against stale React state returns 4100.
+  // Refresh GET_STATE on that signal so the Gate routes back to /unlock
+  // automatically instead of stranding the user on the failing page.
+  useEffect(() => {
+    const onSessionLost = () => { void refresh(); };
+    window.addEventListener(SW_SESSION_LOST_EVENT, onSessionLost);
+    return () => window.removeEventListener(SW_SESSION_LOST_EVENT, onSessionLost);
+  }, []);
 
   useEffect(() => {
     if (state == null) return;

@@ -16,6 +16,9 @@ export interface EvmTxSummary {
   from:        string;
   to:          string | null;
   blockNumber: string;
+  /** Sender's nonce on the EVM runtime. Used to correlate kernel-synthesized
+   *  txs with their originating L1 ops in submission order. */
+  nonce?:      string;
 }
 
 export class TezlinkClient {

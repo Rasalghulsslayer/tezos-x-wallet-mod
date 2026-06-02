@@ -21,12 +21,8 @@ export const BADGE_BG_COLOR = '#a78bfa';
 
 /**
  * Tenderbake finality on Tezos L1: a block is final after 2 attestation
- * rounds. Used by the L1 status poller (pollL1 in shared/tx-status.ts).
- *
- * Note: this constant is NOT used for L2 EVM finality — that path relies
- * on the `finalized` block tag from the Tezlink EVM RPC, which tracks the
- * actual L1 inclusion finality of L2 blocks (per Thomas Letan's feedback
- * on 2026-05-15, #techrel-tezosx-mvp).
+ * rounds. Used by the L1 status poller. L2 finality uses the `finalized`
+ * block tag from the Tezlink EVM RPC instead — see shared/tx-status.ts.
  */
 export const TEZOS_L1_FINALITY_BLOCKS = 2;
 

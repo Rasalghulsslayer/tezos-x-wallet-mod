@@ -63,7 +63,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 chrome.runtime.onInstalled.addListener(() => {
   void persistentPorts.notifications.setPendingCount(0);
-  console.info('[TezosX Wallet] service worker installed, v0.10.2');
+  console.info('[TezosX Wallet] service worker installed, v0.11.0');
 });
 
 chrome.windows.onRemoved.addListener((windowId) => {

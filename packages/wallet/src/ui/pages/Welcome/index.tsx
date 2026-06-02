@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../tx/Button';
+import { LogoMark } from '../../tx/LogoMark';
 import { KindCard } from './KindCard';
 
 type Kind = 'tezos' | 'evm';
@@ -34,7 +35,9 @@ export function Welcome({ onDone: _onDone }: { onDone: () => void }) {
                 transform: 'translate(18px, 6px)',
               }}
             />
-            <div className="tx-logo-mark lg" style={{ width: 56, height: 56, borderRadius: 14, position: 'relative' }} />
+            <div style={{ position: 'relative' }}>
+              <LogoMark size={56} />
+            </div>
           </div>
           <div>
             <div style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.15 }}>

@@ -1,6 +1,6 @@
 {
   "name": "@tezosx/relayer",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -14,6 +14,7 @@
     "./wallet-client": "./src/ports/tezos-wallet-client.ts",
     "./tezlink": "./src/tezos/tezlink.ts",
     "./utils/derive": "./src/use-cases/derive-alias.ts",
+    "./use-cases/build-tezos-to-evm-call": "./src/use-cases/build-tezos-to-evm-call.ts",
     "./package.json": "./package.json"
   },
   "scripts": {

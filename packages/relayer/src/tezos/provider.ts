@@ -1,6 +1,6 @@
 import EventEmitter from 'eventemitter3';
 import { TezlinkClient } from './tezlink.js';
-import { buildTezosToEvmCall } from '../use-cases/build-tezos-to-evm-call.js';
+import { buildTezosToEvmCall, UnknownSelectorError, SubMutezPrecisionError } from '../use-cases/build-tezos-to-evm-call.js';
 import { deriveEvmAlias } from '../use-cases/derive-alias.js';
 import { l1OpHashToEvmHash } from '../use-cases/build-synthetic-receipt.js';
 import { findRealHash } from '../use-cases/resolve-synthetic-hash.js';
@@ -232,8 +232,17 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
 
     devLog.info('[TezosX Relayer] eth_sendTransaction →', { to: tx.to, value: tx.value ?? '0x0', data: tx.data ?? '0x' });
 
-    // Build NAC gateway Micheline call (async: may resolve selector via 4byte.directory)
-    const { entrypoint, michelineArg, mutezAmount } = await buildTezosToEvmCall(tx);
+    let entrypoint: string;
+    let michelineArg: import('@taquito/rpc').MichelsonV1Expression;
+    let mutezAmount: bigint;
+    try {
+      ({ entrypoint, michelineArg, mutezAmount } = await buildTezosToEvmCall(tx));
+    } catch (err) {
+      if (err instanceof UnknownSelectorError || err instanceof SubMutezPrecisionError) {
+        throw rpcError(JSON_RPC_INVALID_PARAMS, err.message);
+      }
+      throw err;
+    }
     devLog.info('[TezosX Relayer] NAC call built →', { entrypoint, mutezAmount });
 
     // Record the EVM head block BEFORE submission — used later by the resolver

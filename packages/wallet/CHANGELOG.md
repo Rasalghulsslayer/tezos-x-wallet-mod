@@ -6,6 +6,40 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.11.0] — 2026-06-02
+
+Minor release hardening the signing path and the cross-runtime UX. Ships alongside `@tezosx/relayer` 0.5.3.
+
+### Changed
+- **Signature methods require an active session for the calling origin.** `eth_sendTransaction`, `personal_sign`, and `eth_signTypedData_v4` now reject with EIP-1193 code `4100` (unauthorised) if the origin has not previously gone through `eth_requestAccounts`. Previously these methods only checked that the wallet was unlocked; any tab could open an approval popup against the active account without a prior Connect handshake.
+- **Per-account pending-nonce serialisation in `EvmProvider`.** Concurrent `eth_sendTransaction` calls from the same dApp (or multiple dApps) used to fetch the same `'latest'` nonce in parallel, which caused one of the broadcasts to be dropped by the EVM node. The provider now maintains a FIFO queue and a local counter — first send seeds the counter from chain, subsequent sends increment locally; the counter resets to null on any send failure so the next send re-syncs from chain.
+- **Synthetic-hash resolver now correlates on sender ordering.** `findRealHash` previously matched the first un-claimed tx where `from` OR `to` equalled the alias. With two concurrent cross-runtime ops to/from the same alias, the wrong real hash could be attached to the wrong synthetic hash. The matcher now filters strictly on `from === alias` and sorts per-block candidates by `nonce` ascending, so concurrent syntheses claim their txs in submission order. `EvmTxSummary` gains an optional `nonce` field. (Persistence of `claimedHashes` across SW restarts is queued for a follow-up.)
+- **Approve popup for Tezos-source `eth_sendTransaction` now shows what is actually signed.** A new "What you actually sign" card sits below the dApp-intent card on the transaction approval screen, surfacing the Michelson target (`KT1…`), entrypoint (`default` or `call_evm`), 4-byte selector, and the mutez value that will actually move. The dApp-intent card (`To` / `Value` / `Data`) stays so the user can verify the two views match. EVM-source sends are unchanged.
+
+### Removed
+- **Remote 4byte.directory selector lookup in `buildTezosToEvmCall`.** Selectors are now resolved against an audited local registry only (`KNOWN_SIGNATURES` in [`build-tezos-to-evm-call.ts`](packages/relayer/src/use-cases/build-tezos-to-evm-call.ts)); unknown selectors throw a new `UnknownSelectorError` that the relayer translates to EIP-1193 `-32602`. Removes a supply-chain footgun (a poisoned `text_signature` would end up in the signed Micheline payload), a privacy leak (every selector the wallet saw used to be posted to the third party), and a liveness footgun (4byte downtime caused malformed signed payloads).
+
+### Added
+- **`SubMutezPrecisionError` in the relayer.** Wei amounts whose remainder modulo `10^12` is non-zero on a tz1 → 0x transfer used to be silently floor-divided to mutez — the loss was hidden from the user and the op still reported success. The relayer now throws on any sub-mutez remainder; the wallet translates to EIP-1193 `-32602`.
+- **`PendingTransaction.crossRuntime`** optional field in [`shared/messages.ts`](packages/wallet/src/shared/messages.ts): `{ michelsonTarget, entrypoint, decodedSelector, mutezValue }`. Populated by the SW dispatch when the active account is Tezos-kind; consumed by the Approve popup's new card.
+- **3 regression tests** in [`composition/__tests__/sw-wiring-multi-account.test.ts`](packages/wallet/src/composition/__tests__/sw-wiring-multi-account.test.ts) pinning the signature-method session-gating: `personal_sign`, `eth_sendTransaction`, `eth_signTypedData_v4` all reject with `4100` for an origin without a session. Suite total: 18 files, 160 tests.
+
+### Compatibility
+- **dApp behaviour:** dApps that never called `eth_requestAccounts` and assumed they could go straight to `eth_sendTransaction` will now receive `4100`. This is the standard EIP-1193 contract; MetaMask has enforced it since pre-2020. Real dApps go through Connect; only edge-case test scripts and malicious tabs are affected.
+- **Sub-mutez sends:** dApps that built tz1 → 0x transfers with `value` not divisible by `10^12` wei (1 mutez) will now receive a rejection instead of a silent floor. The wallet's own Send page already rounds to mutez precision; the rejection only fires for dApp-initiated payloads.
+- **Cross-runtime Approve card:** purely additive UI. The popup falls back to the legacy `To / Value / Data` layout for EVM-source accounts where `crossRuntime` is undefined.
+- **Storage / vault format unchanged.** No migration.
+- **Relayer pin** in the wallet stays at `^0.5.0`; 0.5.3 is picked up automatically.
+
+### Manual test plan
+1. From a tab that has never connected, run `await window.ethereum.request({ method: 'eth_sendTransaction', params: [{ to: '0x…', value: '0x0' }] })`. Receives `4100`, no popup opens.
+2. Click Connect, approve. Run the same — popup opens and (if active account is Tezos) the new "What you actually sign" card shows `KT18oDJJ…`, `default` (for bare transfer) or `call_evm` (for ERC-20 call), the 4-byte selector, and the mutez value.
+3. From a dApp console: fire two `eth_sendTransaction` back-to-back. Both succeed, second tx carries `nonce = first + 1`. Verify on Blockscout.
+4. Call `eth_sendTransaction` with `value: '0x1'` (1 wei, sub-mutez) — receives `-32602` "Amount … not divisible by 10^12".
+5. Call `eth_sendTransaction` with `data: '0xdeadbeef…'` against an unknown selector — receives `-32602` "Unknown function selector". No request to 4byte.directory (verify via DevTools Network tab).
+
+---
+
 ## [0.10.2] — 2026-06-02
 
 Security patch. Three audit findings closed at the wallet ↔ dApp boundary plus an infrastructure gap that was letting regressions through CI. Pairs with `@tezosx/relayer` 0.5.2 (which carries the synthetic-receipt fix). No vault format change, no message-type change.

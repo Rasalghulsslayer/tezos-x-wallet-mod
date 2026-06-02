@@ -1,11 +1,7 @@
 /**
  * Tests for the L2 finality model in pollL2: a Tezlink block is final when
- * its number is <= the `finalized` block tag's number. This replaces the
- * head - tx >= N heuristic that was incorrect for Tezos X (per Thomas
- * Letan's feedback on 2026-05-15, #techrel-tezosx-mvp).
- *
- * The L1 (TzKT) path keeps the Tenderbake 2-attestation logic — see the
- * companion cases at the bottom of this file.
+ * its number is <= the `finalized` block tag's number. The L1 (TzKT) path
+ * keeps Tenderbake 2-attestation logic — companion cases at the bottom.
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
