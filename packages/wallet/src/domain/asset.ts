@@ -1,18 +1,32 @@
 /**
- * Asset, AssetBalance, AssetId. Extended via the custom-token registry in W7.
+ * Asset discriminated union (xtz | erc20) + AssetBalance.
  */
 
-export type AssetId = 'XTZ' | 'USDC';
+export type AssetKind = 'xtz' | 'erc20';
 
-export interface Asset {
-  id:               AssetId;
-  symbol:           string;
-  decimals:         number;
-  runtime:          'michelson' | 'evm';
-  contractAddress?: string;
+export interface XtzAsset {
+  kind:     'xtz';
+  symbol:   'XTZ';
+  decimals: 6 | 18;             // 6 on L1 (mutez), 18 on L2 (wei)
+  runtime:  'michelson' | 'evm';
 }
+
+export interface Erc20Asset {
+  kind:     'erc20';
+  address:  string;             // lowercased; EIP-55 only at display time
+  symbol:   string;
+  name:     string;
+  decimals: number;
+  runtime:  'evm';              // ERC-20 tokens live on L2 only in 0.10.0
+}
+
+export type Asset = XtzAsset | Erc20Asset;
 
 export interface AssetBalance {
-  asset:  AssetId;
+  asset:  Asset;
   amount: bigint;
 }
+
+/** Canonical XtzAsset values. `amount` is in mutez when L1, wei when L2. */
+export const XTZ_L1_ASSET: XtzAsset = { kind: 'xtz', symbol: 'XTZ', decimals: 6,  runtime: 'michelson' };
+export const XTZ_L2_ASSET: XtzAsset = { kind: 'xtz', symbol: 'XTZ', decimals: 18, runtime: 'evm' };

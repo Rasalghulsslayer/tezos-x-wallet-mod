@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import type { TxStatus } from '@/domain/tx-status';
+import type { Asset } from '@/domain/asset';
 import { FINALIZED_AFTER_BLOCKS } from '@/shared/constants';
-
-type Asset = 'XTZ' | 'USDC';
 
 interface Props {
   status:  TxStatus;
@@ -20,7 +19,7 @@ export function StatusHero({ status, runtime, amount, asset, to }: Props) {
       <div>
         <h2 className="tx-status-hero-title">{titleFor(status)}</h2>
         <div className="tx-status-hero-amt">
-          <span className="num">{amount}</span> {asset} → {to}
+          <span className="num">{amount}</span> {asset.symbol} → {to}
         </div>
         <div className="tx-status-hero-route">{routeFor(status, runtime)}</div>
       </div>

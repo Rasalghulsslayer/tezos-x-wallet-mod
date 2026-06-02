@@ -7,7 +7,7 @@
  * than a pre-rendered title string.
  */
 
-import { mutezToXtz, shortAddr, weiToXtz, formatUsdc } from '../../shared/format';
+import { formatTokenAmount, shortAddr } from '../../shared/format';
 import type { ActivityItem } from '../../domain/activity';
 
 export type RuntimeBadge = 'l1' | 'l2' | 'cross';
@@ -31,15 +31,7 @@ export interface ActivityRowVM {
 
 function fmtAmount(item: ActivityItem): string {
   if (item.kind !== 'transfer') return '';
-  if (item.asset === 'USDC') return formatUsdc('0x' + BigInt(item.amount).toString(16));
-  // tz1 amounts (TzKT) are mutez; EVM-side amounts (Blockscout, including
-  // the evm-to-tezos precompile path) are wei.
-  const sourceIsWei =
-    item.runtime === 'l2'
-    || item.crossRuntime?.direction === 'evm-to-tezos';
-  return sourceIsWei
-    ? weiToXtz('0x' + BigInt(item.amount).toString(16))
-    : mutezToXtz(item.amount);
+  return formatTokenAmount(item.amount, item.asset.decimals);
 }
 
 function runtimeBadgeOf(item: ActivityItem): RuntimeBadge {
@@ -115,7 +107,7 @@ export function activityRowVM(item: ActivityItem, nowMs: number = Date.now()): A
       runtimeBadge,
       runtimeTag,
       amount:       { value: fmtAmount(item), sign },
-      asset:        item.asset,
+      asset:        item.asset.symbol,
       status:       item.status,
       ago,
       identicon:    item.counterparty || item.id,

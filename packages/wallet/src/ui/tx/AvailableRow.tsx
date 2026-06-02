@@ -1,4 +1,4 @@
-type Asset = 'XTZ' | 'USDC';
+import type { Asset } from '@/domain/asset';
 
 export function AvailableRow({
   available,
@@ -29,7 +29,7 @@ export function AvailableRow({
         <span className="tx-avail-sep">·</span>
         {loading
           ? <span className="tx-skel tx-skel-num" aria-hidden="true" />
-          : <span className="tx-avail-num">{available} {asset}</span>
+          : <span className="tx-avail-num">{available} {asset.symbol}</span>
         }
       </span>
       <button

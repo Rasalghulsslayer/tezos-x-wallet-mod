@@ -25,6 +25,8 @@ import type { ActivityFetcher } from '../ports/activity-fetcher';
 import type { VaultStore } from '../ports/vault-store';
 import type { SessionStore } from '../ports/session-store';
 import type { NotificationPort } from '../ports/notification-port';
+import type { TokenStore } from '../ports/token-store';
+import { ChromeTokenStore } from '../adapters/chrome/chrome-token-store';
 import type { TezosAccount, EvmAccount, AccountId } from '../domain/account';
 
 export type UnlockedSecrets =
@@ -60,20 +62,23 @@ export interface Container {
   activitySources:  ActivitySources;
   vaultStore:       VaultStore;
   sessionStore:     SessionStore;
+  tokenStore:       TokenStore;
   notifications:    NotificationPort;
 }
 
 export interface PersistentPorts {
   vaultStore:    VaultStore;
   sessionStore:  SessionStore;
+  tokenStore:    TokenStore;
   notifications: NotificationPort;
 }
 
 const vaultStore:    VaultStore       = new ChromeVaultStore();
 const sessionStore:  SessionStore     = new ChromeSessionStore();
+const tokenStore:    TokenStore       = new ChromeTokenStore();
 const notifications: NotificationPort = new ChromeNotificationPort();
 
-export const persistentPorts: PersistentPorts = { vaultStore, sessionStore, notifications };
+export const persistentPorts: PersistentPorts = { vaultStore, sessionStore, tokenStore, notifications };
 
 export function buildContainer(secrets: UnlockedSecrets): Container {
   if (secrets.kind === 'tezos') {
@@ -87,16 +92,17 @@ export function buildContainer(secrets: UnlockedSecrets): Container {
     };
     const signer   = new TezosSigner(account, secrets.secretKey);
     const provider = new RelayerProvider(signer);
+    const tokenList = () => tokenStore.list(account.id);
     return {
       signer,
       provider,
       balanceFetcher:  new TezosBalanceFetcher(),
       activitySources: {
         tezos:       new TezosActivityFetcher(),
-        evm:         new EvmActivityFetcher(),
+        evm:         new EvmActivityFetcher(undefined, tokenList),
         pendingOps:  () => provider.listPendingOps(),
       },
-      vaultStore, sessionStore, notifications,
+      vaultStore, sessionStore, tokenStore, notifications,
     };
   }
 
@@ -108,13 +114,14 @@ export function buildContainer(secrets: UnlockedSecrets): Container {
     publicKey: secrets.publicKey,
     createdAt: secrets.createdAt,
   };
-  const signer   = new EvmSigner(account, secrets.privateKey);
-  const provider = new EvmProvider(signer, TEZLINK_EVM_RPC);
+  const signer    = new EvmSigner(account, secrets.privateKey);
+  const provider  = new EvmProvider(signer, TEZLINK_EVM_RPC);
+  const tokenList = () => tokenStore.list(account.id);
   return {
     signer,
     provider,
     balanceFetcher:  new EvmBalanceFetcher(),
-    activitySources: { evm: new EvmActivityFetcher() },
-    vaultStore, sessionStore, notifications,
+    activitySources: { evm: new EvmActivityFetcher(undefined, tokenList) },
+    vaultStore, sessionStore, tokenStore, notifications,
   };
 }

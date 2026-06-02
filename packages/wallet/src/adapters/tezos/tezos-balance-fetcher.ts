@@ -7,8 +7,7 @@
 import { TezlinkClient } from '@tezosx/relayer/tezlink';
 import { TEZOS_L1_RPC } from '@tezosx/relayer/constants';
 import type { BalanceFetcher } from '../../ports/balance-fetcher';
-import type { AssetId } from '../../domain/asset';
-import { USDC_CONTRACT } from '../../shared/constants';
+import type { Asset } from '../../domain/asset';
 
 const tezlink = new TezlinkClient();
 
@@ -36,15 +35,17 @@ export async function fetchErc20Balance(token: string, holder: string): Promise<
 }
 
 export class TezosBalanceFetcher implements BalanceFetcher {
-  async balanceOf(holder: string, asset: AssetId): Promise<bigint> {
-    if (asset === 'XTZ') {
+  /**
+   * `holder` is interpreted based on `asset.runtime`:
+   *   - asset.kind === 'xtz' with runtime 'michelson' → tz1, hits TzKT for mutez balance
+   *   - asset.kind === 'erc20' (always 'evm' runtime) → 0x EVM alias of the tz1
+   */
+  async balanceOf(holder: string, asset: Asset): Promise<bigint> {
+    if (asset.kind === 'xtz') {
       const mutez = await fetchL1XtzBalance(holder);
       return BigInt(mutez);
     }
-    if (asset === 'USDC') {
-      const hex = await fetchErc20Balance(USDC_CONTRACT, holder);
-      return BigInt(hex);
-    }
-    throw new Error(`Unsupported asset for TezosBalanceFetcher: ${asset}`);
+    const hex = await fetchErc20Balance(asset.address, holder);
+    return BigInt(hex);
   }
 }

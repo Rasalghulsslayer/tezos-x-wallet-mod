@@ -20,3 +20,6 @@ export * from './remove-account';
 export * from './set-active-account';
 export * from './rename-account';
 export * from './list-accounts';
+export * from './add-custom-token';
+export * from './remove-custom-token';
+export * from './list-registered-tokens';

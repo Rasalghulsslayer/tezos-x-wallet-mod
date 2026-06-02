@@ -7,6 +7,8 @@
 
 import type { Keyring } from '../background/keyring';
 import type { AccountKind, AccountId, AddAccountSource, Account } from '../domain/account';
+import type { TokenStore } from '../ports/token-store';
+import { seedDefaultTokensForAccount } from '../shared/seed-default-tokens';
 
 export interface AddAccountReq {
   kind:   AccountKind;
@@ -15,7 +17,8 @@ export interface AddAccountReq {
 }
 
 export interface AddAccountDeps {
-  keyring: Keyring;
+  keyring:    Keyring;
+  tokenStore: TokenStore;
 }
 
 export interface AddAccountResult {
@@ -25,10 +28,9 @@ export interface AddAccountResult {
 }
 
 export async function addAccount(req: AddAccountReq, deps: AddAccountDeps): Promise<AddAccountResult> {
-  if (req.kind === 'tezos') {
-    const { accountId, account, mnemonic } = await deps.keyring.addTezosAccount(req.source, req.label);
-    return { accountId, account, secret: mnemonic };
-  }
-  const { accountId, account, privateKey } = await deps.keyring.addEvmAccount(req.source, req.label);
-  return { accountId, account, secret: privateKey };
+  const result = req.kind === 'tezos'
+    ? await deps.keyring.addTezosAccount(req.source, req.label).then((r) => ({ accountId: r.accountId, account: r.account as Account, secret: r.mnemonic }))
+    : await deps.keyring.addEvmAccount(req.source, req.label).then((r) => ({ accountId: r.accountId, account: r.account as Account, secret: r.privateKey }));
+  await seedDefaultTokensForAccount(result.accountId, deps.tokenStore);
+  return result;
 }

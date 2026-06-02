@@ -1,13 +1,12 @@
 /**
  * EvmBalanceFetcher: balance reads for an EVM-native account via the
- * Tezlink EVM RPC. Native XTZ via eth_getBalance, ERC-20 (USDC) via
- * eth_call to balanceOf(address).
+ * Tezlink EVM RPC. XTZ via eth_getBalance; ERC-20 via eth_call to
+ * balanceOf(holder) at the token contract address.
  */
 
 import { TEZLINK_EVM_RPC } from '@tezosx/relayer/constants';
 import type { BalanceFetcher } from '../../ports/balance-fetcher';
-import type { AssetId } from '../../domain/asset';
-import { USDC_CONTRACT } from '../../shared/constants';
+import type { Asset } from '../../domain/asset';
 
 const BALANCE_OF_SELECTOR = '0x70a08231';
 
@@ -27,18 +26,15 @@ async function jsonRpc<T>(method: string, params: unknown[]): Promise<T> {
 }
 
 export class EvmBalanceFetcher implements BalanceFetcher {
-  async balanceOf(holder: string, asset: AssetId): Promise<bigint> {
-    if (asset === 'XTZ') {
+  async balanceOf(holder: string, asset: Asset): Promise<bigint> {
+    if (asset.kind === 'xtz') {
       const hex = await jsonRpc<string>('eth_getBalance', [holder, 'latest']);
       return BigInt(hex);
     }
-    if (asset === 'USDC') {
-      const hex = await jsonRpc<string>('eth_call', [
-        { to: USDC_CONTRACT, data: BALANCE_OF_SELECTOR + encodeAddressParam(holder) },
-        'latest',
-      ]);
-      return BigInt(hex);
-    }
-    throw new Error(`Unsupported asset for EvmBalanceFetcher: ${asset}`);
+    const hex = await jsonRpc<string>('eth_call', [
+      { to: asset.address, data: BALANCE_OF_SELECTOR + encodeAddressParam(holder) },
+      'latest',
+    ]);
+    return BigInt(hex);
   }
 }

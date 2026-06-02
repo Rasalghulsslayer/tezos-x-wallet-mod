@@ -46,3 +46,25 @@ export const MAX_LABEL_LENGTH          = 32;
 
 /** SW container cache (LRU); each entry ~5–10 KB of JS. */
 export const CONTAINER_CACHE_SIZE      = 16;
+
+/** Custom-token registry caps + tuning. */
+export const MAX_TOKENS_PER_ACCOUNT    = 30;
+export const TOKEN_METADATA_TIMEOUT_MS = 5_000;
+
+/**
+ * Default tokens seeded into every account's registry on first 0.10.0 unlock
+ * (CT4 wires the auto-seed step). In 0.10.0 the seed is just USDC; multi-token
+ * seeding is straightforward via this array.
+ */
+export const DEFAULT_TOKENS_PER_RUNTIME = [
+  {
+    address:  USDC_CONTRACT.toLowerCase(),
+    symbol:   'USDC',
+    name:     'USD Coin',
+    decimals: 6,
+    builtin:  true,
+  },
+] as const;
+
+/** Tezos X Previewnet chain ID — scoped in the token-registry storage key for forward-compat. */
+export const PREVIEWNET_CHAIN_ID       = 128064;

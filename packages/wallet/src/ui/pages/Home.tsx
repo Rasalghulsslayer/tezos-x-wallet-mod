@@ -7,8 +7,8 @@ import {
   fetchXtzBalance,
   fetchErc20Balance,
 } from '@/adapters/tezos/tezos-balance-fetcher';
-import { USDC_CONTRACT, FAUCET_URL } from '@/shared/constants';
-import { mutezToXtz, weiToXtz, formatUsdc } from '@/shared/format';
+import { FAUCET_URL } from '@/shared/constants';
+import { mutezToXtz, weiToXtz } from '@/shared/format';
 import { sendPopupRequest } from '@/shared/messaging';
 import { formatError } from '@/domain/error';
 import { AccountHeader } from '../tx/AccountHeader';
@@ -17,18 +17,14 @@ import { RenameModal } from '../tx/RenameModal';
 import { RemoveAccountModal } from '../tx/RemoveAccountModal';
 import { IconBtn } from '../tx/Button';
 import { Icon } from '../tx/Icon';
-import { AssetMark } from '../tx/AssetMark';
+import { AssetRow } from '../tx/AssetRow';
+import { assetRowVM } from '../view-models/asset-row-vm';
+import { XTZ_L1_ASSET, XTZ_L2_ASSET, type Erc20Asset } from '@/domain/asset';
+import type { RegisteredToken } from '@/domain/token';
 import { TopBar } from '../tx/TopBar';
 import { BottomTabs } from '../tx/BottomTabs';
 import { Badge } from '../tx/Badge';
 import { errorToast } from '../tx/Toast';
-
-interface Balances {
-  /** Native XTZ balance for the active runtime (mutez for tz1, wei for 0x). */
-  xtz:  string;
-  /** ERC-20 USDC balance on the EVM-visible address. */
-  usdc: string;
-}
 
 type AssetFilter = 'all' | 'l1' | 'l2';
 
@@ -36,13 +32,16 @@ const isSidePanel = new URLSearchParams(window.location.search).get('mode') === 
 
 export function Home({ state, onChanged }: { state: VaultState; onChanged: () => void }) {
   const navigate = useNavigate();
-  const [bal, setBal]                   = useState<Balances | null>(null);
+  const [xtz, setXtz]                   = useState<string | null>(null);
   const [loading, setLd]                = useState(true);
   const [assetFilter, setAssetFilter]   = useState<AssetFilter>('all');
   const [balanceHidden, setBalanceHidden] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<AccountSummary | null>(null);
   const [removeTarget, setRemoveTarget] = useState<AccountSummary | null>(null);
+  const [customTokens, setCustomTokens] = useState<RegisteredToken[]>([]);
+  /** Map<lowercased token address, formatted balance string>. Empty when not yet loaded. */
+  const [tokenBalances, setTokenBalances] = useState<Record<string, string>>({});
 
   const refresh = async () => {
     if (state.status !== 'unlocked') return;
@@ -55,24 +54,29 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
         ? fetchL1XtzBalance(xtzAddress).then(mutezToXtz)
         : fetchXtzBalance(xtzAddress).then(weiToXtz);
 
-      const [xtzRes, usdcRes] = await Promise.allSettled([
+      const tokens = await sendPopupRequest<RegisteredToken[]>({ type: 'LIST_REGISTERED_TOKENS' }).catch(() => [] as RegisteredToken[]);
+      setCustomTokens(tokens);
+
+      const tokenFetches = tokens.map((t) =>
+        fetchErc20Balance(t.address, evmAddress).then((hex) => [t.address.toLowerCase(), hex] as const),
+      );
+
+      const [xtzRes, ...tokenRes] = await Promise.allSettled([
         xtzFetch,
-        fetchErc20Balance(USDC_CONTRACT, evmAddress).then(formatUsdc),
+        ...tokenFetches,
       ]);
-      if (xtzRes.status  === 'rejected') console.error('[Home] XTZ fetch failed',  xtzRes.reason);
-      if (usdcRes.status === 'rejected') console.error('[Home] USDC fetch failed', usdcRes.reason);
+      if (xtzRes.status === 'rejected') console.error('[Home] XTZ fetch failed', xtzRes.reason);
 
-      const xtz  = xtzRes.status  === 'fulfilled' ? xtzRes.value  : '—';
-      const usdc = usdcRes.status === 'fulfilled' ? usdcRes.value : '0.00';
-      setBal({ xtz, usdc });
+      setXtz(xtzRes.status === 'fulfilled' ? xtzRes.value : '—');
 
-      const reason = xtzRes.status === 'rejected'
-        ? xtzRes.reason
-        : usdcRes.status === 'rejected'
-          ? usdcRes.reason
-          : null;
-      if (reason != null) {
-        const e = formatError(reason);
+      const balances: Record<string, string> = {};
+      for (const r of tokenRes) {
+        if (r.status === 'fulfilled') balances[r.value[0]] = r.value[1];
+      }
+      setTokenBalances(balances);
+
+      if (xtzRes.status === 'rejected') {
+        const e = formatError(xtzRes.reason);
         errorToast({
           message:   e.title,
           secondary: e.code === 'rpc-unreachable' ? '· network'
@@ -103,15 +107,13 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
   const activeLabel    = activeSummary?.label?.trim()
     || (activeSummary != null ? `Account ${activeIdx + 1}` : 'Account');
 
-  const xtzNum     = bal ? parseFloat(bal.xtz)  || 0 : 0;
-  const usdcNum    = bal ? parseFloat(bal.usdc) || 0 : 0;
+  const xtzNum     = xtz != null ? parseFloat(xtz) || 0 : 0;
   const fmtBalance = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
-  const fmtUsdc    = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const isEvm      = state.kind === 'evm';
   const xtzChain: 'l1' | 'l2' = isEvm ? 'l2' : 'l1';
 
   const xtzVisible  = assetFilter === 'all' || assetFilter === xtzChain;
-  const usdcVisible = assetFilter === 'all' || assetFilter === 'l2';
+  const tokensVisible = assetFilter === 'all' || assetFilter === 'l2';
 
   const setActive = async (id: AccountId) => {
     setSwitcherOpen(false);
@@ -209,7 +211,7 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
         <div className="tx-home-balance">
           <div className="kicker">Balance</div>
           <div className="num">
-            <span>{balanceHidden ? '••••••' : (bal ? fmtBalance(xtzNum) : '—')}</span>
+            <span>{balanceHidden ? '••••••' : (xtz != null ? fmtBalance(xtzNum) : '—')}</span>
             <span className="unit">XTZ</span>
           </div>
           <button
@@ -278,42 +280,37 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
         </div>
 
         {xtzVisible && (
-          <div className="tx-home-asset-row">
-            <div className="glyph-wrap">
-              <AssetMark asset="xtz" />
-              <span className="runtime-pip" aria-hidden>
-                <span className={`core ${xtzChain}`} />
-              </span>
-            </div>
-            <div className="body">
-              <div className="nm">XTZ</div>
-              <div className="runtime">{isEvm ? 'EVM runtime' : 'Michelson runtime'}</div>
-            </div>
-            <div className="amt">
-              <div className="v">{balanceHidden ? '••••' : (bal ? fmtBalance(xtzNum) : '—')}</div>
-            </div>
-          </div>
+          <AssetRow
+            vm={assetRowVM(isEvm ? XTZ_L2_ASSET : XTZ_L1_ASSET, null)}
+            displayBalance={balanceHidden ? '••••' : (xtz != null ? fmtBalance(xtzNum) : '—')}
+          />
         )}
 
-        {usdcVisible && (
-          <div className="tx-home-asset-row">
-            <div className="glyph-wrap">
-              <AssetMark asset="usdc" />
-              <span className="runtime-pip" aria-hidden>
-                <span className="core l2" />
-              </span>
-            </div>
-            <div className="body">
-              <div className="nm">USDC</div>
-              <div className="runtime">EVM runtime</div>
-            </div>
-            <div className="amt">
-              <div className="v">{balanceHidden ? '••••' : (bal ? fmtUsdc(usdcNum) : '—')}</div>
-            </div>
-          </div>
-        )}
+        {tokensVisible && customTokens.map((t) => {
+          const asset: Erc20Asset = {
+            kind: 'erc20', address: t.address, symbol: t.symbol, name: t.name,
+            decimals: t.decimals, runtime: 'evm',
+          };
+          const rawHex = tokenBalances[t.address.toLowerCase()];
+          return (
+            <AssetRow
+              key={t.address}
+              vm={assetRowVM(asset, rawHex ?? null)}
+              displayBalance={balanceHidden ? '••••' : (rawHex != null ? assetRowVM(asset, rawHex).balanceFormatted : '—')}
+            />
+          );
+        })}
 
-        {!loading && !xtzVisible && !usdcVisible && (
+        <button
+          type="button"
+          className="tx-home-add-token"
+          onClick={() => navigate('/tokens/add')}
+        >
+          <Icon name="plus" size={13} />
+          <span>Add token</span>
+        </button>
+
+        {!loading && !xtzVisible && !tokensVisible && customTokens.length === 0 && (
           <div style={{ padding: 32, textAlign: 'center', color: 'var(--tx-fg-muted)', fontSize: 12 }}>
             No assets on this runtime.
           </div>

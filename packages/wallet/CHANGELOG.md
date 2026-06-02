@@ -6,6 +6,51 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.10.0] — 2026-06-02
+
+### Added
+- **Custom ERC-20 token support, end-to-end.** Users can register any ERC-20 deployed on the Tezos X EVM runtime by pasting its contract address. The wallet reads `symbol()` / `decimals()` / `name()` via three `eth_call`s in `Promise.allSettled` (handles both `string` and `bytes32` encodings, falls back to short-address symbol on metadata failure, throws `NotErc20Error` when `decimals()` rejects). Up to `MAX_TOKENS_PER_ACCOUNT = 30` tokens per account, persisted in `chrome.storage.local` under `customTokens:<chainId>:<accountId>`. The token then renders identically to native assets across Home, Send, Activity.
+- **`AddToken` flow at `/tokens/add`.** Three stages — paste address → confirm metadata → submit. The paste stage validates the 0x shape locally (regex), then dedupes against the active account's registry before any network call. The confirm stage shows symbol (28px / 600), name, the truncated contract address, and a seamed metadata card where **decimals carries the most visual weight** because it's the only field that can silently corrupt a balance. The flow wears the cyan EVM-runtime accent — `variant="accent-cyan"` on the primary CTA — to mark ERC-20s as L2 objects.
+- **`tryAnyway` path for non-standard contracts.** When `decimals()` rejects, the user can engage Try anyway; the wallet defaults to 18 decimals and surfaces a non-dismissable yellow band above the metadata explaining the silent-failure risk in plain terms, with a Blockscout deep-link to verify the actual decimals before sending. The decimals row tags the value with an "assumed" pill in warning yellow.
+- **`PEEK_CUSTOM_TOKEN` message + `peek-custom-token` use case** — read-only counterpart to `ADD_CUSTOM_TOKEN`. Runs the same validation + metadata fetch but does not write to the store. The confirm stage previews via PEEK; only the "Add {symbol}" CTA in confirm fires the actual `ADD_CUSTOM_TOKEN` write. Cancel = navigate, no cleanup. This closes the cancel-leaves-token-in-registry bug from the prototype.
+- **`TokensSettings` page at `/tokens`** — list of registered tokens with per-row Remove. USDC seeds with `builtin: true` (see Changed below) and renders Remove as disabled with a tooltip.
+- **`AddToken` accessible from two surfaces.** Settings → Manage tokens, and the "+" affordance on Home's assets list. Both navigate to `/tokens/add`.
+- **`AssetRow`, `AssetSelector`, `assetRowVM` extracted as design-system components.** Home iterates `[xtzAsset, ...registeredTokens]` through `AssetRow`; Send's asset selector uses `AssetSelector` over the same list. Generic ERC-20 fallback icon (first-letter bubble in `--tx-surface-3` with `--tx-fg-muted`) since no logo fetch ships in 0.10.0.
+- **Activity feed now decodes ERC-20 Transfer events** for every token in the per-account registry. `EvmActivityFetcher` queries Blockscout's `tokentx` endpoint and filters by the registry; each Transfer surfaces as an `ActivityTransferItem` with the right `direction` (`sent`/`received` based on `from`/`to` match), the right decimals (read from the registry entry), the right symbol, and an `id` keyed on `l2-erc20:<txHash>:<logIndex>` to dedupe across paginations. USDC transfers now appear in Activity — they did not before 0.10.0.
+- **`formatTokenAmount(rawHex, decimals)` in `shared/format.ts`.** Generic helper; `mutezToXtz` and `weiToXtz` become thin wrappers. Arbitrary-decimal tokens (WXTZ at 18, future tokens at any value the contract reports) render correctly.
+
+### Changed
+- **USDC is internally re-modelled as a default-seeded ERC-20.** On every unlock and on every new account creation, `seedDefaultTokensForAccount` inserts the USDC entry (`address: 0xd77420…b0344`, `symbol: 'USDC'`, `decimals: 6`, `name: 'USD Coin'`, `builtin: true`) into the active account's registry if missing. Idempotent — re-running is a single `chrome.storage.local.get` + zero writes. Builtin tokens cannot be removed (Settings → Manage tokens renders the Remove button as disabled with a tooltip). **No user-visible change to the USDC row on Home or the USDC Send flow** — the redirection is purely internal, so the 12+ `if (asset === 'USDC')` branches across the codebase collapse to "iterate registered tokens".
+- **`Asset` is now a discriminated union** over `{ kind: 'xtz' } | { kind: 'erc20', address, symbol, name, decimals, runtime: 'evm' }`. Replaces the legacy `AssetId = 'XTZ' | 'USDC'` string literal alias (removed). `BalanceFetcher.balanceOf(holder, asset: Asset)` and `SEND_TX.asset: Asset` are the load-bearing signatures. Every consumer (Home, Send, RoutingCard, InsufficientWarning, AvailableRow, StatusHero, activity-vm) now narrows on `asset.kind`.
+- **The "USDC can't go to L1" rule generalises to any ERC-20.** `RoutingCard` now blocks any `Erc20Asset` destination on `l1` with the copy "{symbol} only exists on the EVM runtime — enter a 0x address" (symbol read from the asset, no longer hardcoded). Send's `erc20OnL1` predicate gates the form submission.
+- **Container rebuild on token mutations.** `ADD_CUSTOM_TOKEN` and `REMOVE_CUSTOM_TOKEN` both trigger `rebuildContainer()` in the SW dispatch so `EvmActivityFetcher`'s `tokenList` closure picks up the new registry on the next poll. `PEEK_CUSTOM_TOKEN` does not rebuild — it's read-only.
+- **AddToken redesign.** New 3-stage shell that **states what it wants** in one line (an 18px / 600 prompt above a 52px mono field with a Paste affordance and a live byte counter) and rebuilds the confirm screen around a typographic ramp ranked by consequence-of-error rather than reading order — symbol at 28 / 600, decimals at 14 / 600, everything else at 12. Loading between paste and confirm uses a skeleton calibrated to the confirm layout's exact rhythm (mark 48, symbol bar 96×22, name 130×12, three rows on a seamed card) so the resolved screen lands without a reflow jump. ~280 lines of new `.tx-addtoken-*` classes appended to `ui/styles.css`; no new design tokens.
+
+### Removed
+- **`formatUsdc`** from `shared/format.ts`. Every call site uses `formatTokenAmount(rawHex, asset.decimals)` with the token's actual decimals read from the registry entry.
+- **`AssetId`** type alias and **`USDC_ASSET`** export from `domain/asset.ts`. Both replaced by the `Asset` discriminated union plus the seed entry in `DEFAULT_TOKENS_PER_RUNTIME`.
+
+### Compatibility
+- **No vault format change.** The `customTokens:<chainId>:<accountId>` storage key is brand new; no collision with existing keys.
+- **USDC auto-seed runs at first 0.10.0 unlock per account, then is a no-op.** Vaults created on 0.9.x get USDC seeded on their next unlock; nothing is destroyed.
+- **Activity cursor stays opaque.** CT2's `tokentx` cursor sits alongside the existing TzKT and Blockscout txlist cursors in the same base64 JSON blob; older clients ignore the new key.
+- **Relayer pin unchanged at `^0.5.0`.** No relayer change shipped with 0.10.0 — `fetchErc20Metadata` lives in `wallet/src/shared/erc20-metadata.ts`. If a third-party SDK consumer surfaces in 0.10.x, this is a candidate for the 0.5.2 patch.
+- **RPC load (informational).** With 30 registered tokens per account and Home's ~30s refresh, the wallet fires ~1 `eth_call` per second on average; Activity's Blockscout `tokentx` endpoint adds a third HTTP request per refresh cycle. Not catastrophic; if previewnet usage in 0.10.x shows rate-limit hits the natural patch is a `Multicall3`-backed batched balance read.
+
+### Manual test plan
+1. **Vault from 0.9.x.** Unlock → Home shows XTZ + USDC (USDC seeded on first unlock). Lock + unlock → USDC still there, no duplicate. Settings → Manage tokens → USDC present, Remove disabled with tooltip.
+2. **Fresh install.** Welcome → Create → Tezos. Home shows XTZ + USDC. Add a second account → its registry is seeded with USDC at add-account time.
+3. **Add a custom token.** Home → "+" → `/tokens/add` → paste a known ERC-20 address → confirm metadata → token appears on Home. Cancel mid-confirm (Cancel button) → token is **not** in the registry (peek-then-commit).
+4. **`tryAnyway` path.** Paste a non-ERC-20 address → ErrorCard "This contract doesn't look like an ERC-20" → Try anyway → yellow non-dismissable warning band on confirm, decimals tagged "assumed" → user can verify on Blockscout via deep-link, then commit or cancel.
+5. **Send a custom token.** Send → asset selector → pick the custom token → 0x destination → routing card shows "ERC-20 transfer · routed via NAC gateway"; tz1 destination → ErrorInline "{symbol} only exists on the EVM runtime".
+6. **Activity decoding.** USDC transfer (Send completes) → row appears in Activity with the right symbol, decimals, runtime tag, direction. Same for the custom token added in step 3.
+7. **Multi-account isolation.** Switch active account → Home shows the seeded USDC + that account's custom tokens; the custom token added on account 1 is **not** visible on account 2.
+8. **Settings → Manage tokens → Remove** on the user-added token → confirmation → disappears from Home and Activity. USDC stays.
+9. **Address grep sanity.** `grep -rn "formatUsdc\|AssetId\|USDC_ASSET" packages/wallet/src/` — zero hits outside test fixtures.
+10. **Build.** `npm run typecheck -w @tezosx/wallet` (green), `npm run test -w @tezosx/wallet` (141 / 141), `npm run build -w @tezosx/wallet` (green, `[postbuild] manifest.json sanitized`, no `approve.html` in WAR, `frame-ancestors 'none'` preserved).
+
+---
+
 ## [0.9.0] — 2026-05-21
 
 ### Added

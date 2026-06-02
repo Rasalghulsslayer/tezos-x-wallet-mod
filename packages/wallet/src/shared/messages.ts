@@ -6,6 +6,7 @@
 import type { RequestArguments } from '@tezosx/relayer/types';
 import type { ActivityFilter, ActivityPage } from '../domain/activity';
 import type { AccountSummary, AccountKind, AccountId, AddAccountSource } from '../domain/account';
+import type { Asset } from '../domain/asset';
 
 export type { ActivityFilter, ActivityPage, AccountSummary, AddAccountSource };
 
@@ -78,7 +79,7 @@ export type PopupRequest =
   | { type: 'UNLOCK';        password: string }
   | { type: 'LOCK' }
   | { type: 'EXPORT_SEED';   password: string; accountId?: AccountId }
-  | { type: 'SEND_TX';       to: string; amount: string; asset: 'XTZ' | 'USDC' }
+  | { type: 'SEND_TX';       to: string; amount: string; asset: Asset }
   | { type: 'RESOLVE_TX';    syntheticHash: string }
   | { type: 'LIST_PENDING' }
   | { type: 'LIST_SESSIONS' }
@@ -88,7 +89,11 @@ export type PopupRequest =
   | { type: 'REMOVE_ACCOUNT';     accountId: AccountId; password: string }
   | { type: 'SET_ACTIVE_ACCOUNT'; accountId: AccountId }
   | { type: 'RENAME_ACCOUNT';     accountId: AccountId; label: string }
-  | { type: 'LIST_ACCOUNTS' };
+  | { type: 'LIST_ACCOUNTS' }
+  | { type: 'PEEK_CUSTOM_TOKEN';   address: string; tryAnyway?: boolean }
+  | { type: 'ADD_CUSTOM_TOKEN';    address: string; tryAnyway?: boolean }
+  | { type: 'REMOVE_CUSTOM_TOKEN'; address: string }
+  | { type: 'LIST_REGISTERED_TOKENS' };
 
 // ── Approve.html → Service Worker ─────────────────────────────────────────────
 
