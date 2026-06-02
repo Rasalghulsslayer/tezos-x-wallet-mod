@@ -26,15 +26,11 @@ import { BottomTabs } from '../tx/BottomTabs';
 import { Badge } from '../tx/Badge';
 import { errorToast } from '../tx/Toast';
 
-type AssetFilter = 'all' | 'l1' | 'l2';
-
 const isSidePanel = new URLSearchParams(window.location.search).get('mode') === 'side';
 
 export function Home({ state, onChanged }: { state: VaultState; onChanged: () => void }) {
   const navigate = useNavigate();
   const [xtz, setXtz]                   = useState<string | null>(null);
-  const [loading, setLd]                = useState(true);
-  const [assetFilter, setAssetFilter]   = useState<AssetFilter>('all');
   const [balanceHidden, setBalanceHidden] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<AccountSummary | null>(null);
@@ -45,48 +41,43 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
 
   const refresh = async () => {
     if (state.status !== 'unlocked') return;
-    setLd(true);
-    try {
-      const xtzAddress = state.kind === 'tezos' ? state.tz1     : state.address;
-      const evmAddress = state.kind === 'tezos' ? state.evmAlias : state.address;
+    const xtzAddress = state.kind === 'tezos' ? state.tz1     : state.address;
+    const evmAddress = state.kind === 'tezos' ? state.evmAlias : state.address;
 
-      const xtzFetch = state.kind === 'tezos'
-        ? fetchL1XtzBalance(xtzAddress).then(mutezToXtz)
-        : fetchXtzBalance(xtzAddress).then(weiToXtz);
+    const xtzFetch = state.kind === 'tezos'
+      ? fetchL1XtzBalance(xtzAddress).then(mutezToXtz)
+      : fetchXtzBalance(xtzAddress).then(weiToXtz);
 
-      const tokens = await sendPopupRequest<RegisteredToken[]>({ type: 'LIST_REGISTERED_TOKENS' }).catch(() => [] as RegisteredToken[]);
-      setCustomTokens(tokens);
+    const tokens = await sendPopupRequest<RegisteredToken[]>({ type: 'LIST_REGISTERED_TOKENS' }).catch(() => [] as RegisteredToken[]);
+    setCustomTokens(tokens);
 
-      const tokenFetches = tokens.map((t) =>
-        fetchErc20Balance(t.address, evmAddress).then((hex) => [t.address.toLowerCase(), hex] as const),
-      );
+    const tokenFetches = tokens.map((t) =>
+      fetchErc20Balance(t.address, evmAddress).then((hex) => [t.address.toLowerCase(), hex] as const),
+    );
 
-      const [xtzRes, ...tokenRes] = await Promise.allSettled([
-        xtzFetch,
-        ...tokenFetches,
-      ]);
-      if (xtzRes.status === 'rejected') console.error('[Home] XTZ fetch failed', xtzRes.reason);
+    const [xtzRes, ...tokenRes] = await Promise.allSettled([
+      xtzFetch,
+      ...tokenFetches,
+    ]);
+    if (xtzRes.status === 'rejected') console.error('[Home] XTZ fetch failed', xtzRes.reason);
 
-      setXtz(xtzRes.status === 'fulfilled' ? xtzRes.value : '—');
+    setXtz(xtzRes.status === 'fulfilled' ? xtzRes.value : '—');
 
-      const balances: Record<string, string> = {};
-      for (const r of tokenRes) {
-        if (r.status === 'fulfilled') balances[r.value[0]] = r.value[1];
-      }
-      setTokenBalances(balances);
+    const balances: Record<string, string> = {};
+    for (const r of tokenRes) {
+      if (r.status === 'fulfilled') balances[r.value[0]] = r.value[1];
+    }
+    setTokenBalances(balances);
 
-      if (xtzRes.status === 'rejected') {
-        const e = formatError(xtzRes.reason);
-        errorToast({
-          message:   e.title,
-          secondary: e.code === 'rpc-unreachable' ? '· network'
-                   : e.code === 'rpc-timeout'     ? '· timeout'
-                   : undefined,
-          retry:     () => void refresh(),
-        });
-      }
-    } finally {
-      setLd(false);
+    if (xtzRes.status === 'rejected') {
+      const e = formatError(xtzRes.reason);
+      errorToast({
+        message:   e.title,
+        secondary: e.code === 'rpc-unreachable' ? '· network'
+                 : e.code === 'rpc-timeout'     ? '· timeout'
+                 : undefined,
+        retry:     () => void refresh(),
+      });
     }
   };
 
@@ -110,10 +101,6 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
   const xtzNum     = xtz != null ? parseFloat(xtz) || 0 : 0;
   const fmtBalance = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
   const isEvm      = state.kind === 'evm';
-  const xtzChain: 'l1' | 'l2' = isEvm ? 'l2' : 'l1';
-
-  const xtzVisible  = assetFilter === 'all' || assetFilter === xtzChain;
-  const tokensVisible = assetFilter === 'all' || assetFilter === 'l2';
 
   const setActive = async (id: AccountId) => {
     setSwitcherOpen(false);
@@ -248,45 +235,14 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
 
         <div className="tx-home-assets-head">
           <span className="kicker">Assets</span>
-          <div className="tx-home-assets-seg" role="tablist" aria-label="Asset filter">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={assetFilter === 'all'}
-              className={assetFilter === 'all' ? 'on' : ''}
-              onClick={() => setAssetFilter('all')}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={assetFilter === 'l1'}
-              className={assetFilter === 'l1' ? 'on' : ''}
-              onClick={() => setAssetFilter('l1')}
-            >
-              <span className="sw l1" aria-hidden />L1
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={assetFilter === 'l2'}
-              className={assetFilter === 'l2' ? 'on' : ''}
-              onClick={() => setAssetFilter('l2')}
-            >
-              <span className="sw l2" aria-hidden />L2
-            </button>
-          </div>
         </div>
 
-        {xtzVisible && (
-          <AssetRow
-            vm={assetRowVM(isEvm ? XTZ_L2_ASSET : XTZ_L1_ASSET, null)}
-            displayBalance={balanceHidden ? '••••' : (xtz != null ? fmtBalance(xtzNum) : '—')}
-          />
-        )}
+        <AssetRow
+          vm={assetRowVM(isEvm ? XTZ_L2_ASSET : XTZ_L1_ASSET, null)}
+          displayBalance={balanceHidden ? '••••' : (xtz != null ? fmtBalance(xtzNum) : '—')}
+        />
 
-        {tokensVisible && customTokens.map((t) => {
+        {customTokens.map((t) => {
           const asset: Erc20Asset = {
             kind: 'erc20', address: t.address, symbol: t.symbol, name: t.name,
             decimals: t.decimals, runtime: 'evm',
@@ -309,12 +265,6 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
           <Icon name="plus" size={13} />
           <span>Add token</span>
         </button>
-
-        {!loading && !xtzVisible && !tokensVisible && customTokens.length === 0 && (
-          <div style={{ padding: 32, textAlign: 'center', color: 'var(--tx-fg-muted)', fontSize: 12 }}>
-            No assets on this runtime.
-          </div>
-        )}
 
         <div style={{ height: 24 }} />
       </div>

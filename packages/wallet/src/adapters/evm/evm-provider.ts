@@ -11,6 +11,8 @@ import type {
   ProviderRpcError,
 } from '@tezosx/relayer/types';
 import type { EvmSigner } from './evm-signer';
+import { devLog } from '../../shared/log';
+import { normalizePersonalSignMessage } from '../../shared/evm-signing';
 
 const JSON_RPC_INVALID_PARAMS = -32602;
 
@@ -48,7 +50,7 @@ export class EvmProvider extends EventEmitter implements EIP1193Provider {
 
       case 'net_version': {
         const chainId = await this.request({ method: 'eth_chainId' }) as string;
-        return String(parseInt(chainId, 16));
+        return BigInt(chainId).toString();
       }
 
       case 'eth_sendTransaction':
@@ -56,7 +58,9 @@ export class EvmProvider extends EventEmitter implements EIP1193Provider {
 
       case 'personal_sign': {
         const params  = args.params as [string, string];
-        const message = params[0];
+        // EIP-191: params[0] is hex-encoded bytes — decode before signing so
+        // the signed bytes match what the approval UI displays (#17).
+        const message = normalizePersonalSignMessage(params[0]);
         return this.signer.signPersonalMessage(message);
       }
 
@@ -106,15 +110,15 @@ export class EvmProvider extends EventEmitter implements EIP1193Provider {
     };
     const rawSigned = await this.signer.signEvmTx(txParams);
 
-    console.info('[EvmProvider] eth_sendTransaction signing',
+    devLog.info('[EvmProvider] eth_sendTransaction signing',
       { from: fromAddress, to: txParams.to, value: '0x'+txParams.value.toString(16),
         nonce: '0x'+txParams.nonce.toString(16), chainId: '0x'+txParams.chainId.toString(16),
         gasLimit: '0x'+txParams.gasLimit.toString(16),
         maxFeePerGas: '0x'+maxFeePerGas.toString(16) });
-    console.info('[EvmProvider] rawSigned', rawSigned);
+    devLog.info('[EvmProvider] rawSigned', rawSigned);
 
     const txHash = await this.jsonRpc<string>('eth_sendRawTransaction', [rawSigned]);
-    console.info('[EvmProvider] eth_sendRawTransaction returned', txHash);
+    devLog.info('[EvmProvider] eth_sendRawTransaction returned', txHash);
     return txHash;
   }
 

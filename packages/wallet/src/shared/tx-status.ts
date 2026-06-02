@@ -1,7 +1,7 @@
 import { TEZLINK_EVM_RPC } from '@tezosx/relayer/constants';
 import {
   TZKT_API_BASE,
-  FINALIZED_AFTER_BLOCKS,
+  TEZOS_L1_FINALITY_BLOCKS,
   TX_POLL_INTERVAL_FAST_MS,
   TX_POLL_INTERVAL_SLOW_MS,
   TX_POLL_TIMEOUT_MS,
@@ -65,7 +65,11 @@ async function pollL1(opHash: string): Promise<TxStatus | null> {
   const head = (await headRes.json()) as { level: number };
   const confirmations = head.level - op.level;
 
-  if (confirmations >= FINALIZED_AFTER_BLOCKS) {
+  // Tenderbake-style finality: a Tezos L1 block is final after 2 attestation
+  // rounds. head.level - op.level >= TEZOS_L1_FINALITY_BLOCKS is the canonical
+  // check. For L2 EVM blocks we use the `finalized` block tag instead — see
+  // pollL2.
+  if (confirmations >= TEZOS_L1_FINALITY_BLOCKS) {
     return { stage: 'finalized', blockLevel: op.level, confirmations };
   }
   return {
@@ -78,6 +82,7 @@ async function pollL1(opHash: string): Promise<TxStatus | null> {
 // ── L2 polling via Tezlink EVM RPC ──────────────────────────────────────
 
 interface EvmReceipt { blockNumber: string; status: string }
+interface EvmBlockHeader { number: string }
 
 async function pollL2(realHash: string): Promise<TxStatus | null> {
   const receipt = await rpcCall<EvmReceipt | null>(
@@ -90,7 +95,29 @@ async function pollL2(realHash: string): Promise<TxStatus | null> {
     return { stage: 'failed', reason: 'Reverted' };
   }
 
-  return { stage: 'finalized', blockLevel, confirmations: 0 };
+  // Tezos X L2 finality is driven by L1 inclusion, not by L2 block count:
+  // a Tezlink block becomes final when it is included in a finalised L1
+  // Tezos block. The `finalized` block tag exposes that signal; we treat
+  // the tx as finalised once its block <= the finalised block. (Per Thomas
+  // Letan's feedback on 2026-05-15, #techrel-tezosx-mvp — counting blocks
+  // above the tx, as Ethereum mainnet does, is the wrong model for Tezos
+  // X since L2 blocks above this one provide no additional finality
+  // guarantee beyond L1 inclusion.)
+  const finalizedBlock = await rpcCall<EvmBlockHeader | null>(
+    'eth_getBlockByNumber', ['finalized', false],
+  );
+  const finalizedBlockLevel = finalizedBlock != null
+    ? parseInt(finalizedBlock.number, 16)
+    : -1;
+
+  if (finalizedBlockLevel >= blockLevel) {
+    return { stage: 'finalized', blockLevel, finalizedBlockLevel };
+  }
+  return {
+    stage:       'included',
+    blockLevel,
+    timestampMs: Date.now(),
+  };
 }
 
 async function rpcCall<T>(method: string, params: unknown[]): Promise<T> {

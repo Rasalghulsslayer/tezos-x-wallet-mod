@@ -16,7 +16,7 @@ const STEP_ORDER: readonly StepKey[] = ['broadcasting', 'included', 'finalized']
 function labelFor(key: StepKey, runtime: 'l1' | 'l2'): string {
   if (key === 'broadcasting') return 'Broadcasted';
   if (key === 'included')     return runtime === 'l2' ? 'Settled on EVM' : 'Included';
-  return runtime === 'l2' ? 'Finalized on L2' : 'Finalized';
+  return runtime === 'l2' ? 'Finalized on L1' : 'Finalized';
 }
 
 function fillWidthFor(status: TxStatus): string {
@@ -45,17 +45,17 @@ export function StatusTimeline({ status, runtime, startedAt }: {
     status.stage === 'included' || status.stage === 'finalized'
       ? status.blockLevel
       : null;
-  const confirmations =
-    status.stage === 'finalized' ? status.confirmations : null;
 
   const subFor = (key: StepKey, state: StepState): string => {
     if (key === 'broadcasting') return formatAgo(elapsed);
     if (key === 'included' && blockLevel != null) return `block #${blockLevel.toLocaleString()}`;
     if (key === 'included' && state === 'failed')  return 'unreachable';
-    if (key === 'finalized' && confirmations != null) {
-      
-      if (confirmations === 0) return runtime === 'l2' ? 'L1-anchored' : 'L1';
-      return `${confirmations} confirmation${confirmations === 1 ? '' : 's'}`;
+    if (key === 'finalized' && status.stage === 'finalized') {
+      // L2: finality comes from L1 inclusion (the `finalized` block tag).
+      // L1: finality comes from Tenderbake attestation rounds (canonical).
+      if (runtime === 'l2') return 'final on L1';
+      const n = status.confirmations ?? 0;
+      return n <= 1 ? 'attested' : `${n} attestations`;
     }
     return '—';
   };

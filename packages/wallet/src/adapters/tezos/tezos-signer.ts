@@ -13,6 +13,7 @@ import type { WalletPermissions } from '@tezosx/relayer/wallet-client';
 import { TEZOS_L1_RPC, NAC_CONTRACT } from '@tezosx/relayer/constants';
 import type { TezosSignerPort } from '../../ports/signer-port';
 import type { TezosAccount } from '../../domain/account';
+import { devLog } from '../../shared/log';
 
 type Rational = [string, string];
 type FeeConstants = {
@@ -163,7 +164,7 @@ export class TezosSigner implements TezosSignerPort {
 
     try {
       const hash = await this.transferWithKernelAwareFees(params);
-      console.info('[TezosX Wallet] L1 opHash:', hash);
+      devLog.info('[TezosX Wallet] L1 opHash:', hash);
       return hash;
     } catch (err) {
       const e = err as { errors?: unknown[]; message?: string; name?: string };
@@ -171,10 +172,10 @@ export class TezosSigner implements TezosSignerPort {
         { name: e.name, message: e.message, errors: e.errors, raw: err });
 
       if (entrypoint === 'call_evm' && isTezlinkSimError(err)) {
-        console.warn('[TezosX Wallet] retrying call_evm with fixed ceilings (Beacon-style fallback)');
+        devLog.warn('[TezosX Wallet] retrying call_evm with fixed ceilings (Beacon-style fallback)');
         try {
           const hash = await this.submitWithFixedCeilings(params);
-          console.info('[TezosX Wallet] L1 opHash (fallback):', hash);
+          devLog.info('[TezosX Wallet] L1 opHash (fallback):', hash);
           return hash;
         } catch (retryErr) {
           const r = retryErr as { errors?: unknown[]; message?: string; name?: string };
@@ -194,7 +195,7 @@ export class TezosSigner implements TezosSignerPort {
         amount: Number(mutezAmount),
         mutez:  true,
       });
-      console.info('[TezosX Wallet] L1 native opHash:', hash);
+      devLog.info('[TezosX Wallet] L1 native opHash:', hash);
       return hash;
     } catch (err) {
       const e = err as { errors?: unknown[]; message?: string; name?: string };
