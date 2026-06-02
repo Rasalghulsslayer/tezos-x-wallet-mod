@@ -1,8 +1,8 @@
 import type { DestRuntime } from '@/domain/chain';
+import type { Asset } from '@/domain/asset';
 import { ChainPill } from './ChainPill';
 import { Icon } from './Icon';
 
-type Asset      = 'XTZ' | 'USDC';
 type SourceKind = 'tezos' | 'evm';
 
 export function RoutingCard({
@@ -14,12 +14,12 @@ export function RoutingCard({
   dest:        DestRuntime;
   sourceKind:  SourceKind;
 }) {
-  // USDC only exists on the EVM runtime — block any non-0x destination.
-  if (asset === 'USDC' && dest === 'l1') {
+  // ERC-20 tokens only exist on the EVM runtime — block any non-0x destination.
+  if (asset.kind === 'erc20' && dest === 'l1') {
     return (
       <Frame tone="warning">
         <Icon name="alert" size={14} color="var(--tx-warning)" />
-        <span>USDC only exists on the EVM runtime — enter a 0x address.</span>
+        <span>{asset.symbol} only exists on the EVM runtime — enter a 0x address.</span>
       </Frame>
     );
   }
@@ -33,10 +33,10 @@ export function RoutingCard({
     );
   }
 
-  if (asset === 'USDC') {
-    // Only Tezos-source USDC sends are wired in 0.7.0; the asset selector in
-    // Send disables USDC when sourceKind === 'evm', so this branch is the
-    // tz1 → 0x ERC-20 cross-runtime path.
+  if (asset.kind === 'erc20') {
+    // Only Tezos-source ERC-20 sends are wired in 0.10.0; the asset selector
+    // in Send disables ERC-20s when sourceKind === 'evm', so this branch is
+    // the tz1 → 0x ERC-20 cross-runtime path.
     return (
       <Frame tone="cyan">
         <ChainPill chain="l2" />

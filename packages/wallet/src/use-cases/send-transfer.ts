@@ -11,11 +11,12 @@ import type { CrossRuntimeIntent } from '@tezosx/relayer/types';
 import { decideRoute } from '../domain/transfer';
 import { buildEvmToTezosTx } from '../adapters/evm/nac-precompile-builder';
 import type { Container } from '../composition/container';
+import type { Asset } from '../domain/asset';
 
 export interface SendTransferReq {
   to:     string;
   amount: string;                // 0x-prefixed hex wei
-  asset:  'XTZ' | 'USDC';
+  asset:  Asset;
 }
 
 export interface SendTransferDeps {
@@ -34,12 +35,12 @@ export async function sendTransfer(
   const route  = decideRoute(signer.account, req.to);
 
   if (signer.kind === 'tezos') {
-    if (req.asset === 'XTZ' && route.via === 'native') {
+    if (req.asset.kind === 'xtz' && route.via === 'native') {
       const mutez  = (BigInt(req.amount) / 10n ** 12n).toString();
       const opHash = await signer.sendNativeTransfer(req.to, mutez);
       return { runtime: 'l1', hash: opHash };
     }
-    // Cross-runtime XTZ (tz1 → 0x) or USDC → NAC gateway. Returns the
+    // Cross-runtime XTZ (tz1 → 0x) or ERC-20 → NAC gateway. Returns the
     // synthetic NAC hash; the popup polls resolveTx to swap it for the
     // kernel-synthesized real EVM hash before showing "Done".
     const synthetic = await deps.container.provider.request({
@@ -47,15 +48,15 @@ export async function sendTransfer(
       params: [{
         to:    req.to,
         value: req.amount,
-        data:  req.asset === 'XTZ' ? '0x' : req.amount,
+        data:  req.asset.kind === 'xtz' ? '0x' : req.amount,
       }],
     }) as string;
     return { runtime: 'l2', hash: synthetic };
   }
 
   // EVM signer paths
-  if (req.asset !== 'XTZ') {
-    throw new Error(`EVM-source ${req.asset} transfers are not supported in 0.7.0`);
+  if (req.asset.kind !== 'xtz') {
+    throw new Error(`EVM-source ${req.asset.symbol} transfers are not supported in 0.7.0`);
   }
 
   if (route.via === 'native') {

@@ -4,13 +4,13 @@ import type { ResolveTxResult, SendTxResult, VaultState, VaultStateUnlocked } fr
 import { sendPopupRequest } from '@/shared/messaging';
 import { detectRuntime } from '@/domain/validation';
 import type { DestRuntime } from '@/domain/chain';
-import { USDC_CONTRACT } from '@/shared/constants';
+import type { RegisteredToken } from '@/domain/token';
 import {
   fetchL1XtzBalance,
   fetchXtzBalance,
   fetchErc20Balance,
 } from '@/adapters/tezos/tezos-balance-fetcher';
-import { mutezToXtz, weiToXtz, formatUsdc } from '@/shared/format';
+import { mutezToXtz, weiToXtz, formatTokenAmount } from '@/shared/format';
 import { formatError } from '@/domain/error';
 import { trackTx } from '@/shared/tx-status';
 import type { TxStatus } from '@/domain/tx-status';
@@ -19,7 +19,7 @@ import { Button } from '../tx/Button';
 import { Icon } from '../tx/Icon';
 import { TopBar } from '../tx/TopBar';
 import { AssetSelector, type AssetOption } from '../tx/AssetSelector';
-import { XTZ_L1_ASSET, XTZ_L2_ASSET, USDC_ASSET } from '@/domain/asset';
+import { XTZ_L1_ASSET, XTZ_L2_ASSET, type Asset, type Erc20Asset } from '@/domain/asset';
 import { ChainPill } from '../tx/ChainPill';
 import { Line } from '../tx/Line';
 import { RoutingCard } from '../tx/RoutingCard';
@@ -33,7 +33,6 @@ import { TEZOS_EXPLORER, EVM_EXPLORER } from '@/shared/constants';
 import { truncAddr } from '../tx/utils';
 
 type Stage = 'form' | 'review' | 'done';
-type Asset = 'XTZ' | 'USDC';
 
 interface DoneState {
   hash:    string;
@@ -41,10 +40,15 @@ interface DoneState {
   pending: boolean;
 }
 
-interface Balances {
-  xtz:  string;
-  usdc: string;
-  loading: boolean;
+/** Balance map keyed by 'xtz' for native, lowercased contract address for ERC-20. */
+type BalanceMap = Record<string, string>;
+
+function assetKey(asset: Asset): string {
+  return asset.kind === 'xtz' ? 'xtz' : asset.address.toLowerCase();
+}
+
+function tokenToAsset(t: RegisteredToken): Erc20Asset {
+  return { kind: 'erc20', address: t.address, symbol: t.symbol, name: t.name, decimals: t.decimals, runtime: 'evm' };
 }
 
 const RESOLVE_POLL_MS    = 2_000;
@@ -90,10 +94,11 @@ export function Send({ state, onDone }: { state: VaultState; onDone: () => void 
 }
 
 function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: () => void }) {
-  const navigate = useNavigate();
+  const navigate    = useNavigate();
   const isEvmSource = state.kind === 'evm';
-  // EVM-source XTZ-only in 0.7.0; USDC source-from-EVM is out of scope.
-  const [asset,  setAsset] = useState<Asset>('XTZ');
+  const xtzAsset    = state.kind === 'tezos' ? XTZ_L1_ASSET : XTZ_L2_ASSET;
+  // EVM-source ERC-20 sends are out of scope in 0.7.0+; the UI disables them.
+  const [asset,  setAsset] = useState<Asset>(xtzAsset);
   const [to,     setTo]    = useState('');
   const [amount, setAmt]   = useState('');
   const [stage,  setStage] = useState<Stage>('form');
@@ -102,35 +107,46 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
   const [txStatus, setTxStatus] = useState<TxStatus | null>(null);
   const [doneStartedAt, setDoneStartedAt] = useState<number | null>(null);
   const [pendingResolve, setPendingResolve] = useState<{ syntheticHash: string } | null>(null);
-  const [balances, setBalances] = useState<Balances>({ xtz: '0', usdc: '0', loading: true });
+  const [tokens,   setTokens]   = useState<RegisteredToken[]>([]);
+  const [balances, setBalances] = useState<BalanceMap>({});
+  const [balancesLoading, setBalancesLoading] = useState(true);
 
-  // Kind-dependent address resolution and balance source.
-  const fromAddr  = signingSourceAddress(state);
-  const usdcAddr  = state.kind === 'tezos' ? state.evmAlias : state.address;
+  // Kind-dependent address resolution for ERC-20 balance reads.
+  const fromAddr = signingSourceAddress(state);
+  const evmAddr  = state.kind === 'tezos' ? state.evmAlias : state.address;
 
   useEffect(() => {
     if (fromAddr === '') return;
     let cancelled = false;
     (async () => {
       try {
+        const registered = await sendPopupRequest<RegisteredToken[]>({ type: 'LIST_REGISTERED_TOKENS' }).catch(() => [] as RegisteredToken[]);
+        if (cancelled) return;
+        setTokens(registered);
+
         const xtzPromise = state.kind === 'tezos'
           ? fetchL1XtzBalance(state.tz1).then(mutezToXtz)
           : fetchXtzBalance(state.address).then(weiToXtz);
-        // Skip the USDC fetch entirely for EVM-source: USDC isn't a selectable
-        // asset in this branch, so the value is never read.
-        const usdcPromise = state.kind === 'tezos'
-          ? fetchErc20Balance(USDC_CONTRACT, state.evmAlias).then(formatUsdc)
-          : Promise.resolve('0');
 
-        const [xtzStr, usdcStr] = await Promise.all([xtzPromise, usdcPromise]);
+        const tokenPromises = registered.map((t) =>
+          fetchErc20Balance(t.address, evmAddr).then((hex) => [t.address.toLowerCase(), formatTokenAmount(hex, t.decimals)] as const),
+        );
+
+        const [xtzRes, ...tokenRes] = await Promise.allSettled([xtzPromise, ...tokenPromises]);
         if (cancelled) return;
-        setBalances({ xtz: xtzStr, usdc: usdcStr, loading: false });
+        const map: BalanceMap = {};
+        map.xtz = xtzRes.status === 'fulfilled' ? xtzRes.value : '0';
+        for (const r of tokenRes) {
+          if (r.status === 'fulfilled') map[r.value[0]] = r.value[1];
+        }
+        setBalances(map);
+        setBalancesLoading(false);
       } catch {
-        if (!cancelled) setBalances((b) => ({ ...b, loading: false }));
+        if (!cancelled) setBalancesLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [fromAddr, usdcAddr, state.kind]);
+  }, [fromAddr, evmAddr, state.kind]);
 
   useEffect(() => {
     if (pendingResolve == null) return;
@@ -181,29 +197,30 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
   const dest    = detectRuntime(to);
   const isCross = state.kind === 'tezos' ? dest === 'l2' : dest === 'l1';
 
-  const usdcOnL1 = asset === 'USDC' && dest === 'l1';
+  // ERC-20 tokens live on L2 only; sending to an L1 destination is invalid.
+  const erc20OnL1 = asset.kind === 'erc20' && dest === 'l1';
   const valid =
     dest !== null &&
-    !usdcOnL1 &&
-    (!isEvmSource || asset === 'XTZ') &&
+    !erc20OnL1 &&
+    (!isEvmSource || asset.kind === 'xtz') &&
     /^\d+(\.\d+)?$/.test(amount) &&
     Number(amount) > 0;
 
-  const availableStr = asset === 'XTZ' ? balances.xtz : balances.usdc;
-  const insufficient = !balances.loading
+  const availableStr = balances[assetKey(asset)] ?? '0';
+  const insufficient = !balancesLoading
     && parseFloat(amount || '0') > 0
     && parseFloat(amount || '0') > parseFloat(availableStr);
 
   const handleMax = () => {
-    if (balances.loading) return;
-    if (asset === 'XTZ') {
-      const mutezTotal = mutezToBig(balances.xtz);
+    if (balancesLoading) return;
+    if (asset.kind === 'xtz') {
+      const mutezTotal = mutezToBig(balances.xtz ?? '0');
       const usable     = mutezTotal > MAX_FEE_RESERVE_MUTEZ
         ? mutezTotal - MAX_FEE_RESERVE_MUTEZ
         : 0n;
       setAmt(bigMutezToXtzString(usable));
     } else {
-      setAmt(balances.usdc);
+      setAmt(availableStr);
     }
   };
 
@@ -212,7 +229,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
   //   resolves to an EVM hash; EVM-source always broadcasts on L2 even when
   //   the destination is L1).
   const predictedRuntime: 'l1' | 'l2' =
-    state.kind === 'tezos' && asset === 'XTZ' && dest === 'l1' ? 'l1' : 'l2';
+    state.kind === 'tezos' && asset.kind === 'xtz' && dest === 'l1' ? 'l1' : 'l2';
 
   const submit = async () => {
     setErr(null);
@@ -351,7 +368,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
           </div>
 
           <div className="tx-card" style={{ padding: 0 }}>
-            <Line label="Amount" value={`${parseFloat(amount).toLocaleString()} ${asset}`} />
+            <Line label="Amount" value={`${parseFloat(amount).toLocaleString()} ${asset.symbol}`} />
             <div className="tx-divider" />
             <Line label="Routing" value={routingLabel(state.kind, dest)} />
             <div className="tx-divider" />
@@ -389,22 +406,21 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
       <div className="tx-page-scroll" style={{ padding: '4px 16px 16px' }}>
         <div className="tx-kicker" style={{ padding: '8px 0' }}>Asset</div>
         {(() => {
-          const xtzAsset = state.kind === 'tezos' ? XTZ_L1_ASSET : XTZ_L2_ASSET;
+          const tokenOptions: AssetOption[] = tokens.map((t) => ({
+            asset:    tokenToAsset(t),
+            subLabel: isEvmSource ? 'Soon · EVM-source' : 'ERC-20 · EVM runtime',
+            disabled: isEvmSource,
+            title:    isEvmSource ? 'ERC-20 sends from EVM accounts are coming in a follow-up release.' : undefined,
+          }));
           const options: AssetOption[] = [
             { asset: xtzAsset, subLabel: 'Native asset' },
-            {
-              asset:    USDC_ASSET,
-              subLabel: isEvmSource ? 'Soon · EVM-source' : 'ERC-20 · EVM runtime',
-              disabled: isEvmSource,
-              title:    isEvmSource ? 'USDC sends from EVM accounts are coming in a follow-up release.' : undefined,
-            },
+            ...tokenOptions,
           ];
-          const selected = asset === 'XTZ' ? xtzAsset : USDC_ASSET;
           return (
             <AssetSelector
               options={options}
-              selected={selected}
-              onSelect={(a) => setAsset(a.kind === 'xtz' ? 'XTZ' : 'USDC')}
+              selected={asset}
+              onSelect={setAsset}
               onAddToken={() => navigate('/tokens/add')}
             />
           );
@@ -417,7 +433,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
           onChange={(e) => setTo(e.target.value)}
           placeholder={
             isEvmSource ? '0x… or tz1…' :
-            asset === 'USDC' ? '0x…' :
+            asset.kind === 'erc20' ? '0x…' :
             'tz1… or 0x…'
           }
         />
@@ -436,7 +452,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
             available={availableStr}
             asset={asset}
             insufficient={insufficient}
-            loading={balances.loading}
+            loading={balancesLoading}
             onMax={handleMax}
           />
         </div>

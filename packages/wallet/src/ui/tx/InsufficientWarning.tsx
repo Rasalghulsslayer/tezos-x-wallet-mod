@@ -1,4 +1,4 @@
-type Asset = 'XTZ' | 'USDC';
+import type { Asset } from '@/domain/asset';
 
 export function InsufficientWarning({
   requested,
@@ -22,7 +22,7 @@ export function InsufficientWarning({
         <div className="tx-warn-title">Likely insufficient funds</div>
         <div className="tx-warn-detail">
           Trying to send <span className="tx-warn-num">{requested}</span> but balance is{' '}
-          <span className="tx-warn-num">{available} {asset}</span>. You can still attempt — the kernel may settle a balance the RPC hasn't refreshed.
+          <span className="tx-warn-num">{available} {asset.symbol}</span>. You can still attempt — the kernel may settle a balance the RPC hasn't refreshed.
         </div>
       </div>
     </div>

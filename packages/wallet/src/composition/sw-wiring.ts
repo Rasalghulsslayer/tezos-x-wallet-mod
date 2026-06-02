@@ -39,6 +39,7 @@ import { removeAccount }           from '../use-cases/remove-account';
 import { setActiveAccount }        from '../use-cases/set-active-account';
 import { renameAccount }           from '../use-cases/rename-account';
 import { listAccounts }            from '../use-cases/list-accounts';
+import { peekCustomToken }         from '../use-cases/peek-custom-token';
 import { addCustomToken }          from '../use-cases/add-custom-token';
 import { removeCustomToken }       from '../use-cases/remove-custom-token';
 import { listRegisteredTokens }    from '../use-cases/list-registered-tokens';
@@ -132,7 +133,7 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
       }
 
       case 'UNLOCK': {
-        await unlockVault({ password: msg.password }, { keyring: deps.keyring });
+        await unlockVault({ password: msg.password }, { keyring: deps.keyring, tokenStore: deps.persistentPorts.tokenStore });
         await deps.rebuildContainer();
         return refreshState();
       }
@@ -199,7 +200,7 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
         }
         const result = await addAccount(
           { kind: msg.kind, source: msg.source, label: msg.label },
-          { keyring: deps.keyring },
+          { keyring: deps.keyring, tokenStore: deps.persistentPorts.tokenStore },
         );
         return { ok: true, data: result };
       }
@@ -250,6 +251,16 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
         }
         const result = await listAccounts({ keyring: deps.keyring });
         return { ok: true, data: result };
+      }
+
+      case 'PEEK_CUSTOM_TOKEN': {
+        const unlocked = deps.keyring.getUnlocked();
+        if (unlocked == null) return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+        const token = await peekCustomToken(
+          { accountId: unlocked.account.id, address: msg.address, tryAnyway: msg.tryAnyway },
+          { tokenStore: deps.persistentPorts.tokenStore, rpcUrl: TEZLINK_EVM_RPC },
+        );
+        return { ok: true, data: token };
       }
 
       case 'ADD_CUSTOM_TOKEN': {
