@@ -8,7 +8,7 @@ if (window.top !== window) {
   window.close();
 } else {
   createRoot(document.getElementById('root')!).render(
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <ExperimentalBanner />
       <Approve />
     </div>,

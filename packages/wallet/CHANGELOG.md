@@ -6,6 +6,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.11.1] — 2026-06-02
+
+Patch following dApp-integration testing. No relayer change; pin stays `^0.5.0` and picks up 0.5.3 automatically.
+
+### Fixed
+- **`window.ethereum.isTezosXRelayer` now reflects the active account's routing mode.** The injected provider used to expose the flag as a constant `true` regardless of which account was active. That mismatch confused TezosX-aware dApps (e.g. potluck) that branch on the flag: with an EVM-source 0x account they'd skip the standard `approve` step expected for ERC-20 deposits, jumping straight to `transferFrom` which then reverted. The flag is now `true` only when the active account is Tezos-source (routes via NAC gateway); `false` for EVM-source 0x accounts (routes natively, indistinguishable from MetaMask behaviour from the dApp's perspective). A new `WALLET_ROLE` ContentPush event is broadcast by the SW on every container rebuild (unlock, account switch, lock) and forwarded by the bridge as a `TEZOSX_WALLET_ROLE` `postMessage`; the injected provider mutates its flag on receipt. `isTezosXWallet = true` stays unconditional as our wallet's stable identity flag.
+- **Approval popup scrolls correctly when content overflows.** The 0.11.0 cross-runtime card on the Approve screen ("What you actually sign") could push total content past the popup's viewport. The root container in `approve-main.tsx` used `minHeight: 100vh` (= "at least 100vh, may grow"), which let the outer element exceed the popup height; the inner `.tx-page-scroll` then never had an overflow to clip against and nothing scrolled. Changed to `height: 100vh` so the root is exactly viewport-height, the flex children are constrained, and `.tx-page-scroll` clips + scrolls internally.
+
+### Compatibility
+- **Wire-compatible additive change** to `ContentPush` (`WALLET_ROLE` is a new variant; older bridges/providers ignore unknown shapes). dApps that don't read `isTezosXRelayer` are unaffected. dApps that only read the flag at connection time should re-read on `accountsChanged` to stay in sync if the user switches account kind in the wallet.
+- No vault, storage, or signing semantics change.
+- 160 / 160 tests pass.
+
+### Manual test plan
+1. Active a tz1 account → reload a dApp page → `window.ethereum.isTezosXRelayer === true` (the NAC routing flag).
+2. Switch to a 0x account in the wallet → `window.ethereum.isTezosXRelayer` updates to `false` within ~1 ms (without a page reload).
+3. Connect to potluck.tezos.com with an EVM-source account → the dApp now orchestrates `approve USDC` then `deposit` (two separate signing prompts) as it does with MetaMask, instead of jumping to `deposit` directly.
+4. Trigger a long approval popup (`eth_sendTransaction` from a tz1 source so the cross-runtime card adds rows) — the popup's content area scrolls; Approve / Reject buttons remain pinned at the bottom of the visible area.
+
+---
+
 ## [0.11.0] — 2026-06-02
 
 Minor release hardening the signing path and the cross-runtime UX. Ships alongside `@tezosx/relayer` 0.5.3.

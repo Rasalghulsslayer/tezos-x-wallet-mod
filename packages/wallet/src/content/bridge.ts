@@ -66,11 +66,20 @@ window.addEventListener('message', (event: MessageEvent) => {
 // ── SW → Page (push events: accountsChanged, disconnect, …) ──────────────────
 
 chrome.runtime.onMessage.addListener((msg: ContentPush) => {
-  if (msg.type !== 'PROVIDER_EVENT') return;
-  window.postMessage(
-    { type: 'TEZOSX_WALLET_EVENT', event: msg.event, data: msg.data },
-    window.location.origin || '*',
-  );
+  if (msg.type === 'PROVIDER_EVENT') {
+    window.postMessage(
+      { type: 'TEZOSX_WALLET_EVENT', event: msg.event, data: msg.data },
+      window.location.origin || '*',
+    );
+    return;
+  }
+  if (msg.type === 'WALLET_ROLE') {
+    window.postMessage(
+      { type: 'TEZOSX_WALLET_ROLE', routesViaRelayer: msg.routesViaRelayer },
+      window.location.origin || '*',
+    );
+    return;
+  }
 });
 
 console.info('[TezosX Wallet] content bridge loaded');
