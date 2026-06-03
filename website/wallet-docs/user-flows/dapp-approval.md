@@ -62,6 +62,14 @@ If you approve, the wallet signs the L1 operation via `LocalSignerClient` and re
 
 Since 0.11.0, signature methods (`eth_sendTransaction`, `personal_sign`, `eth_signTypedData_v4`) require an active session for the calling origin — the page must have completed `eth_requestAccounts` first. Calls from unconnected tabs receive EIP-1193 error `4100` (unauthorised) directly, with no popup. This matches the standard EIP-1193 contract; the Connect step is no longer cosmetic.
 
+### Auto-recovery when the service worker session is lost
+
+Manifest V3 evicts the wallet's service worker on idle (no message activity for a few minutes) or when it sits behind a long blocking call (e.g. a cross-runtime sign + resolve sequence that takes 30 s). On wake, the SW has lost its in-memory unlock cache: `keyring.getUnlocked()` returns `null` and any popup operation other than `GET_STATE` / `UNLOCK` will respond with `4100` "Wallet is locked", even though the popup's React state may still think the user is unlocked.
+
+Since 0.11.1, the popup detects this case at the messaging layer ([`shared/messaging.ts`](https://github.com/trilitech/tezos-x-wallet/blob/main/packages/wallet/src/shared/messaging.ts), `SW_SESSION_LOST_EVENT`): on `4100` from any non-exempt request, a DOM event fires. The app's top-level `Gate` listens, re-runs `GET_STATE`, sees the SW-side state is now `locked`, and routes the user to `/unlock`. The user enters their password once and lands back at a working session — no need to lock + unlock manually.
+
+This is purely a UX improvement; the security model is unchanged (the keyring is genuinely re-derived from the password on every SW boot).
+
 ## Approval window lifecycle
 
 ```mermaid
