@@ -1,9 +1,14 @@
 /**
  * TezosSigner: TezosSignerPort implementation backed by a tz1 secret key
  * held in SW memory. Wraps Taquito's InMemorySigner and TezosToolkit for
- * op injection. Computes a kernel-exact fee from live mempool/filter
- * constants and retries with the kernel-reported required value on a
- * residual insufficient_fees rejection.
+ * op injection.
+ *
+ * Fees: Taquito >= 24.3 derives `suggestedFeeMutez` from the live
+ * `mempool/filter` schedule on every estimate (dynamic gas price + DA byte
+ * fee), so it is already kernel-correct for Tezos X. We use it directly and
+ * apply a volatility buffer on top (the gas price is congestion-based and can
+ * rise between estimate and inclusion). A residual insufficient_fees rejection
+ * is retried once with the kernel-reported `required` value.
  */
 
 import { TezosToolkit, type TransferParams } from '@taquito/taquito';
@@ -15,18 +20,13 @@ import type { TezosSignerPort } from '../../ports/signer-port';
 import type { TezosAccount } from '../../domain/account';
 import { devLog } from '../../shared/log';
 
-type Rational = [string, string];
-type FeeConstants = {
-  minimalFees:    bigint;
-  nanotezPerGas:  Rational;
-  nanotezPerByte: Rational;
-};
-
-const CONSTANTS_TTL_MS = 30_000;
-let cachedConstants: { value: FeeConstants; at: number } | null = null;
-
-/** Bytes added to `est.opSize` to cover the 64-byte signature + zarith shift. */
-const OP_SIZE_MARGIN_BYTES = 96;
+/**
+ * Volatility headroom over Taquito's suggested fee. The Tezos X gas price is
+ * dynamic (congestion-based) and can rise between estimation and inclusion, so
+ * we pad the fee. The gas/storage *limits* are deterministic and left as-is;
+ * the retry path still covers a residual under-shoot.
+ */
+const FEE_BUFFER = 1.5;
 
 /**
  * Beacon-style ceilings for NAC `call_evm` operations. Tezlink's run_operation
@@ -44,39 +44,6 @@ function isTezlinkSimError(err: unknown): boolean {
   if (msg.includes('tezlink_error')) return true;
   const errs = JSON.stringify(e.errors ?? '');
   return errs.includes('tezlink_error');
-}
-
-async function getFeeConstants(): Promise<FeeConstants> {
-  const now = Date.now();
-  if (cachedConstants && now - cachedConstants.at < CONSTANTS_TTL_MS) {
-    return cachedConstants.value;
-  }
-  const res = await fetch(`${TEZOS_L1_RPC}/chains/main/mempool/filter`);
-  if (!res.ok) throw new Error(`mempool/filter HTTP ${res.status}`);
-  const j = await res.json() as {
-    minimal_fees:                 string;
-    minimal_nanotez_per_gas_unit: [string, string];
-    minimal_nanotez_per_byte:     [string, string];
-  };
-  const value: FeeConstants = {
-    minimalFees:    BigInt(j.minimal_fees),
-    nanotezPerGas:  j.minimal_nanotez_per_gas_unit,
-    nanotezPerByte: j.minimal_nanotez_per_byte,
-  };
-  cachedConstants = { value, at: now };
-  return value;
-}
-
-function ceilNanotezToMutez(x: bigint, [num, den]: Rational): bigint {
-  const n = x * BigInt(num);
-  const d = 1000n * BigInt(den);
-  return (n + d - 1n) / d;
-}
-
-function computeKernelFee(gasLimit: number, opSize: number, c: FeeConstants): number {
-  const gasCost  = ceilNanotezToMutez(BigInt(gasLimit), c.nanotezPerGas);
-  const byteCost = ceilNanotezToMutez(BigInt(opSize),   c.nanotezPerByte);
-  return Number(c.minimalFees + gasCost + byteCost);
 }
 
 function extractRequiredFee(err: unknown): number | null {
@@ -113,13 +80,12 @@ export class TezosSigner implements TezosSignerPort {
     return this.permissions;
   }
 
-  private async transferWithKernelAwareFees(params: TransferParams): Promise<string> {
-    const [est, c] = await Promise.all([
-      this.toolkit.estimate.transfer(params),
-      getFeeConstants(),
-    ]);
-    const opSize   = Number(est.opSize) + OP_SIZE_MARGIN_BYTES;
-    const computed = computeKernelFee(est.gasLimit, opSize, c);
+  private async transferWithBufferedFees(params: TransferParams): Promise<string> {
+    // Taquito >= 24.3 derives suggestedFeeMutez from the live mempool/filter
+    // schedule (dynamic gas price + DA byte fee), so it is kernel-correct for
+    // Tezos X. We only pad it for volatility between estimate and inclusion.
+    const est      = await this.toolkit.estimate.transfer(params);
+    const computed = Math.ceil(est.suggestedFeeMutez * FEE_BUFFER);
 
     const submit = (fee: number) =>
       this.toolkit.contract.transfer({
@@ -163,7 +129,7 @@ export class TezosSigner implements TezosSignerPort {
     };
 
     try {
-      const hash = await this.transferWithKernelAwareFees(params);
+      const hash = await this.transferWithBufferedFees(params);
       devLog.info('[TezosX Wallet] L1 opHash:', hash);
       return hash;
     } catch (err) {
@@ -190,7 +156,7 @@ export class TezosSigner implements TezosSignerPort {
 
   async sendNativeTransfer(to: string, mutezAmount: string): Promise<string> {
     try {
-      const hash = await this.transferWithKernelAwareFees({
+      const hash = await this.transferWithBufferedFees({
         to,
         amount: Number(mutezAmount),
         mutez:  true,
