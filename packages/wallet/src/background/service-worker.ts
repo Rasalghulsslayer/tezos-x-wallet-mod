@@ -35,6 +35,7 @@ async function rebuildContainer(): Promise<void> {
   if (unlocked == null) {
     state.container = null;
     state.evmAlias  = null;
+    await broadcastEvent({ type: 'WALLET_ROLE', routesViaRelayer: false });
     return;
   }
   state.container = await ensureContainerFor(unlocked.account.id, {
@@ -42,6 +43,7 @@ async function rebuildContainer(): Promise<void> {
     containerCache,
     onProviderEvent: broadcastEvent,
   });
+  await broadcastEvent({ type: 'WALLET_ROLE', routesViaRelayer: unlocked.account.kind === 'tezos' });
 }
 
 const deps: SwDeps = {
@@ -63,7 +65,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 chrome.runtime.onInstalled.addListener(() => {
   void persistentPorts.notifications.setPendingCount(0);
-  console.info('[TezosX Wallet] service worker installed, v0.10.1');
+  console.info('[TezosX Wallet] service worker installed, v0.11.1');
 });
 
 chrome.windows.onRemoved.addListener((windowId) => {

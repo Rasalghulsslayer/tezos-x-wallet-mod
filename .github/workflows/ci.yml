@@ -50,6 +50,17 @@ jobs:
           cache-dependency-path: website/package-lock.json
       - run: cd website && npm ci && npx tsc --noEmit
 
+  test-wallet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test -w @tezosx/wallet
+
   build-relayer:
     needs: [lint, typecheck-relayer]
     runs-on: ubuntu-latest
@@ -85,7 +96,7 @@ jobs:
           retention-days: 7
 
   build-wallet:
-    needs: [lint, typecheck-wallet]
+    needs: [lint, typecheck-wallet, test-wallet]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

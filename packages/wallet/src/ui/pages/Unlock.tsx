@@ -4,6 +4,7 @@ import { sendPopupRequest } from '@/shared/messaging';
 import { formatError } from '@/domain/error';
 import { Button } from '../tx/Button';
 import { ErrorInline } from '../tx/ErrorInline';
+import { LogoMark } from '../tx/LogoMark';
 
 export function Unlock({ onDone }: { onDone: () => void }) {
   const navigate = useNavigate();
@@ -31,7 +32,7 @@ export function Unlock({ onDone }: { onDone: () => void }) {
     <div className="tx-page">
       <div className="tx-page-scroll" style={{ padding: '40px 24px', display: 'flex', flexDirection: 'column' }}>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', gap: 16 }}>
-          <div className="tx-logo-mark lg" style={{ width: 48, height: 48, borderRadius: 12 }} />
+          <LogoMark size={48} />
           <div>
             <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.015em' }}>Welcome back</div>
             <div style={{ fontSize: 13, color: 'var(--tx-fg-muted)', marginTop: 6 }}>

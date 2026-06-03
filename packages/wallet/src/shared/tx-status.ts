@@ -95,14 +95,9 @@ async function pollL2(realHash: string): Promise<TxStatus | null> {
     return { stage: 'failed', reason: 'Reverted' };
   }
 
-  // Tezos X L2 finality is driven by L1 inclusion, not by L2 block count:
-  // a Tezlink block becomes final when it is included in a finalised L1
-  // Tezos block. The `finalized` block tag exposes that signal; we treat
-  // the tx as finalised once its block <= the finalised block. (Per Thomas
-  // Letan's feedback on 2026-05-15, #techrel-tezosx-mvp — counting blocks
-  // above the tx, as Ethereum mainnet does, is the wrong model for Tezos
-  // X since L2 blocks above this one provide no additional finality
-  // guarantee beyond L1 inclusion.)
+  // L2 finality on Tezos X is driven by L1 inclusion: a Tezlink block
+  // becomes final when its L1 parent reaches finality. The `finalized`
+  // block tag exposes that signal directly.
   const finalizedBlock = await rpcCall<EvmBlockHeader | null>(
     'eth_getBlockByNumber', ['finalized', false],
   );

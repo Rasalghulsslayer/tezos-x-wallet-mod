@@ -12,6 +12,7 @@ import { mutezToXtz, weiToXtz } from '@/shared/format';
 import { sendPopupRequest } from '@/shared/messaging';
 import { formatError } from '@/domain/error';
 import { AccountHeader } from '../tx/AccountHeader';
+import { LogoMark } from '../tx/LogoMark';
 import { AccountSwitcher } from '../tx/AccountSwitcher';
 import { RenameModal } from '../tx/RenameModal';
 import { RemoveAccountModal } from '../tx/RemoveAccountModal';
@@ -130,7 +131,7 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
       <TopBar
         left={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div className="tx-logo-mark" style={{ width: 18, height: 18, borderRadius: 4 }} />
+            <LogoMark size={18} />
             <span style={{ fontSize: 13, fontWeight: 500 }}>Tezos X</span>
             <Badge variant="testnet">Testnet</Badge>
           </div>

@@ -34,6 +34,11 @@ interface PageEvent {
   data:  unknown;
 }
 
+interface PageRoleEvent {
+  type:             'TEZOSX_WALLET_ROLE';
+  routesViaRelayer: boolean;
+}
+
 // ── Pending request registry ──────────────────────────────────────────────────
 
 type Resolver = { resolve: (v: unknown) => void; reject: (err: Error) => void };
@@ -46,12 +51,17 @@ function newRequestId(): string {
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 class TezosXWalletProvider {
-  readonly isMetaMask     = false;
-  readonly isTezosXWallet  = true;
-  /** Signals that the provider routes EVM calls through the Tezos X NAC
-   *  gateway (CRAC). dApps use this to skip "no XTZ on L2" gas checks
-   *  since fees are paid on Michelson L1, not on the EVM runtime. */
-  readonly isTezosXRelayer = true;
+  readonly isMetaMask    = false;
+  readonly isTezosXWallet = true;
+
+  /** True when the active account is Tezos-source — outgoing EVM calls then
+   *  route through the NAC gateway (signed as Michelson ops on L1, fees paid
+   *  in mutez). dApps with TezosX-aware branching read this to skip checks
+   *  like "does the user hold L2 XTZ for gas". False for 0x-source accounts,
+   *  which sign native EIP-1559 EVM transactions. The SW updates this on
+   *  every container rebuild (unlock, account switch, lock); the initial
+   *  injection-time value is false until the SW pushes the first signal. */
+  isTezosXRelayer = false;
 
   private readonly listeners = new Map<string, Set<Listener>>();
 
@@ -91,7 +101,7 @@ const provider = new TezosXWalletProvider();
 
 window.addEventListener('message', (event: MessageEvent) => {
   if (event.source !== window) return;
-  const data = event.data as PageResponse | PageEvent | undefined;
+  const data = event.data as PageResponse | PageEvent | PageRoleEvent | undefined;
   if (data == null || typeof data !== 'object') return;
 
   if (data.type === 'TEZOSX_WALLET_RESPONSE') {
@@ -110,6 +120,11 @@ window.addEventListener('message', (event: MessageEvent) => {
 
   if (data.type === 'TEZOSX_WALLET_EVENT') {
     provider.emit(data.event, data.data);
+    return;
+  }
+
+  if (data.type === 'TEZOSX_WALLET_ROLE') {
+    provider.isTezosXRelayer = data.routesViaRelayer;
     return;
   }
 });

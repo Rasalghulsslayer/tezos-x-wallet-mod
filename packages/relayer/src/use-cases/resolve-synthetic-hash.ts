@@ -1,7 +1,8 @@
 /**
  * findRealHash: scan EVM blocks starting at fromBlock to find the kernel-
- * synthesized transaction whose `from` or `to` matches the alias and that
- * has not been claimed yet.
+ * synthesized transaction whose `from` matches the alias and that has not
+ * been claimed yet. Per-block candidates are sorted by nonce ascending so
+ * concurrent syntheses claim their txs in submission order.
  */
 
 import type { TezlinkClient } from '../tezos/tezlink.js';
@@ -75,13 +76,18 @@ async function scanBlock(
     })),
   );
 
-  const match = block.transactions.find(
-    (tx) =>
-      !claimedHashes.has(tx.hash) &&
-      (tx.from.toLowerCase() === alias || tx.to?.toLowerCase() === alias),
-  );
-  if (match === undefined) return null;
+  const candidates = block.transactions
+    .filter((tx) => !claimedHashes.has(tx.hash) && tx.from.toLowerCase() === alias)
+    .sort((a, b) => parseNonce(a.nonce) - parseNonce(b.nonce));
+  if (candidates.length === 0) return null;
 
+  const match = candidates[0];
   claimedHashes.add(match.hash);
   return match.hash;
+}
+
+function parseNonce(hex: string | undefined): number {
+  if (hex == null) return Number.MAX_SAFE_INTEGER;
+  const n = parseInt(hex, 16);
+  return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
 }

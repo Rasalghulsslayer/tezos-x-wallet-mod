@@ -776,12 +776,6 @@ html, body {
 
 /* Logo */
 .tx-logo { display: inline-flex; align-items: center; gap: var(--tx-sp-2); font-weight: 600; letter-spacing: -0.01em; font-size: var(--tx-fs-lg); }
-.tx-logo-mark {
-  width: 24px; height: 24px; border-radius: 6px; position: relative;
-  background: linear-gradient(135deg, var(--tx-purple) 0%, var(--tx-purple) 49%, var(--tx-cyan) 51%, var(--tx-cyan) 100%);
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15);
-}
-.tx-logo-mark.lg { width: 44px; height: 44px; border-radius: 10px; }
 
 /* ─── Send · Available row + Max pill ─────────────────────────────────── */
 .tx-avail {
@@ -2570,3 +2564,24 @@ html, body {
 .tx-addtoken-skel-sym  { width: 96px;  height: 22px; display: block; margin-bottom: 7px; }
 .tx-addtoken-skel-name { width: 130px; height: 12px; display: block; }
 .tx-addtoken-skel-kick { width: 120px; height: 10px; display: block; margin: 18px 0 10px; }
+
+/* ─── Approve · cross-runtime card ─────────────────────────────────────── */
+.tx-cross-card {
+  position: relative;
+  box-shadow: inset 0 0 0 1px rgba(0,194,255,0.20);
+}
+.tx-cross-card::before {
+  content: ""; position: absolute;
+  left: 0; right: 0; top: 0; height: 2px;
+  background: var(--tx-cyan); opacity: 0.7;
+  border-radius: var(--tx-r-md) var(--tx-r-md) 0 0;
+}
+.tx-cross-note {
+  margin-top: 10px;
+  padding: 10px 12px;
+  font-size: 11px; line-height: 1.5;
+  color: var(--tx-fg-muted);
+  background: var(--tx-cyan-bg);
+  box-shadow: inset 0 0 0 1px rgba(0,194,255,0.18);
+  border-radius: var(--tx-r-md);
+}

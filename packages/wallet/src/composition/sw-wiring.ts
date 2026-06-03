@@ -14,6 +14,7 @@ import type {
   ApproveRequest,
   ContentPush,
   EthereumRequest,
+  PendingTransaction,
   PopupRequest,
   WalletResponse,
 } from '../shared/messages';
@@ -44,6 +45,7 @@ import { addCustomToken }          from '../use-cases/add-custom-token';
 import { removeCustomToken }       from '../use-cases/remove-custom-token';
 import { listRegisteredTokens }    from '../use-cases/list-registered-tokens';
 import { TEZLINK_EVM_RPC }         from '@tezosx/relayer/constants';
+import { buildTezosToEvmCall, UnknownSelectorError, SubMutezPrecisionError } from '@tezosx/relayer/use-cases/build-tezos-to-evm-call';
 
 export interface SwState {
   container: Container | null;
@@ -332,8 +334,29 @@ function handleApproveRequest(msg: ApproveRequest, deps: SwDeps): WalletResponse
 async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promise<WalletResponse> {
   const method = msg.args.method;
 
+  // EIP-1193 requires `eth_accounts` to return [] for origins that have not
+  // connected. The wallet's per-origin session, written on `eth_requestAccounts`
+  // approval, is the authoritative source — gate at the SW layer so the
+  // provider doesn't disclose the active address to unconnected pages.
+  if (method === 'eth_accounts') {
+    if (deps.keyring.getUnlocked() == null) {
+      return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+    }
+    const sessions = await deps.persistentPorts.sessionStore.list();
+    const session  = sessions.find((s) => s.origin === msg.origin);
+    return { ok: true, data: session == null ? [] : [session.evmAlias] };
+  }
+
   const needsApproval =
     method === 'eth_requestAccounts'   ||
+    method === 'eth_sendTransaction'   ||
+    method === 'personal_sign'         ||
+    method === 'eth_signTypedData_v4';
+
+  // Signing methods require an active session for the calling origin.
+  // `eth_requestAccounts` is the one method that creates a session, so it's
+  // exempt. Everything else must go through Connect first.
+  const requiresSession =
     method === 'eth_sendTransaction'   ||
     method === 'personal_sign'         ||
     method === 'eth_signTypedData_v4';
@@ -344,6 +367,18 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
     const unlocked = deps.keyring.getUnlocked();
     if (unlocked == null) {
       return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+    }
+
+    if (requiresSession) {
+      const sessions = await deps.persistentPorts.sessionStore.list();
+      const session  = sessions.find((s) => s.origin === msg.origin);
+      if (session == null) {
+        return {
+          ok:      false,
+          code:    EIP_UNAUTHORIZED,
+          message: 'Origin is not connected. Call eth_requestAccounts first.',
+        };
+      }
     }
 
     const accountId = unlocked.account.id;
@@ -358,15 +393,53 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
         createdAt: Date.now(),
       };
     } else if (method === 'eth_sendTransaction') {
+      const tx = (msg.args.params as { to?: string; value?: string; data?: string }[])[0] ?? {};
+
+      // Tezos-source eth_sendTransaction routes through the NAC gateway: build
+      // the Michelson call ahead of approval so the popup can show the
+      // resolved target / entrypoint / selector / mutez value. EVM-source
+      // sends skip this (handled natively by EvmProvider).
+      let crossRuntime: PendingTransaction['crossRuntime'] | undefined;
+      if (unlocked.account.kind === 'tezos') {
+        try {
+          const gateway = await buildTezosToEvmCall({
+            to:    tx.to ?? '',
+            value: tx.value,
+            data:  tx.data,
+          });
+          const calldata = (tx.data ?? '0x').replace(/^0x/i, '');
+          const selectorHex = calldata.length >= 8 ? calldata.slice(0, 8) : '';
+          let decodedSelector: string | null = null;
+          if (gateway.entrypoint === 'call_evm') {
+            // For call_evm, the methodSig string sits in the Pair under args[1].args[0]
+            // — but easier to surface via a follow-up build. For now we expose the raw
+            // 0x<selector> so the popup at least shows what 4 bytes were resolved.
+            decodedSelector = selectorHex !== '' ? `0x${selectorHex}` : null;
+          }
+          crossRuntime = {
+            michelsonTarget: gateway.contractAddr,
+            entrypoint:      gateway.entrypoint,
+            decodedSelector,
+            mutezValue:      gateway.mutezAmount.toString(),
+          };
+        } catch (err) {
+          if (err instanceof UnknownSelectorError || err instanceof SubMutezPrecisionError) {
+            return { ok: false, code: JSON_RPC_INVALID_PARAMS, message: err.message };
+          }
+          throw err;
+        }
+      }
+
       pending = {
         kind:      'transaction',
         requestId: msg.requestId,
         origin:    msg.origin,
         accountId,
-        to:        (msg.args.params as { to: string }[])[0]?.to ?? '',
-        value:     (msg.args.params as { value?: string }[])[0]?.value ?? '0x0',
-        data:      (msg.args.params as { data?: string }[])[0]?.data ?? '0x',
+        to:        tx.to ?? '',
+        value:     tx.value ?? '0x0',
+        data:      tx.data ?? '0x',
         createdAt: Date.now(),
+        crossRuntime,
       };
     } else {
       const params  = msg.args.params as string[];

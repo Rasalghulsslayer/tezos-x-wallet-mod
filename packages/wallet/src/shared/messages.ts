@@ -54,6 +54,19 @@ export interface PendingTransaction {
   data:         string;
   methodSig?:   string;        // resolved by the gateway (e.g. "approve(address,uint256)")
   createdAt:    number;
+  /**
+   * Present for Tezos-source eth_sendTransaction. The dApp asked for an EVM
+   * call against `to/value/data`; the wallet will actually sign a Michelson
+   * call against `michelsonTarget/entrypoint`, with `mutezValue` debited
+   * (post wei→mutez conversion). The Approve UI surfaces both — dApp intent
+   * AND what gets signed — so the user can verify they match.
+   */
+  crossRuntime?: {
+    michelsonTarget: string;          // KT1 NAC gateway address
+    entrypoint:      string;          // 'default' (bare transfer) | 'call_evm' (ABI call)
+    decodedSelector: string | null;   // null when calldata is empty (default entrypoint)
+    mutezValue:      string;          // decimal mutez string
+  };
 }
 
 export interface PendingSignature {
@@ -117,6 +130,13 @@ export type ContentPush =
   | { type: 'PROVIDER_EVENT'; event: 'chainChanged';    data: string }
   | { type: 'PROVIDER_EVENT'; event: 'connect';         data: { chainId: string } }
   | { type: 'PROVIDER_EVENT'; event: 'disconnect';      data: { code: number; message: string } }
+  /** Signals whether outgoing EVM calls currently route through the Tezos X
+   *  NAC gateway (true for a tz1-source active account) or directly to the
+   *  EVM runtime (false for a 0x-source active account). Consumed by the
+   *  injected provider to keep its `isTezosXRelayer` flag accurate so dApps
+   *  with TezosX-aware branching pick the right flow. Pushed on every
+   *  container rebuild (unlock, account switch, lock). */
+  | { type: 'WALLET_ROLE'; routesViaRelayer: boolean }
   | { type: 'ETHEREUM_RESPONSE'; requestId: string; ok: true;  result: unknown }
   | { type: 'ETHEREUM_RESPONSE'; requestId: string; ok: false; code: number; message: string };
 

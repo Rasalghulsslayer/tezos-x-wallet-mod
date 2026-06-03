@@ -1,7 +1,7 @@
 /**
  * buildTezosToEvmCall: builds a NAC gateway Michelson call (GatewayCall)
- * from an EthTransactionRequest. Resolves the 4-byte selector via a local
- * registry then via 4byte.directory as fallback.
+ * from an EthTransactionRequest. The 4-byte selector is resolved against
+ * a curated local allow-list; adding a new selector is a code change.
  */
 
 import type { MichelsonV1Expression } from '@taquito/rpc';
@@ -17,6 +17,10 @@ function isEmptyCalldata(calldata: string): boolean {
   return stripHexPrefix(calldata).length === 0;
 }
 
+/**
+ * The text_signature here is embedded verbatim in the signed Micheline
+ * payload — every entry needs to be reviewed before being added.
+ */
 const KNOWN_SIGNATURES: Record<string, string> = {
   'a1544fc3': 'callMichelson(string,string,bytes)',
   'a9059cbb': 'transfer(address,uint256)',
@@ -34,29 +38,45 @@ const KNOWN_SIGNATURES: Record<string, string> = {
   '2e17de78': 'unstake(uint256)',
 };
 
-async function lookupMethodSignature(selectorHex: string): Promise<string | null> {
-  try {
-    const url = `https://www.4byte.directory/api/v1/signatures/?hex_signature=0x${selectorHex}`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const json = (await res.json()) as { results?: { text_signature: string }[] };
-    const results = json.results;
-    if (!results || results.length === 0) return null;
-    return results[0].text_signature;
-  } catch {
-    return null;
+export class UnknownSelectorError extends Error {
+  constructor(public readonly selectorHex: string) {
+    super(
+      `Unknown function selector 0x${selectorHex}. The relayer only signs ` +
+      `cross-runtime calls for a curated allow-list of methods.`,
+    );
+    this.name = 'UnknownSelectorError';
   }
 }
 
-async function resolveMethodSignature(selectorHex: string): Promise<string> {
+/**
+ * The Tezos runtime denominates value in mutez (10⁻⁶ XTZ). Wei amounts that
+ * carry sub-mutez precision (remainder under 10¹² wei) would be silently
+ * truncated by a floor division — reject them at build time so the loss
+ * can't be hidden from the user.
+ */
+export class SubMutezPrecisionError extends Error {
+  constructor(public readonly weiValue: bigint, public readonly remainderWei: bigint) {
+    super(
+      `Amount ${weiValue.toString()} wei is not divisible by 10^12 (1 mutez); ` +
+      `remainder ${remainderWei.toString()} wei would be lost on the Tezos runtime.`,
+    );
+    this.name = 'SubMutezPrecisionError';
+  }
+}
+
+const WEI_PER_MUTEZ = 1_000_000_000_000n;
+
+function weiToMutezExact(wei: bigint): bigint {
+  if (wei === 0n) return 0n;
+  const remainder = wei % WEI_PER_MUTEZ;
+  if (remainder !== 0n) throw new SubMutezPrecisionError(wei, remainder);
+  return wei / WEI_PER_MUTEZ;
+}
+
+function resolveMethodSignature(selectorHex: string): string {
   const known = KNOWN_SIGNATURES[selectorHex];
   if (known) return known;
-
-  const remote = await lookupMethodSignature(selectorHex);
-  if (remote) return remote;
-
-  console.warn(`[TezosX Relayer] Unknown selector 0x${selectorHex} — using raw hex`);
-  return selectorHex;
+  throw new UnknownSelectorError(selectorHex);
 }
 
 function buildDefaultArg(destination: string): MichelsonV1Expression {
@@ -97,7 +117,7 @@ export async function buildTezosToEvmCall(
   const calldata = tx.data ?? '0x';
 
   const weiValue    = tx.value != null ? BigInt(tx.value) : 0n;
-  const mutezAmount = weiValue > 0n ? weiValue / 1_000_000_000_000n : 0n;
+  const mutezAmount = weiToMutezExact(weiValue);
 
   if (isEmptyCalldata(calldata)) {
     return {
@@ -113,7 +133,7 @@ export async function buildTezosToEvmCall(
   const selectorHex  = calldataHex.slice(0, 8);
   const abiParamsHex = calldataHex.slice(8);
 
-  const methodSig = await resolveMethodSignature(selectorHex);
+  const methodSig = resolveMethodSignature(selectorHex);
   console.info('[TezosX Relayer] gateway selector →', `0x${selectorHex}`, '→', methodSig);
 
   return {
