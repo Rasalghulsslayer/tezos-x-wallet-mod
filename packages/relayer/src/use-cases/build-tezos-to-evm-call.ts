@@ -36,6 +36,9 @@ const KNOWN_SIGNATURES: Record<string, string> = {
   '3ccfd60b': 'withdraw()',
   '4e71d92d': 'claim()',
   '2e17de78': 'unstake(uint256)',
+  'd09de08a': 'increment()',
+  '2baeceb7': 'decrement()',
+  '3fb5c1cb': 'setNumber(uint256)',
 };
 
 export class UnknownSelectorError extends Error {
