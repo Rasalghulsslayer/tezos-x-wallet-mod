@@ -19,6 +19,10 @@ export interface EvmTxSummary {
   /** Sender's nonce on the EVM runtime. Used to correlate kernel-synthesized
    *  txs with their originating L1 ops in submission order. */
   nonce?:      string;
+  /** 0x-prefixed wei value carried by the tx. Used to disambiguate which
+   *  synthesized tx corresponds to a given pending op when several pendings
+   *  target the same destination. */
+  value?:      string;
 }
 
 export class TezlinkClient {

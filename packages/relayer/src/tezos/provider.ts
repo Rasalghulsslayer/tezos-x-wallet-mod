@@ -23,8 +23,11 @@ interface RelayerSession {
 
 interface PendingOp {
   l1OpHash:       string;
-  from:           string;    // EVM alias of the sender
-  to:             string;    // destination address (informational)
+  from:           string;    // EVM alias of the sender (informational)
+  to:             string;    // destination address — matched against the
+                              // synthesized tx's `to` to correlate
+  value:          string;    // 0x-prefixed wei the user requested — matched
+                              // against the synthesized tx's `value`
   fromBlock:      string;    // 0x-prefixed hex: EVM block number at send time
   broadcastedAt:  number;    // Date.now() at submission, exposed via listPendingOps
   realHash?:      string;    // cached real EVM tx hash once resolved
@@ -263,6 +266,7 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
       l1OpHash,
       from:          this.session.evmAlias,
       to:            tx.to,
+      value:         tx.value ?? '0x0',
       fromBlock,
       broadcastedAt: Date.now(),
     });
@@ -316,7 +320,7 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
 
     const promise = findRealHash(
       this.tezlink,
-      pending.from,
+      { to: pending.to, value: pending.value, senderAlias: pending.from },
       pending.fromBlock,
       this.claimedRealHashes,
     ).then((hash) => {

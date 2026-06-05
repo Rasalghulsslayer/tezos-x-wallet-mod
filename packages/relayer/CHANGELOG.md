@@ -6,6 +6,39 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.5.5] — 2026-06-04
+
+Ships alongside `@tezosx/wallet` 0.11.3.
+
+### Fixed
+- **`findRealHash` now accepts the kernel's sender-side bookkeeping tx as a match.** When the user's `eth_sendTransaction` destination is the EVM-encoded form of a Tezos L1 entity (a KT1, or another tz1's alias), the kernel routes the value via L1 and emits a bookkeeping EVM tx whose `to` is the sender's own alias — not the user-typed destination. 0.5.4's predicate matched only on `tx.to === destination`, which missed this case and left the resolver looping until timeout. The predicate is now `tx.value === expected AND tx.to ∈ {destination, senderAlias}`, covering both the direct-EVM and L1-routed shapes.
+
+### Changed
+- **`FindRealHashTarget`** gains a required `senderAlias: string` field. Callers (only `RelayerProvider.resolveRealHash` known) must pass it; the previous `{ to, value }` shape is not source-compatible.
+
+### Compatibility
+- **Breaking on the `findRealHash` public surface** (one new required argument). Internal-only as far as we know.
+
+---
+
+## [0.5.4] — 2026-06-04
+
+Ships alongside `@tezosx/wallet` 0.11.2.
+
+### Fixed
+- **`findRealHash` now correlates cross-runtime tz1 → 0x bare transfers correctly.** The previous predicate filtered candidate EVM txs on `from === alias` (the EVM derivation of the originating tz1). On Tezos X Previewnet the kernel synthesizes these txs with `from = 0x7e20580000000000000000000000000000000001` (a constant system address) and the originating tz1's alias never appears on the synthesized tx — so the matcher would scan blocks indefinitely without finding a candidate, the resolver would time out, and the wallet UI would never transition past "broadcasting". The matcher is rebuilt around the only fields the kernel carries forward intact from the original `eth_sendTransaction` request: the destination (`to`) and the value (`value` in wei).
+
+### Changed
+- **`findRealHash` signature.** Now takes `{ to: string; value: string }` (the original tx's destination + wei value) instead of a single `alias: string`. Per-block candidates that share the predicate are still sorted by nonce ascending so concurrent syntheses claim their txs in submission order; `claimedHashes` semantics are unchanged.
+- **`EvmTxSummary`** gains an optional `value?: string` field (0x-prefixed wei) so the matcher can disambiguate concurrent pendings targeting the same destination.
+- **`PendingOp`** in `RelayerProvider` gains a `value: string` field captured at submission time and passed to `findRealHash`.
+
+### Compatibility
+- **Breaking on the `findRealHash` public surface** (one renamed argument). Internal-only as far as we know — only `RelayerProvider.resolveRealHash` in this package consumes it. Third-party consumers should update the call.
+- No change to `RelayerProvider`'s EIP-1193 surface, no change to op submission semantics.
+
+---
+
 ## [0.5.3] — 2026-06-02
 
 Ships alongside `@tezosx/wallet` 0.11.0.

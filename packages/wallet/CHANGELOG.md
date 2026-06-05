@@ -6,6 +6,34 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.11.3] — 2026-06-04
+
+Follow-up patch on the cross-runtime resolver. Ships alongside `@tezosx/relayer` 0.5.5. No wallet logic change beyond the relayer pin picking up 0.5.5.
+
+### Fixed
+- **Cross-runtime status resolver now also handles encoded-KT1 / alias destinations.** When the user-typed `to` is the EVM-encoded form of a Tezos L1 contract (or another alias), the kernel doesn't synthesize an EVM transfer to that address — it routes the value via L1 (AliasForwarder / contract call) and emits a bookkeeping EVM tx whose `to` is the sender's own alias. 0.11.2's matcher missed this case because it only accepted `tx.to === destination`. The matcher now also accepts `tx.to === senderAlias` with the same value, so the Send timeline progresses in both the direct-EVM and the L1-routed cases.
+
+### Compatibility
+- Relayer pin stays at `^0.5.0`; 0.5.5 is picked up automatically.
+- No storage, message, or signing change.
+- 160 / 160 tests pass.
+
+---
+
+## [0.11.2] — 2026-06-04
+
+Patch fixing the cross-runtime status resolver. Ships alongside `@tezosx/relayer` 0.5.4 (the matcher itself lives there). No wallet logic change beyond the relayer pin picking up 0.5.4.
+
+### Fixed
+- **Cross-runtime tz1 → 0x transfers now resolve to their real EVM hash in the UI.** Previously the wallet's *Send* status timeline would stall at "broadcasting" and never advance to "included" / "finalized" because the resolver couldn't find the kernel-synthesized EVM tx — it filtered on `from === alias`, but the kernel uses a constant system address (`0x7e20580000000000000000000000000000000001`) as the `from` field, with the originating tz1 nowhere on the synthesized tx. The matcher now keys on `(to, value)` from the user's original `eth_sendTransaction` request, both of which the kernel carries verbatim into the synthesized tx. (Implemented in `@tezosx/relayer/use-cases/resolve-synthetic-hash`.)
+
+### Compatibility
+- **No surface change** in the wallet. The relayer's `findRealHash` signature changes from `(alias, ...)` to `({ to, value }, ...)`; the wallet's only consumer (`RelayerProvider.resolveRealHash` in `@tezosx/relayer`) was updated in lockstep. Third-party consumers of `findRealHash` should update their call.
+- Storage / vault / message format unchanged.
+- 160 / 160 tests pass.
+
+---
+
 ## [0.11.1] — 2026-06-02
 
 Patch following dApp-integration testing. No relayer change; pin stays `^0.5.0` and picks up 0.5.3 automatically.
