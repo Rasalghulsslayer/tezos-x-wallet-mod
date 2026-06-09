@@ -1,0 +1,12 @@
+{
+  "_meta": {
+    "fixturesVersion": 1
+  },
+  "entries": {
+    "GET /chains/main/blocks/head/context/contracts/tz1ZTKzWZshji8kW45Tg6WPDX7WVrBnRJ9SH/balance": {
+      "status": 200,
+      "contentType": "application/json",
+      "body": "\"99886916677\"\n"
+    }
+  }
+}
