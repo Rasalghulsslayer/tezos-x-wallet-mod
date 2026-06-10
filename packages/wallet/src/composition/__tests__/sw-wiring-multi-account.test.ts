@@ -281,7 +281,7 @@ describe('sw-wiring signature-method session gating', () => {
     expect(res.code).toBe(4100);
   });
 
-  it('rejects eth_signTypedData_v4 with 4100 when origin has no session', async () => {
+  it('rejects eth_signTypedData_v4 with -32601 (unimplemented, never prompted)', async () => {
     const res = await dispatch(
       {
         type: 'ETHEREUM_REQUEST', origin: 'https://attacker.example', requestId: 'req-std-1',
@@ -292,6 +292,6 @@ describe('sw-wiring signature-method session gating', () => {
     );
     expect(res.ok).toBe(false);
     if (res.ok) throw new Error('unreachable');
-    expect(res.code).toBe(4100);
+    expect(res.code).toBe(-32601);
   });
 });
