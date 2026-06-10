@@ -46,7 +46,13 @@ export interface UnlockedKeyring extends UnlockedSession {
   password: string;
 }
 
-const PBKDF2_ITERATIONS = 200_000;
+// OWASP-recommended floor for PBKDF2-HMAC-SHA256 (also MetaMask's setting).
+// The encrypted vault sits in chrome.storage.local — plaintext on disk — so
+// this work factor is the only cost an offline brute-force has to pay.
+// Decryption reads the per-vault `iterations` field, so existing vaults
+// created at lower counts keep unlocking and are re-encrypted at this count
+// on their next mutation.
+const PBKDF2_ITERATIONS = 600_000;
 const SALT_BYTES        = 16;
 const IV_BYTES          = 12;
 
