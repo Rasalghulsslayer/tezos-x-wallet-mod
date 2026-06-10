@@ -6,8 +6,11 @@
  * The kernel produces one of two shapes:
  *
  *  - **Sender-side synthesis** (the common case): the synthesized tx is
- *    *from* the alias (`tx.from = senderAlias`). The destination, value,
- *    and calldata mirror the dApp's original request. Matched directly.
+ *    *from* the alias (`tx.from = senderAlias`). For plain transfers the
+ *    destination and value mirror the dApp's original request and are
+ *    matched exactly. For contract calls routed through L1 the real call
+ *    lives in the receipt logs, not the top-level fields, so when no
+ *    candidate mirrors the request the matcher falls back to `from` alone.
  *
  *  - **Inbound bookkeeping** (AliasForwarder, contract calls routed through
  *    L1, etc.): the synthesized tx is *to* the alias (`tx.to = senderAlias`)
@@ -114,10 +117,19 @@ async function scanBlock(
     .filter((tx) => !claimedHashes.has(tx.hash) && tx.from.toLowerCase() === target.senderAlias)
     .sort((a, b) => parseNonce(a.nonce) - parseNonce(b.nonce));
 
-  if (senderCandidates.length > 0) {
-    const match = senderCandidates[0];
-    claimedHashes.add(match.hash);
-    return match.hash;
+  // Claiming on `from` alone lets concurrent ops from the same alias (or an
+  // unrelated tx in the scan window) swap receipts, so candidates whose
+  // top-level to/value mirror the original request win over from-only ones.
+  const exactMatches = senderCandidates.filter(
+    (tx) =>
+      (tx.to ?? '').toLowerCase() === target.to &&
+      normaliseHex(tx.value ?? '0x0') === target.value,
+  );
+
+  const senderMatch = exactMatches[0] ?? senderCandidates[0];
+  if (senderMatch != null) {
+    claimedHashes.add(senderMatch.hash);
+    return senderMatch.hash;
   }
 
   const inboundCandidates = block.transactions
