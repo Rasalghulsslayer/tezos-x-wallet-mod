@@ -1,24 +1,27 @@
 /**
  * findRealHash: scan EVM blocks starting at fromBlock to find the kernel-
- * synthesized transaction matching the original `eth_sendTransaction`
- * request.
+ * synthesized transaction bound to the sender's alias for an outgoing
+ * `eth_sendTransaction` cross-runtime request.
  *
- * The kernel produces one of two shapes depending on the destination:
+ * The kernel produces one of two shapes:
  *
- *  - **Real EVM destination** — the synthesized tx has `to = destination`,
- *    `value = original wei`. Direct match.
+ *  - **Sender-side synthesis** (the common case): the synthesized tx is
+ *    *from* the alias (`tx.from = senderAlias`). The destination, value,
+ *    and calldata mirror the dApp's original request. Matched directly.
  *
- *  - **Encoded-KT1 / alias destination** — the kernel routes the value via
- *    L1 (AliasForwarder, contract call, etc.) and synthesizes an EVM
- *    bookkeeping tx with `to = sender's alias` (a trace of the cross-runtime
- *    op rather than a transfer).
+ *  - **Inbound bookkeeping** (AliasForwarder, contract calls routed through
+ *    L1, etc.): the synthesized tx is *to* the alias (`tx.to = senderAlias`)
+ *    and the receipt carries a log emitted by the NAC precompile. Matching
+ *    on `to = senderAlias` alone is too permissive — unrelated bookkeeping
+ *    txs share that shape — so the matcher checks the receipt for a
+ *    NAC_PRECOMPILE_ADDR log before claiming.
  *
- * The matcher accepts either: `tx.to ∈ {destination, senderAlias}` AND
- * `tx.value = expected`. Per-block candidates are sorted by nonce ascending
- * so concurrent syntheses claim their txs in submission order.
+ * Per-block candidates are sorted by nonce ascending so concurrent syntheses
+ * claim their txs in submission order.
  */
 
 import type { TezlinkClient } from '../tezos/tezlink.js';
+import { NAC_PRECOMPILE_ADDR } from '../shared/constants.js';
 import { hexToNum, numToHex } from '../shared/hex.js';
 import { sleep } from '../shared/async.js';
 
@@ -107,23 +110,46 @@ async function scanBlock(
   const block = await tezlink.getBlockByNumber(numToHex(blockNum), true);
   if (block === null || block.transactions.length === 0) return null;
 
-  const candidates = block.transactions
-    .filter((tx) => {
-      if (claimedHashes.has(tx.hash)) return false;
-      if (normaliseHex(tx.value ?? '0x0') !== target.value) return false;
-      const recipient = (tx.to ?? '').toLowerCase();
-      return recipient === target.to || recipient === target.senderAlias;
-    })
+  const senderCandidates = block.transactions
+    .filter((tx) => !claimedHashes.has(tx.hash) && tx.from.toLowerCase() === target.senderAlias)
     .sort((a, b) => parseNonce(a.nonce) - parseNonce(b.nonce));
-  if (candidates.length === 0) return null;
 
-  const match = candidates[0];
-  claimedHashes.add(match.hash);
-  return match.hash;
+  if (senderCandidates.length > 0) {
+    const match = senderCandidates[0];
+    claimedHashes.add(match.hash);
+    return match.hash;
+  }
+
+  const inboundCandidates = block.transactions
+    .filter((tx) => !claimedHashes.has(tx.hash) && tx.to?.toLowerCase() === target.senderAlias)
+    .sort((a, b) => parseNonce(a.nonce) - parseNonce(b.nonce));
+
+  for (const tx of inboundCandidates) {
+    if (await hasNacPrecompileLog(tezlink, tx.hash)) {
+      claimedHashes.add(tx.hash);
+      return tx.hash;
+    }
+  }
+
+  return null;
 }
 
 function parseNonce(hex: string | undefined): number {
   if (hex == null) return Number.MAX_SAFE_INTEGER;
   const n = parseInt(hex, 16);
   return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+}
+
+async function hasNacPrecompileLog(tezlink: TezlinkClient, txHash: string): Promise<boolean> {
+  const receipt = await tezlink.getTransactionReceipt(txHash);
+  return Boolean(
+    receipt?.logs.some(
+      (log): log is { address: string } =>
+        typeof log === 'object' &&
+        log !== null &&
+        'address' in log &&
+        typeof (log as { address?: unknown }).address === 'string' &&
+        (log as { address: string }).address.toLowerCase() === NAC_PRECOMPILE_ADDR,
+    ),
+  );
 }

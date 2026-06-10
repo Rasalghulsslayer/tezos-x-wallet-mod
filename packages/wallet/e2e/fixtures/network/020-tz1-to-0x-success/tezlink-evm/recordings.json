@@ -1,0 +1,37 @@
+{
+  "_meta": {
+    "fixturesVersion": 1
+  },
+  "entries": {
+    "JSON-RPC tez_getTezosEthereumAddress [\"tz1ZTKzWZshji8kW45Tg6WPDX7WVrBnRJ9SH\"]": {
+      "status": 200,
+      "contentType": "application/json",
+      "body": "{\"jsonrpc\":\"2.0\",\"result\":\"0xb650b9991e6e7f693d72cd66c6aceeaf254ef606\",\"id\":1}\n"
+    },
+    "JSON-RPC eth_chainId []": {
+      "status": 200,
+      "contentType": "application/json",
+      "body": "{\"jsonrpc\":\"2.0\",\"result\":\"0x1f440\",\"id\":1}\n"
+    },
+    "JSON-RPC eth_call [{\"data\":\"0x70a08231000000000000000000000000b650b9991e6e7f693d72cd66c6aceeaf254ef606\",\"to\":\"0xd77420f73b4612a7a99dba8c2afd30a1886b0344\"},\"latest\"]": {
+      "status": 200,
+      "contentType": "application/json",
+      "body": "{\"jsonrpc\":\"2.0\",\"result\":\"0x0000000000000000000000000000000000000000000000000000000000989680\",\"id\":1}\n"
+    },
+    "JSON-RPC eth_blockNumber []": {
+      "status": 200,
+      "contentType": "application/json",
+      "body": "{\"jsonrpc\":\"2.0\",\"result\":\"0x93fc8\",\"id\":1}\n"
+    },
+    "JSON-RPC eth_getTransactionReceipt [\"0x6024c67e50963af5d530292f2f031337dd575334511a347a639555b59b3533fa\"]": {
+      "status": 200,
+      "contentType": "application/json",
+      "body": "{\"jsonrpc\":\"2.0\",\"result\":null,\"id\":1}\n"
+    },
+    "JSON-RPC eth_getBlockByNumber [\"0x93fc8\",true]": {
+      "status": 200,
+      "contentType": "application/json",
+      "body": "{\"jsonrpc\":\"2.0\",\"result\":{\"number\":\"0x93fc8\",\"hash\":\"0x68ea8a4d7a4e01eab43aac62671f8f42e9bd667b849044631e3bc2471db01249\",\"parentHash\":\"0x8727f4336876bda172697cb68f154ae5bfbfce4f7cecd6bd9efceb0c54a0bb30\",\"nonce\":\"0x0000000000000000\",\"sha3Uncles\":\"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347\",\"logsBloom\":\"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\",\"transactionsRoot\":\"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421\",\"stateRoot\":\"0xf35b01bf61916d2e47292ef83a5ee2c0318f78b78a538fa54ea29ee9596bae3c\",\"receiptsRoot\":\"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421\",\"miner\":\"0x433df42a81f9a4a1480e92641b694399a83647ca\",\"difficulty\":\"0x0\",\"totalDifficulty\":\"0x0\",\"extraData\":\"0x\",\"size\":\"0x258\",\"gasLimit\":\"0x4000000000000\",\"gasUsed\":\"0x0\",\"timestamp\":\"0x6a22dda9\",\"transactions\":[],\"uncles\":[],\"baseFeePerGas\":\"0x3b9aca00\",\"mixHash\":\"0x0000000000000000000000000000000000000000000000000000000000000000\",\"withdrawals\":[],\"withdrawalsRoot\":\"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421\",\"blobGasUsed\":\"0x0\",\"excessBlobGas\":\"0x0\",\"parentBeaconBlockRoot\":\"0x0000000000000000000000000000000000000000000000000000000000000000\"},\"id\":1}\n"
+    }
+  }
+}
