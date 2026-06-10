@@ -74,12 +74,23 @@ export async function dispatch(
   deps:   SwDeps,
 ): Promise<WalletResponse> {
   if ('type' in msg && msg.type === 'ETHEREUM_REQUEST') {
-    return handleEthereumRequest(msg, deps);
-  }
-  if ('type' in msg && (msg.type === 'GET_PENDING' || msg.type === 'RESOLVE_PENDING')) {
-    if (sender.id !== chrome.runtime.id) {
+    // dApp traffic is relayed exclusively by the content bridge, which runs
+    // in a tab and stamps msg.origin from its own window.location. Reject
+    // tab-less senders so extension pages can't impersonate a dApp, and
+    // senders whose real origin disagrees with the stamped one.
+    if (sender.tab == null || (sender.origin != null && sender.origin !== msg.origin)) {
       return { ok: false, code: EIP_UNAUTHORIZED, message: 'Forbidden sender' };
     }
+    return handleEthereumRequest(msg, deps);
+  }
+
+  // Everything else is privileged (unlock, seed export, approval decisions):
+  // only the extension's own pages may issue it. A bare runtime.id check is
+  // not enough — content scripts share the extension id.
+  if (sender.url == null || !sender.url.startsWith(chrome.runtime.getURL(''))) {
+    return { ok: false, code: EIP_UNAUTHORIZED, message: 'Forbidden sender' };
+  }
+  if ('type' in msg && (msg.type === 'GET_PENDING' || msg.type === 'RESOLVE_PENDING')) {
     return handleApproveRequest(msg, deps);
   }
   return handlePopupRequest(msg as PopupRequest, deps);
