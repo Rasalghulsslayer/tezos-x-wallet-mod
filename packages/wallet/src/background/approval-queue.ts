@@ -3,6 +3,15 @@ import type { NotificationPort } from '../ports/notification-port';
 
 type Decision = 'approve' | 'reject';
 
+/** Thrown when a request id is already pending — entries are immutable once
+ *  enqueued, so a colliding id can never replace what the approval UI shows. */
+export class DuplicateRequestIdError extends Error {
+  constructor(requestId: string) {
+    super(`Request id already pending: ${requestId}`);
+    this.name = 'DuplicateRequestIdError';
+  }
+}
+
 interface Pending {
   request: PendingRequest;
   resolve: (decision: Decision) => void;
@@ -40,6 +49,9 @@ export class ApprovalQueue {
    * user's decision. Opens the approve.html window side by side.
    */
   async enqueue(request: PendingRequest): Promise<Decision> {
+    if (this.queue.has(request.requestId)) {
+      throw new DuplicateRequestIdError(request.requestId);
+    }
     const approvalUrl = chrome.runtime.getURL(
       `approve.html?requestId=${encodeURIComponent(request.requestId)}`,
     );
