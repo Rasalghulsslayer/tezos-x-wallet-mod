@@ -7,6 +7,7 @@ import {
   TX_POLL_TIMEOUT_MS,
 } from './constants';
 import { startPoller, type PollHandle } from './poller';
+import { e2eConfig } from './e2e';
 import type { TxStatus } from '../domain/tx-status';
 
 export interface TrackTxArgs {
@@ -33,7 +34,7 @@ export function trackTx({ hash, runtime, onUpdate }: TrackTxArgs): PollHandle {
     },
     isDone:    (s) => s.stage === 'finalized' || s.stage === 'failed',
     intervalMs: TX_POLL_INTERVAL_FAST_MS,
-    timeoutMs:  TX_POLL_TIMEOUT_MS,
+    timeoutMs:  e2eConfig()?.txPollTimeoutMs ?? TX_POLL_TIMEOUT_MS,
     onTimeout:  () => onUpdate({ stage: 'unavailable' }),
   });
 

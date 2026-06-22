@@ -13,6 +13,7 @@ import {
 import { mutezToXtz, weiToXtz, formatTokenAmount } from '@/shared/format';
 import { formatError } from '@/domain/error';
 import { trackTx } from '@/shared/tx-status';
+import { e2eConfig } from '@/shared/e2e';
 import type { TxStatus } from '@/domain/tx-status';
 import { signingSourceAddress } from '../view-models/account-card-vm';
 import { Button } from '../tx/Button';
@@ -153,6 +154,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
 
     let cancelled = false;
     const startedAt = Date.now();
+    const resolveTimeoutMs = e2eConfig()?.resolveTimeoutMs ?? RESOLVE_TIMEOUT_MS;
 
     const tick = async () => {
       if (cancelled) return;
@@ -170,7 +172,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
         }
       } catch { /* keep polling */ }
 
-      if (Date.now() - startedAt >= RESOLVE_TIMEOUT_MS) {
+      if (Date.now() - startedAt >= resolveTimeoutMs) {
         setDone((prev) => prev != null ? { ...prev, pending: true } : prev);
         setPendingResolve(null);
         onDone();

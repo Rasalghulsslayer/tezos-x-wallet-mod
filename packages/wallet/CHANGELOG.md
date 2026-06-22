@@ -14,9 +14,10 @@ A test-hardening release: it turns the existing test work into a green, enforced
 - **Known-answer tests for the EVM signing primitives.** The bytes that move funds were previously checked against nothing. This release pins the RLP encoder against the canonical Ethereum spec vectors (empty string, `"dog"`, the nested set, the 56-byte long-string boundary), and the EIP-1559 raw-transaction signer against reference vectors produced independently by viem (bare transfer with a leading-zero-trimmed nonce, a contract call with calldata, and a transaction carrying an access list) — the hand-rolled signer must reproduce them byte-for-byte. The EIP-191 `personal_sign` and EIP-55 address vectors added earlier remain.
 - **Known-answer test for Tezos key derivation.** `seed.ts` is pinned against the published Flextesa "alice" keypair (its `edsk` → `tz1` / `edpk`, derived by octez), locking in the ed25519-pubkey → tz1 encoding, plus determinism and round-trip checks on the BIP-44 mnemonic path.
 - **Assertions on the two remaining sensitive seams.** The keyring's vault crypto is now asserted directly: a wrong password and a tampered ciphertext both fail to unlock (AES-GCM authentication), every save draws a fresh salt and IV, and a non-version-2 payload is rejected by the format guard. On the dApp approval router, the cross-extension sender-id guard (a foreign extension's `RESOLVE_PENDING`/`GET_PENDING` is refused) and the user-rejection path (a declined `eth_requestAccounts` surfaces EIP-1193 `4001`) are now covered. The `eth_accounts` non-disclosure gating was already tested.
+- **A single test-only `globalThis.__e2e__` seam** (`shared/e2e.ts`). The cross-runtime status timeouts — the Send page's synthetic→real resolution window and the tx-status poller's hard timeout — now read an optional override before falling back to their shipped constants, so an end-to-end spec can collapse the otherwise two-minute "couldn't confirm" path into a few seconds. `__e2e__` is never set in production, so behaviour there is unchanged; this is the codebase's only sanctioned `globalThis` access.
 
 ### Compatibility
-- No storage, message, or signing-behaviour change. Test-only additions.
+- No storage, message, or signing-behaviour change. The `__e2e__` seam is inert unless explicitly set (only the E2E harness does so).
 
 ---
 
