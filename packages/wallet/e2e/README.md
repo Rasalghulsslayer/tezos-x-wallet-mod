@@ -13,7 +13,7 @@ npm run test:e2e:record       # RECORD mode — captures real previewnet respons
 npm run test:e2e:ui           # interactive Playwright UI mode for debugging
 ```
 
-In CI: `e2e-wallet` is a blocking gate — `needs: [build-wallet]`, downloads the `wallet-dist` artifact, runs `npm run test:e2e`. See `.github/workflows/ci.yml`.
+In CI: `e2e-wallet` is a blocking gate — `needs: [build-wallet]`, downloads the `wallet-dist` artifact into `dist/`, installs the Chromium channel (`npx playwright install --with-deps chromium`, headless, no xvfb), and runs `npm run test:e2e:ci`. That script has no pre-build hook, so it exercises the **exact** artifact `build-wallet` produced rather than rebuilding. On failure the HTML report is uploaded as the `playwright-report` artifact. See `.github/workflows/ci.yml`.
 
 ## Harness layout
 
