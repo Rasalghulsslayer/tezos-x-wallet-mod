@@ -6,6 +6,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.11.4] — 2026-06-22
+
+A test-hardening release: it turns the existing test work into a green, enforced safety net and closes the most dangerous coverage gaps. Ships alongside `@tezosx/relayer` 0.5.6.
+
+### Added
+- **Known-answer tests for the EVM signing primitives.** The bytes that move funds were previously checked against nothing. This release pins the RLP encoder against the canonical Ethereum spec vectors (empty string, `"dog"`, the nested set, the 56-byte long-string boundary), and the EIP-1559 raw-transaction signer against reference vectors produced independently by viem (bare transfer with a leading-zero-trimmed nonce, a contract call with calldata, and a transaction carrying an access list) — the hand-rolled signer must reproduce them byte-for-byte. The EIP-191 `personal_sign` and EIP-55 address vectors added earlier remain.
+- **Known-answer test for Tezos key derivation.** `seed.ts` is pinned against the published Flextesa "alice" keypair (its `edsk` → `tz1` / `edpk`, derived by octez), locking in the ed25519-pubkey → tz1 encoding, plus determinism and round-trip checks on the BIP-44 mnemonic path.
+
+### Compatibility
+- No storage, message, or signing-behaviour change. Test-only additions.
+
+---
+
 ## [0.11.3] — 2026-06-04
 
 Follow-up patch on the cross-runtime resolver. Ships alongside `@tezosx/relayer` 0.5.5. No wallet logic change beyond the relayer pin picking up 0.5.5.
