@@ -65,9 +65,30 @@ describe('findRealHash — synthetic→real hash resolution', () => {
     const claimed = new Set<string>();
     const first  = await findRealHash(asClient(fake), target, '0x10', claimed, 1, 0);
     const second = await findRealHash(asClient(fake), target, '0x10', claimed, 1, 0);
-    expect(first).toBe(h('b0'));   // lowest nonce claimed first
+    expect(first).toBe(h('b0'));   // lowest nonce claimed first (from-only fallback)
     expect(second).toBe(h('b1'));  // shared claimed set → next unclaimed tx
     expect(first).not.toBe(second);
+  });
+
+  it('prefers the exact to/value match over nonce order, so concurrent ops never swap receipts (#74)', async () => {
+    const DEST_A = '0x' + 'aa'.repeat(20);
+    const DEST_B = '0x' + 'bb'.repeat(20);
+    const VAL_A  = '0x38d7ea4c68000';   // 0.001
+    const VAL_B  = '0x16345785d8a0000'; // 0.1
+    const fake = new FakeTezlink(0x10, {
+      0x10: { number: '0x10', transactions: [
+        tx(h('txB'), { from: ALIAS, to: DEST_B, value: VAL_B, nonce: '0x0' }), // lower nonce
+        tx(h('txA'), { from: ALIAS, to: DEST_A, value: VAL_A, nonce: '0x1' }),
+      ] },
+    });
+    const claimed = new Set<string>();
+    // Op A wants DEST_A/VAL_A: it must claim txA even though txB has the lower
+    // nonce — under the old from-only match it would have grabbed txB (the swap).
+    const a = await findRealHash(asClient(fake), { to: DEST_A, value: VAL_A, senderAlias: ALIAS }, '0x10', claimed, 1, 0);
+    expect(a).toBe(h('txA'));
+    // Op B then claims its own exact match.
+    const b = await findRealHash(asClient(fake), { to: DEST_B, value: VAL_B, senderAlias: ALIAS }, '0x10', claimed, 1, 0);
+    expect(b).toBe(h('txB'));
   });
 
   it('claims an inbound bookkeeping tx (to = alias) only when its receipt carries a NAC precompile log', async () => {
