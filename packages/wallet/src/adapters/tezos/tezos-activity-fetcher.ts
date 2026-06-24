@@ -43,19 +43,46 @@ function statusOf(op: TzktOperation): 'pending' | 'confirmed' | 'failed' {
 function isNacGatewayCall(op: TzktOperation): boolean {
   return op.target?.address === NAC_CONTRACT
       && op.parameter != null
-      && (op.parameter.entrypoint === 'default' || op.parameter.entrypoint === 'call_evm');
+      // `call` is the current bare-transfer / HTTP entrypoint; `call_evm` the ABI
+      // call. `default` is the removed legacy bare-transfer helper — still matched
+      // so historical operations keep decoding.
+      && (op.parameter.entrypoint === 'call'
+          || op.parameter.entrypoint === 'call_evm'
+          || op.parameter.entrypoint === 'default');
+}
+
+/** Recursively find the first runtime URL (http://ethereum/<0x> or http://tezos/<tz1>)
+ *  anywhere in a (possibly humanized) TzKT parameter value. */
+function findRuntimeUrl(v: unknown): string | null {
+  if (typeof v === 'string') return /^https?:\/\/(?:ethereum|tezos)\//.test(v) ? v : null;
+  if (Array.isArray(v)) { for (const e of v) { const r = findRuntimeUrl(e); if (r != null) return r; } return null; }
+  if (v != null && typeof v === 'object') { for (const e of Object.values(v as object)) { const r = findRuntimeUrl(e); if (r != null) return r; } }
+  return null;
+}
+
+/** First Micheline/JSON string anywhere in a parameter value. */
+function firstString(v: unknown): string | null {
+  if (typeof v === 'string') return v;
+  if (Array.isArray(v)) { for (const e of v) { const r = firstString(e); if (r != null) return r; } return null; }
+  if (v != null && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    if (typeof o.string === 'string') return o.string;
+    for (const e of Object.values(o)) { const r = firstString(e); if (r != null) return r; }
+  }
+  return null;
 }
 
 function counterpartyFromNacCall(op: TzktOperation): string {
-  // `default` entrypoint: parameter.value is the destination 0x string directly.
-  // `call_evm`: parameter.value is a Michelson tuple; the destination is the first
-  // string field. Best-effort — fall back to the raw string if we can't decode.
+  // Legacy `default`: value is the destination 0x string directly.
+  // `call` (bare transfer): value is an HTTP request whose url is
+  // http://ethereum/<0x> — strip the scheme/host to surface the 0x.
+  // `call_evm` (ABI call): value is a Michelson tuple; the destination is the
+  // first string field. Best-effort — fall back to '' if we can't decode.
   const v = op.parameter?.value;
   if (typeof v === 'string') return v;
-  if (v != null && typeof v === 'object' && 'string' in v && typeof (v as { string: unknown }).string === 'string') {
-    return (v as { string: string }).string;
-  }
-  return '';
+  const url = findRuntimeUrl(v);
+  if (url != null) return url.replace(/^https?:\/\/(?:ethereum|tezos)\//, '');
+  return firstString(v) ?? '';
 }
 
 export class TezosActivityFetcher implements ActivityFetcher {

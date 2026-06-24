@@ -25,7 +25,7 @@ Internally, the wallet picks the right path for each transfer based on the activ
 **From a Michelson (`tz1`) account:**
 
 - **XTZ to another Tezos address** (`tz1 → tz1 / tz2 / tz3 / KT1`) — emitted as a **native Michelson operation** via Taquito, no NAC gateway involved.
-- **XTZ to a 0x address** (`tz1 → 0x`) — wrapped as a Michelson op targeting the **NAC gateway**'s `default` entrypoint at `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw`. *Note*: EVM aliases of Tezos accounts cannot hold native XTZ — the kernel's `AliasForwarder` reroutes any XTZ sent to such an alias back to its tz1 of origin. This path is most useful when the recipient is an EVM-native account or an alias of a known tz1.
+- **XTZ to a 0x address** (`tz1 → 0x`) — wrapped as a Michelson op targeting the **NAC gateway**'s generic `call` entrypoint (a `%call` HTTP request: a POST to `http://ethereum/<0x>` with an empty body) at `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw`. (The hard-coded `%default` helper this used to target was removed in the Tezos X release candidate.) *Note*: EVM aliases of Tezos accounts cannot hold native XTZ — the kernel's `AliasForwarder` reroutes any XTZ sent to such an alias back to its tz1 of origin. This path is most useful when the recipient is an EVM-native account or an alias of a known tz1.
 - **USDC and any dApp-initiated EVM call** — routed through the NAC gateway's `call_evm` entrypoint, executed atomically by the Tezos X kernel on the EVM runtime.
 
 **From an EVM-native (`0x`) account:**

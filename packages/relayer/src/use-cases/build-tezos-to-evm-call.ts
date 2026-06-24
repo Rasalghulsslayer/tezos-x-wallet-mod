@@ -5,7 +5,7 @@
  */
 
 import type { MichelsonV1Expression } from '@taquito/rpc';
-import { NAC_CONTRACT } from '../shared/constants.js';
+import { NAC_CONTRACT, NAC_ETHEREUM_RUNTIME_URL, NAC_HTTP_POST } from '../shared/constants.js';
 import type { GatewayCall } from '../domain/cross-runtime.js';
 import type { EthTransactionRequest } from '../domain/eth-tx.js';
 
@@ -82,8 +82,39 @@ function resolveMethodSignature(selectorHex: string): string {
   throw new UnknownSelectorError(selectorHex);
 }
 
-function buildDefaultArg(destination: string): MichelsonV1Expression {
-  return { string: destination };
+/**
+ * The generic `%call` entrypoint (the removed `%default` helper's replacement —
+ * tezos/tezos!22168) takes an HTTP-style request:
+ *   pair url (pair headers (pair body (pair method callback)))
+ * A bare native transfer is a POST to http://ethereum/<0x> with empty headers
+ * and body; the operation's mutez amount is credited to the destination.
+ */
+function buildHttpCallArg(url: string): MichelsonV1Expression {
+  return {
+    prim: 'Pair',
+    args: [
+      { string: url },
+      {
+        prim: 'Pair',
+        args: [
+          [], // headers: empty list (list (pair string string))
+          {
+            prim: 'Pair',
+            args: [
+              { bytes: '' }, // body: empty
+              {
+                prim: 'Pair',
+                args: [
+                  { int: String(NAC_HTTP_POST) }, // method: POST
+                  { prim: 'None' },               // callback
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
 }
 
 function buildCallArg(
@@ -126,8 +157,8 @@ export async function buildTezosToEvmCall(
     return {
       direction:    'michelson-to-evm',
       contractAddr: NAC_CONTRACT,
-      entrypoint:   'default',
-      michelineArg: buildDefaultArg(tx.to),
+      entrypoint:   'call',
+      michelineArg: buildHttpCallArg(`${NAC_ETHEREUM_RUNTIME_URL}${tx.to}`),
       mutezAmount,
     };
   }

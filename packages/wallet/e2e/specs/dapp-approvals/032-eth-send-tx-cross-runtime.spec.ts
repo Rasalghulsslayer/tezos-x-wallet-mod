@@ -64,7 +64,7 @@ test('eth_sendTransaction (tz1 source): approval popup shows the NAC gateway cro
   expect(body).toContain('Debit (mutez)');
   expect(body).toContain('1000');                    // 0.001 XTZ → 1000 mutez
   expect(body).toContain(NAC_KT1.slice(0, 6));       // truncated KT1 address
-  expect(body).toContain('default');                 // bare-transfer entrypoint
+  expect(body).toContain('call');                    // bare-transfer entrypoint (HTTP %call; %default removed in !22168)
 
   // Reject ends the flow without firing the Taquito sign+inject path
   // (already covered by spec 020). The dApp must receive EIP-1193 4001.

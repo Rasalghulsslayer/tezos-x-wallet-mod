@@ -13,20 +13,33 @@ const TO = '0xdEAD000000000000000042000000000000000000';
 afterEach(() => vi.restoreAllMocks());
 
 describe('buildTezosToEvmCall — wei→mutez conversion & entrypoint routing', () => {
-  it('bare transfer with an exact-mutez value → default entrypoint, divided mutez', async () => {
+  it('bare transfer with an exact-mutez value → generic `call` entrypoint (HTTP %call), divided mutez', async () => {
     // 0x38d7ea4c68000 = 1e15 wei = exactly 1000 mutez (1e15 / 1e12).
     const call = await buildTezosToEvmCall({ to: TO, value: '0x38d7ea4c68000' });
     expect(call.direction).toBe('michelson-to-evm');
     expect(call.contractAddr).toBe(NAC_CONTRACT);
-    expect(call.entrypoint).toBe('default');
-    expect(call.mutezAmount).toBe(1000n);
-    expect(call.michelineArg).toEqual({ string: TO });
+    expect(call.entrypoint).toBe('call'); // %default removed in tezos/tezos!22168
+    expect(call.mutezAmount).toBe(1000n); // value conserved (wei→mutez exact)
+    // %call HTTP request: POST to http://ethereum/<0x>, no headers, empty body.
+    expect(call.michelineArg).toEqual({
+      prim: 'Pair',
+      args: [
+        { string: `http://ethereum/${TO}` },
+        { prim: 'Pair', args: [
+          [],
+          { prim: 'Pair', args: [
+            { bytes: '' },
+            { prim: 'Pair', args: [{ int: '1' }, { prim: 'None' }] },
+          ] },
+        ] },
+      ],
+    });
   });
 
-  it('missing value → 0 mutez, default entrypoint', async () => {
+  it('missing value → 0 mutez, generic `call` entrypoint', async () => {
     const call = await buildTezosToEvmCall({ to: TO });
     expect(call.mutezAmount).toBe(0n);
-    expect(call.entrypoint).toBe('default');
+    expect(call.entrypoint).toBe('call');
   });
 
   it('rejects sub-mutez precision instead of silently flooring it away (audit H4)', async () => {

@@ -47,7 +47,7 @@ The approval window shows two cards stacked vertically:
 **What you actually sign** (present only for Tezos-source accounts, since 0.11.0) — the resolved Michelson call your `tz1` will commit to:
 
 - **Michelson target** — the NAC gateway `KT1…` your op targets
-- **Entrypoint** — `default` for bare value transfers, `call_evm` for ABI calls
+- **Entrypoint** — `call` for bare value transfers (the generic HTTP `%call`), `call_evm` for ABI calls
 - **Selector** — the 4-byte function selector, present only when the entrypoint is `call_evm`. Resolved against a curated allow-list; unknown selectors are rejected by the relayer before the popup opens
 - **Debit (mutez)** — the actual mutez amount that will move from your `tz1`. Wei amounts not divisible by 10¹² (1 mutez) are rejected upstream; what you see here is exact
 

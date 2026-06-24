@@ -63,8 +63,8 @@ export interface PendingTransaction {
    */
   crossRuntime?: {
     michelsonTarget: string;          // KT1 NAC gateway address
-    entrypoint:      string;          // 'default' (bare transfer) | 'call_evm' (ABI call)
-    decodedSelector: string | null;   // null when calldata is empty (default entrypoint)
+    entrypoint:      string;          // 'call' (bare transfer, HTTP %call) | 'call_evm' (ABI call)
+    decodedSelector: string | null;   // null when calldata is empty (bare-transfer `call`)
     mutezValue:      string;          // decimal mutez string
   };
 }
