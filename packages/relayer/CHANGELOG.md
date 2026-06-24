@@ -6,6 +6,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.6.0] — 2026-06-24
+
+Ships alongside `@tezosx/wallet` 0.12.0.
+
+### Changed
+- **Native bare transfers now go through the gateways' generic `call` / `%call` HTTP entrypoint.** tezos/tezos!22168 (the Tezos X release candidate) removed the hard-coded `transfer` (EVM precompile) and `%default` (Michelson gateway) helpers — they were tailored to a two-runtime world. `buildEvmToTezosCall` (0x → tz1) now encodes a `call(string url, (string,string)[] headers, bytes body, uint8 method)` against the precompile — a POST (`method = 1`) to `http://tezos/<destination>` with empty headers and an empty body — instead of `transfer(string)`. `buildTezosToEvmCall` (tz1 → 0x) now emits the `call` entrypoint carrying a `%call` HTTP request (a POST to `http://ethereum/<destination>`, empty body, `callback = None`) instead of `%default`. The `call_evm` / `callMichelson` ABI-call paths are untouched.
+- **Value is conserved — no 10^12 inflation.** The generic `call()` path used to inflate the credited amount by 10^12 (audit finding EL-02), but that was fixed upstream in tezos/tezos!21278: `call()` now converts wei→mutez via `mutez_from_wei()` exactly as the old `transfer` did. The relayer therefore keeps sending `msg.value = mutez × 10^12` on the EVM side and the exact wei→mutez conversion on the Michelson side; the regression tests assert this round-trip.
+
+### Removed
+- **`encodeNacTransfer` and the `transfer(string)` ABI entry** (from `shared/abi.ts` and the `./evm` entry point). They are replaced by `encodeNacCall(url, headers, body, method)`.
+
+### Compatibility
+- **Breaking on the public encoder surface.** `encodeNacTransfer` is gone — use `encodeNacCall`. `GatewayCall.entrypoint` is now `'call' | 'call_evm'` (was `'default' | 'call_evm'`). `NAC_RECOMMENDED_GAS.transfer` was renamed to `.call`.
+- Requires a Tezos X runtime exposing the `call` / `%call` entrypoints (they predate the removal and are already available on previewnet).
+
+---
+
 ## [0.5.6] — 2026-06-22
 
 Ships alongside `@tezosx/wallet` 0.11.4.

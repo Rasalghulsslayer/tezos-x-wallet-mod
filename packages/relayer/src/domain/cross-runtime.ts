@@ -11,7 +11,7 @@ export type CrossRuntimeDirection = 'michelson-to-evm' | 'evm-to-michelson';
 export interface GatewayCall {
   direction:    'michelson-to-evm';
   contractAddr: string;
-  entrypoint:   'default' | 'call_evm';
+  entrypoint:   'call' | 'call_evm';
   michelineArg: MichelsonV1Expression;
   mutezAmount:  bigint;
 }

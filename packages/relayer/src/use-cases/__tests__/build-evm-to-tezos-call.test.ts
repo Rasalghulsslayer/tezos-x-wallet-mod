@@ -7,15 +7,16 @@ import type { CrossRuntimeIntent } from '../../domain/intent';
 const MUTEZ_TO_WEI = 1_000_000_000_000n;
 
 describe('buildEvmToTezosCall — mutez→wei (×1e12) & precompile encoding', () => {
-  it('transfer intent → value ×1e12, transfer gas, precompile address', () => {
+  it('transfer intent → value ×1e12, call gas, http://tezos/<dest> encoded', () => {
     const intent: CrossRuntimeIntent = { kind: 'transfer', destination: 'tz1abc', amount: 5n };
     const call = buildEvmToTezosCall(intent);
     expect(call.direction).toBe('evm-to-michelson');
     expect(call.to).toBe(NAC_PRECOMPILE_ADDR);
-    expect(call.value).toBe(5n * MUTEZ_TO_WEI);
-    expect(call.gasLimit).toBe(NAC_RECOMMENDED_GAS.transfer);
-    expect(call.data.startsWith('0x')).toBe(true);
-    expect(call.data.length).toBeGreaterThan(2);
+    expect(call.value).toBe(5n * MUTEZ_TO_WEI);          // value conserved, no inflation
+    expect(call.gasLimit).toBe(NAC_RECOMMENDED_GAS.call); // generic `call`, not the removed `transfer`
+    // The calldata is a NAC `call` whose url is http://tezos/<destination>.
+    const urlHex = Buffer.from('http://tezos/tz1abc', 'utf8').toString('hex');
+    expect(call.data.toLowerCase()).toContain(urlHex);
   });
 
   it('the ×1e12 factor is the exact inverse of the wei→mutez side', () => {

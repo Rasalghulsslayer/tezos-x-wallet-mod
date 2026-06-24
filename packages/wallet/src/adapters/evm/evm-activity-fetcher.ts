@@ -70,9 +70,11 @@ function statusOf(tx: { txreceipt_status?: string; isError?: string }): 'pending
 }
 
 /**
- * Decodes the destination tz1 from a NAC precompile `transfer(string)` call.
- * ABI layout after the 4-byte selector: 32-byte offset, 32-byte length, then
- * `length` bytes of ASCII payload. Returns null if the layout doesn't match.
+ * Legacy decoder: the destination tz1 from a pre-!22168 `transfer(string)`
+ * precompile call. ABI layout after the 4-byte selector: 32-byte offset,
+ * 32-byte length, then `length` bytes of ASCII payload. Kept for historical
+ * activity; new bare transfers use the generic `call(...)` — decode those with
+ * decodePrecompileDestination.
  */
 export function decodePrecompileTransferInput(input: string): string | null {
   const clean = input.startsWith('0x') ? input.slice(2) : input;
@@ -89,6 +91,41 @@ export function decodePrecompileTransferInput(input: string): string | null {
     out += String.fromCharCode(code);
   }
   return out;
+}
+
+/** Read the first dynamic ABI `string` argument from calldata (selector + head). */
+function decodeFirstAbiString(input: string): string | null {
+  const clean = input.startsWith('0x') ? input.slice(2) : input;
+  const args  = clean.slice(8); // drop the 4-byte selector
+  if (args.length < 64) return null;
+  const offsetBytes = parseInt(args.slice(0, 64), 16);
+  if (!Number.isFinite(offsetBytes)) return null;
+  const at = offsetBytes * 2;
+  if (args.length < at + 64) return null;
+  const len = parseInt(args.slice(at, at + 64), 16);
+  if (!Number.isFinite(len) || len <= 0 || len > 256) return null;
+  const dataHex = args.slice(at + 64, at + 64 + len * 2);
+  if (dataHex.length < len * 2) return null;
+  let out = '';
+  for (let i = 0; i < dataHex.length; i += 2) {
+    const code = parseInt(dataHex.slice(i, i + 2), 16);
+    if (code < 0x20 || code > 0x7e) return null;
+    out += String.fromCharCode(code);
+  }
+  return out;
+}
+
+/**
+ * Decodes the destination address from a NAC precompile call. The current bare
+ * transfer uses `call(string url, …)` whose url is http://tezos/<tz1>; this
+ * strips the scheme/host to surface the bare address. Legacy `transfer(string)`
+ * calldata decodes straight to the address. Best-effort; null if undecodable.
+ */
+export function decodePrecompileDestination(input: string): string | null {
+  const s = decodeFirstAbiString(input);
+  if (s == null) return null;
+  const m = s.match(/^https?:\/\/(?:tezos|ethereum)\/(.+)$/);
+  return m ? m[1] : s;
 }
 
 export type GetTokenList = () => Promise<RegisteredToken[]>;
@@ -213,7 +250,7 @@ export class EvmActivityFetcher implements ActivityFetcher {
 
     // ── NAC precompile call (evm-to-tezos cross-runtime) ──────────────────
     if (toLc === NAC_PRECOMPILE_ADDR.toLowerCase()) {
-      const dest = decodePrecompileTransferInput(tx.input) ?? '';
+      const dest = decodePrecompileDestination(tx.input) ?? '';
       const asset: Asset = XTZ_L2_ASSET;
       const item: ActivityTransferItem = {
         id:           `l2:${tx.hash}`,

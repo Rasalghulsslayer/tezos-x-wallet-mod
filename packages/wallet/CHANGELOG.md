@@ -6,6 +6,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.12.0] — 2026-06-24
+
+Migrates the cross-runtime native-transfer paths off the gateway entrypoints the Tezos X release candidate removes. Ships alongside `@tezosx/relayer` 0.6.0.
+
+### Changed
+- **Native tz1 → 0x transfers now route through the gateway's generic `call` entrypoint** — a `%call` HTTP POST to `http://ethereum/<0x>` with an empty body and the mutez amount attached — instead of the hard-coded `%default` helper removed in tezos/tezos!22168. The amount, target and value conservation are unchanged (the kernel converts wei→mutez correctly; the EL-02 inflation was fixed in tezos/tezos!21278). The approval popup surfaces `call` as the entrypoint.
+- **Activity decoding follows the new shape.** The Tezos and EVM activity fetchers read the destination from the `call` HTTP url (`http://ethereum/<0x>` and `http://tezos/<tz1>` respectively); legacy `%default` / `transfer(string)` operations still decode so historical activity keeps rendering.
+
+### Compatibility
+- Relayer pin bumped to `^0.6.0` (the migration lives in `@tezosx/relayer`).
+- No storage, message-shape, or signing-key change. Requires a Tezos X runtime exposing the `call` / `%call` entrypoints.
+
+---
+
 ## [0.11.4] — 2026-06-22
 
 A test-hardening release: it turns the existing test work into a green, enforced safety net and closes the most dangerous coverage gaps. Ships alongside `@tezosx/relayer` 0.5.6.

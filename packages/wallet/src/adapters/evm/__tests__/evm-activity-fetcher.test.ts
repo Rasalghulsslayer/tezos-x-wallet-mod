@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   EvmActivityFetcher,
   decodePrecompileTransferInput,
+  decodePrecompileDestination,
 } from '../evm-activity-fetcher';
 import type { RegisteredToken } from '../../../domain/token';
 import mixed from '../__fixtures__/blockscout-mixed.json';
@@ -250,5 +251,22 @@ describe('decodePrecompileTransferInput', () => {
       + '0000000000000000000000000000000000000000000000000000000000000003'
       + '74657374' + '0'.repeat(56);                              // 'test'
     expect(decodePrecompileTransferInput(input)).toBe('tes');     // length=3 truncates the 'test'
+  });
+});
+
+describe('decodePrecompileDestination', () => {
+  it('decodes the tz1 from a generic call("http://tezos/<tz1>", …) — the post-!22168 bare transfer', () => {
+    // viem-encoded call(string,(string,string)[],bytes,uint8) for
+    // ("http://tezos/tz1KqTpEZ7Yob7QbPE4Hy4Wo8fHG8LhKxZSx", [], 0x, 1).
+    const input = '0xfa591a56000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000e0000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000031687474703a2f2f74657a6f732f747a314b715470455a37596f62375162504534487934576f38664847384c684b785a537800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
+    expect(decodePrecompileDestination(input)).toBe('tz1KqTpEZ7Yob7QbPE4Hy4Wo8fHG8LhKxZSx');
+  });
+
+  it('still decodes a legacy transfer(string) calldata straight to the address', () => {
+    const input = '0xa0258d0b'
+      + '0000000000000000000000000000000000000000000000000000000000000020'
+      + '0000000000000000000000000000000000000000000000000000000000000024'
+      + '747a314b715470455a37596f62375162504534487934576f38664847384c684b785a537800000000000000000000000000000000000000000000000000000000';
+    expect(decodePrecompileDestination(input)).toBe('tz1KqTpEZ7Yob7QbPE4Hy4Wo8fHG8LhKxZSx');
   });
 });
