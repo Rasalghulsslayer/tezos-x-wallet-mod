@@ -55,8 +55,8 @@ No NAC gateway, no synthetic EVM hash, no block scanning. The hash returned to t
 The kernel materialises the value on the EVM runtime via the gateway contract:
 
 1. `provider.request('eth_sendTransaction', [{ to, value: hexWei, data: '0x' }])` on the `RelayerProvider` (Tezos container)
-2. `buildTezosToEvmCall` detects empty calldata → `default` entrypoint
-3. `TezosSigner.sendContractCall('default', { string: destination }, mutezAmount)` submits the operation to `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw`
+2. `buildTezosToEvmCall` detects empty calldata → the generic `call` entrypoint (a `%call` HTTP request: a POST to `http://ethereum/<destination>` with empty headers and an empty body). The legacy `%default` helper was removed in the Tezos X release candidate.
+3. `TezosSigner.sendContractCall('call', <%call Micheline>, mutezAmount)` submits the operation to `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw`
 4. The L1 `opHash` is converted to a synthetic 32-byte EVM hash; the relayer then resolves it to the real kernel-synthesized EVM tx hash by scanning blocks
 
 ### 0x → 0x: native EVM transfer (same-runtime L2)
@@ -73,7 +73,7 @@ The returned hash is already the real EVM tx hash; no resolution step is needed.
 
 For an EVM-native account sending to a Tezos address, the wallet builds a transaction to the **NAC precompile** at `0xff00000000000000000000000000000000000007`:
 
-1. `buildCrossRuntimeTx` from `@tezosx/relayer/evm` encodes a call to `transfer(string)` with the destination tz1 as the argument
+1. `buildCrossRuntimeTx` from `@tezosx/relayer/evm` encodes a generic `call(string,(string,string)[],bytes,uint8)` — a POST to `http://tezos/<tz1>` with an empty body — to the precompile (the legacy `transfer(string)` selector was removed in the Tezos X release candidate)
 2. `EvmSigner.signEvmTx` signs the resulting EIP-1559 tx with the user's secp256k1 key, using `2 × eth_gasPrice` for `maxFeePerGas`
 3. Broadcast via `eth_sendRawTransaction`; the kernel atomically forwards the value to the receiving tz1
 

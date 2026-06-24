@@ -19,11 +19,11 @@ sequenceDiagram
     participant Temple
 
     dApp->>Relayer: eth_sendTransaction({ to, value })
-    Relayer->>Relayer: Build Micheline (default entrypoint)
+    Relayer->>Relayer: Build Micheline (call entrypoint, HTTP %call)
     Relayer->>Temple: Sign L1 operation
     Temple->>User: Confirm transaction
     User->>Temple: Sign
-    Temple->>Gateway: L1 operation → default(destination)
+    Temple->>Gateway: L1 operation → call(http://ethereum/&lt;0x&gt;, …)
     Gateway->>Gateway: Forward XTZ transfer
     Relayer->>dApp: tx hash
 ```
