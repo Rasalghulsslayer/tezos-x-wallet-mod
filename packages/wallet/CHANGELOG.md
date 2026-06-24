@@ -6,6 +6,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.11.4] — 2026-06-22
+
+A test-hardening release: it turns the existing test work into a green, enforced safety net and closes the most dangerous coverage gaps. Ships alongside `@tezosx/relayer` 0.5.6.
+
+### Added
+- **Known-answer tests for the EVM signing primitives.** The bytes that move funds were previously checked against nothing. This release pins the RLP encoder against the canonical Ethereum spec vectors (empty string, `"dog"`, the nested set, the 56-byte long-string boundary), and the EIP-1559 raw-transaction signer against reference vectors produced independently by viem (bare transfer with a leading-zero-trimmed nonce, a contract call with calldata, and a transaction carrying an access list) — the hand-rolled signer must reproduce them byte-for-byte. The EIP-191 `personal_sign` and EIP-55 address vectors added earlier remain.
+- **Known-answer test for Tezos key derivation.** `seed.ts` is pinned against the published Flextesa "alice" keypair (its `edsk` → `tz1` / `edpk`, derived by octez), locking in the ed25519-pubkey → tz1 encoding, plus determinism and round-trip checks on the BIP-44 mnemonic path.
+- **Assertions on the two remaining sensitive seams.** The keyring's vault crypto is now asserted directly: a wrong password and a tampered ciphertext both fail to unlock (AES-GCM authentication), every save draws a fresh salt and IV, and a non-version-2 payload is rejected by the format guard. On the dApp approval router, the cross-extension sender-id guard (a foreign extension's `RESOLVE_PENDING`/`GET_PENDING` is refused) and the user-rejection path (a declined `eth_requestAccounts` surfaces EIP-1193 `4001`) are now covered. The `eth_accounts` non-disclosure gating was already tested.
+- **A single test-only `globalThis.__e2e__` seam** (`shared/e2e.ts`). The cross-runtime status timeouts — the Send page's synthetic→real resolution window and the tx-status poller's hard timeout — now read an optional override before falling back to their shipped constants, so an end-to-end spec can collapse the otherwise two-minute "couldn't confirm" path into a few seconds. `__e2e__` is never set in production, so behaviour there is unchanged; this is the codebase's only sanctioned `globalThis` access.
+- **Two re-introduced end-to-end specs.** `002-unlock-via-ui` drives the real Unlock password form (the only spec that exercises the locked → Unlock → Home path; the rest unlock programmatically), including the wrong-password inline rejection. `022-tz1-to-0x-unavailable` covers the case where the kernel mapping never materialises: with the synthesized tx withheld from the mock, the resolver never resolves and the tx-status poller (shortened via `__e2e__`) times out into the `unavailable` stage, surfacing the "Status unavailable" banner — distinct from `021`'s on-chain revert.
+- **The suites now run as blocking CI gates.** The Vitest suite already ran (`test-wallet`); CI now also adds `test-relayer` (the new relayer suite) and `e2e-wallet`, which downloads the built `wallet-dist` artifact and runs Playwright against the exact uploaded build (`test:e2e:ci`, no rebuild). A root `npm test` runs both workspace suites in one command. The `e2e/README.md` claim that `e2e-wallet` is a blocking gate is now accurate.
+
+### Compatibility
+- No storage, message, or signing-behaviour change. The `__e2e__` seam is inert unless explicitly set (only the E2E harness does so).
+
+---
+
 ## [0.11.3] — 2026-06-04
 
 Follow-up patch on the cross-runtime resolver. Ships alongside `@tezosx/relayer` 0.5.5. No wallet logic change beyond the relayer pin picking up 0.5.5.

@@ -1,7 +1,7 @@
 {
   "name": "@tezosx/wallet",
   "private": true,
-  "version": "0.11.3",
+  "version": "0.11.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test --config=e2e/playwright.config.ts",
+    "test:e2e:ci": "playwright test --config=e2e/playwright.config.ts",
     "test:e2e:record": "RECORD=1 playwright test --config=e2e/playwright.config.ts",
     "test:e2e:ui": "playwright test --config=e2e/playwright.config.ts --ui",
     "e2e:gen-vault": "tsx e2e/scripts/gen-vault.ts",

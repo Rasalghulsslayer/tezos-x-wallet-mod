@@ -6,6 +6,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.5.6] — 2026-06-22
+
+Ships alongside `@tezosx/wallet` 0.11.4.
+
+### Added
+- **A Vitest test harness and the first relayer tests.** Until now the relayer shipped with zero automated tests despite owning the cross-runtime value-transfer logic. This release adds a `vitest.config.ts` mirroring the wallet's (node environment, co-located `*.test.ts`, no globals) and a `test` script, and covers the four use-cases that move or account for value: `buildTezosToEvmCall` (wei→mutez conversion and the NAC entrypoint routing, including the sub-mutez rejection that prevents silently flooring dust away), `buildEvmToTezosCall` (the inverse mutez→wei factor and the transfer/call-michelson dispatch), `l1OpHashToEvmHash` (the synthetic-hash derivation, pinned against published keccak256 vectors), and `findRealHash` (synthetic→real hash resolution, including the two-concurrent-ops-on-the-same-alias case and the NAC-precompile-log requirement for inbound bookkeeping txs). The tests are regression guards locking in the conversion and resolution behaviour; they do not change any shipped code.
+
+---
+
 ## [0.5.5] — 2026-06-04
 
 Ships alongside `@tezosx/wallet` 0.11.3.
