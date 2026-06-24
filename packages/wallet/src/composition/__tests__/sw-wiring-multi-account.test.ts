@@ -43,7 +43,17 @@ const stubNotifications: NotificationPort = {
   async setPendingCount() {},
 };
 
-const fakeSender = {} as chrome.runtime.MessageSender;
+// dispatch() validates senders against chrome.runtime.getURL — stub the
+// minimal chrome surface the node test environment lacks.
+const EXTENSION_URL = 'chrome-extension://test-extension-id/';
+globalThis.chrome = {
+  runtime: { id: 'test-extension-id', getURL: (path: string) => EXTENSION_URL + path },
+} as unknown as typeof chrome;
+
+/** Sender shape of the extension's own pages (popup, approve, side panel). */
+const popupSender = { url: `${EXTENSION_URL}popup.html` } as chrome.runtime.MessageSender;
+/** Sender shape of the content bridge relaying dApp traffic from a tab. */
+const contentSender = { tab: { id: 1 } as chrome.tabs.Tab } as chrome.runtime.MessageSender;
 
 const PASSWORD = 'correct-horse-battery';
 
@@ -75,7 +85,7 @@ async function setupHarness(): Promise<Harness> {
   return { keyring, deps, broadcasts, rebuilds };
 }
 
-const send = (deps: SwDeps, msg: PopupRequest) => dispatch(msg, fakeSender, deps);
+const send = (deps: SwDeps, msg: PopupRequest) => dispatch(msg, popupSender, deps);
 
 describe('sw-wiring multi-account dispatch', () => {
   let h: Harness;
@@ -192,7 +202,7 @@ describe('sw-wiring eth_accounts session gating', () => {
   const ethAccounts = (deps: SwDeps, origin: string) =>
     dispatch(
       { type: 'ETHEREUM_REQUEST', origin, requestId: 'req-1', args: { method: 'eth_accounts' } },
-      fakeSender,
+      contentSender,
       deps,
     );
 
@@ -256,7 +266,7 @@ describe('sw-wiring signature-method session gating', () => {
         type: 'ETHEREUM_REQUEST', origin, requestId: 'req-sig-1',
         args: { method: 'personal_sign', params: ['0xdeadbeef', '0x' + '0'.repeat(40)] },
       },
-      fakeSender,
+      contentSender,
       deps,
     );
 
@@ -273,7 +283,7 @@ describe('sw-wiring signature-method session gating', () => {
         type: 'ETHEREUM_REQUEST', origin: 'https://attacker.example', requestId: 'req-tx-1',
         args: { method: 'eth_sendTransaction', params: [{ to: '0x' + '1'.repeat(40), value: '0x0', data: '0x' }] },
       },
-      fakeSender,
+      contentSender,
       h.deps,
     );
     expect(res.ok).toBe(false);
@@ -287,11 +297,68 @@ describe('sw-wiring signature-method session gating', () => {
         type: 'ETHEREUM_REQUEST', origin: 'https://attacker.example', requestId: 'req-std-1',
         args: { method: 'eth_signTypedData_v4', params: ['0x' + '0'.repeat(40), '{}'] },
       },
-      fakeSender,
+      contentSender,
       h.deps,
     );
     expect(res.ok).toBe(false);
     if (res.ok) throw new Error('unreachable');
     expect(res.code).toBe(-32601);
+  });
+});
+
+describe('dispatch sender validation', () => {
+  let h: Harness;
+  beforeEach(async () => { h = await setupHarness(); });
+
+  it('rejects ETHEREUM_REQUEST from a tab-less sender (extension page)', async () => {
+    const res = await dispatch(
+      { type: 'ETHEREUM_REQUEST', origin: 'https://any.example', requestId: 'req-1', args: { method: 'eth_accounts' } },
+      popupSender,
+      h.deps,
+    );
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('unreachable');
+    expect(res.code).toBe(4100);
+  });
+
+  it('rejects ETHEREUM_REQUEST when sender.origin disagrees with the stamped origin', async () => {
+    const spoofingSender = {
+      tab:    { id: 1 } as chrome.tabs.Tab,
+      origin: 'https://evil.example',
+    } as chrome.runtime.MessageSender;
+    const res = await dispatch(
+      { type: 'ETHEREUM_REQUEST', origin: 'https://victim.example', requestId: 'req-2', args: { method: 'eth_accounts' } },
+      spoofingSender,
+      h.deps,
+    );
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('unreachable');
+    expect(res.code).toBe(4100);
+  });
+
+  it('rejects privileged popup commands from a content-script sender', async () => {
+    const res = await dispatch({ type: 'EXPORT_SEED', password: PASSWORD }, contentSender, h.deps);
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('unreachable');
+    expect(res.code).toBe(4100);
+  });
+
+  it('rejects RESOLVE_PENDING from a content-script sender', async () => {
+    const res = await dispatch(
+      { type: 'RESOLVE_PENDING', requestId: 'req-3', decision: 'approve' },
+      contentSender,
+      h.deps,
+    );
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('unreachable');
+    expect(res.code).toBe(4100);
+  });
+
+  it('rejects popup commands from a web-page sender url', async () => {
+    const webSender = { url: 'https://evil.example/page' } as chrome.runtime.MessageSender;
+    const res = await dispatch({ type: 'GET_STATE' }, webSender, h.deps);
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('unreachable');
+    expect(res.code).toBe(4100);
   });
 });
