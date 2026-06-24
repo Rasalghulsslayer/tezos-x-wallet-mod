@@ -6,7 +6,7 @@
  */
 
 import type { Keyring } from '../background/keyring';
-import type { ApprovalQueue } from '../background/approval-queue';
+import { DuplicateRequestIdError, type ApprovalQueue } from '../background/approval-queue';
 import type { Container, PersistentPorts } from './container';
 import type { ContainerCache } from './container-cache';
 import { ensureContainerFor } from './container-builder';
@@ -474,7 +474,15 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
       };
     }
 
-    const decision = await deps.approvalQueue.enqueue(pending);
+    let decision: Awaited<ReturnType<typeof deps.approvalQueue.enqueue>>;
+    try {
+      decision = await deps.approvalQueue.enqueue(pending);
+    } catch (err) {
+      if (err instanceof DuplicateRequestIdError) {
+        return { ok: false, code: JSON_RPC_INVALID_PARAMS, message: 'Duplicate request id' };
+      }
+      throw err;
+    }
 
     if (decision === 'reject') {
       return { ok: false, code: EIP_USER_REJECTED, message: 'User rejected the request' };

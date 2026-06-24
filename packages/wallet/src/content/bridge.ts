@@ -21,10 +21,14 @@ window.addEventListener('message', (event: MessageEvent) => {
   const data = event.data as PageRequest | undefined;
   if (data == null || data.type !== 'TEZOSX_WALLET_REQUEST') return;
 
+  // The SW-side requestId is minted here, in the ISOLATED world, so the page
+  // can never choose (or collide) the key under which the approval queue
+  // tracks a request. The page-supplied id is only echoed back in the
+  // response envelope below.
   const bgMessage: EthereumRequest = {
     type:      'ETHEREUM_REQUEST',
     origin:    window.location.origin,
-    requestId: data.requestId,
+    requestId: crypto.randomUUID(),
     args:      data.args,
   };
 
