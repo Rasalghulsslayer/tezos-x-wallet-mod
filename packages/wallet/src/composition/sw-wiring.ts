@@ -347,19 +347,27 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
     return { ok: true, data: session == null ? [] : [session.evmAlias] };
   }
 
+  // eth_signTypedData (any version) is not implemented by either signer:
+  // EvmProvider would fall through to its JSON-RPC proxy — prompting the user
+  // to approve a "signature", then forwarding the payload to the public RPC
+  // node, which cannot sign it. Refuse before prompting so the user is never
+  // asked to approve a signature the wallet cannot produce (and the message
+  // never leaves the extension).
+  if (method.startsWith('eth_signTypedData')) {
+    return { ok: false, code: JSON_RPC_METHOD_NOT_FOUND, message: `${method} is not supported` };
+  }
+
   const needsApproval =
     method === 'eth_requestAccounts'   ||
     method === 'eth_sendTransaction'   ||
-    method === 'personal_sign'         ||
-    method === 'eth_signTypedData_v4';
+    method === 'personal_sign';
 
   // Signing methods require an active session for the calling origin.
   // `eth_requestAccounts` is the one method that creates a session, so it's
   // exempt. Everything else must go through Connect first.
   const requiresSession =
     method === 'eth_sendTransaction'   ||
-    method === 'personal_sign'         ||
-    method === 'eth_signTypedData_v4';
+    method === 'personal_sign';
 
   let pinnedAccountId: string | undefined;
 
