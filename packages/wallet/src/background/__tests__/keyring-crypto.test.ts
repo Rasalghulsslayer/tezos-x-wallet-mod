@@ -62,7 +62,9 @@ describe('keyring — vault crypto', () => {
     const k = new Keyring(store);
     await k.create(PASSWORD);
     const first = store.vault!;
-    expect(first.iterations).toBe(200_000);
+    // Hardened to the OWASP/MetaMask floor (#77). Old 200k vaults still unlock
+    // via the per-vault `iterations` field — see the forgeVault-based tests.
+    expect(first.iterations).toBe(600_000);
 
     await k.renameAccount(k.getUnlocked()!.account.id, 'Renamed'); // forces a re-encrypt
     const second = store.vault!;

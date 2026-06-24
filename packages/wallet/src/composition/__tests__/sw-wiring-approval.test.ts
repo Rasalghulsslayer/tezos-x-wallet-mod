@@ -54,6 +54,10 @@ async function setupHarness() {
 }
 
 const senderWithId = (id: string) => ({ id } as chrome.runtime.MessageSender);
+// Since #75, dispatch validates senders by shape: privileged popup/approve
+// commands must come from an extension-page URL, dApp traffic from a tab.
+const extensionPageSender = { url: `chrome-extension://${OWN_EXT_ID}/approve.html` } as chrome.runtime.MessageSender;
+const contentSender       = { tab: { id: 1 } as chrome.tabs.Tab } as chrome.runtime.MessageSender;
 
 describe('sw-wiring — approval gating', () => {
   let h: Awaited<ReturnType<typeof setupHarness>>;
@@ -95,7 +99,7 @@ describe('sw-wiring — approval gating', () => {
   it('lets a same-extension RESOLVE_PENDING past the sender guard (unknown id → invalid params)', async () => {
     const res = await dispatch(
       { type: 'RESOLVE_PENDING', requestId: 'no-such-pending', decision: 'approve' },
-      senderWithId(OWN_EXT_ID),
+      extensionPageSender,
       h.deps,
     );
     // Past the guard: resolvePendingApproval finds no such request → -32602,
@@ -109,7 +113,7 @@ describe('sw-wiring — approval gating', () => {
     const requestId = 'connect-req-1';
     const pending = dispatch(
       { type: 'ETHEREUM_REQUEST', origin: 'https://dapp.example', requestId, args: { method: 'eth_requestAccounts' } },
-      senderWithId('content-script'),
+      contentSender,
       h.deps,
     );
 
