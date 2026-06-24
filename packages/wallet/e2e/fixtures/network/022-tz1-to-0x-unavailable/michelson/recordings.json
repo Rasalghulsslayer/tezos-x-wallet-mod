@@ -6,7 +6,7 @@
     "GET /chains/main/blocks/head/context/contracts/tz1ZTKzWZshji8kW45Tg6WPDX7WVrBnRJ9SH/balance": {
       "status": 200,
       "contentType": "application/json",
-      "body": "\"99886915060\"\n"
+      "body": "\"99876845984\"\n"
     },
     "GET /chains/main/blocks/head/context/constants": {
       "status": 200,
@@ -21,7 +21,7 @@
     "GET /chains/main/blocks/head~2/header": {
       "status": 200,
       "contentType": "application/json",
-      "body": "{\"protocol\":\"PtTALLiNtPec7mE7yY4m3k26J8Qukef3E3ehzhfXgFZKGtDdAXu\",\"chain_id\":\"NetXY2oPPzkxUW1\",\"hash\":\"BLXJEGPCZDvoA9cyVngRSd9nTqJMBb1B9Q2XVWMY64d8gtPBXL6\",\"level\":606150,\"proto\":1,\"predecessor\":\"BMWyV3symU5AkCEufQq6gZfPxd2hUsHKguDqj34SoP75PpukaNA\",\"timestamp\":\"2026-06-05T14:30:53Z\",\"validation_pass\":4,\"operations_hash\":\"LLoZKi1iMzbeJrfrGWPFYmkLebcsha6vGskQ4rAXt2uMwQtBfRcjL\",\"fitness\":[\"02\",\"00093fc6\",\"\",\"ffffffff\",\"00000000\"],\"context\":\"CoWb42qqDaU8Gr7ukJ7gjWcPYUgha5FxzH3TjgL45cbZor4MnFaX\",\"payload_hash\":\"vh1g87ZG6scSYxKhspAUzprQVuLAyoa5qMBKcUfjgnQGnFb3dJcG\",\"payload_round\":0,\"proof_of_work_nonce\":\"0000000000000000\",\"liquidity_baking_toggle_vote\":\"pass\",\"signature\":\"sigMzJ4GVAvXEd2RjsKGfG2H9QvqTSKCZsuB2KiHbZRGFz72XgF6KaKADznh674fQgBatxw3xdHqTtMHUZAGRprxy64wg1aq\"}\n"
+      "body": "{\"protocol\":\"PtTALLiNtPec7mE7yY4m3k26J8Qukef3E3ehzhfXgFZKGtDdAXu\",\"chain_id\":\"NetXY2oPPzkxUW1\",\"hash\":\"BMF4DVstwNm6c2ydbPs1GtsNczBrz6nDbkopQCzxnKXnn8XBRqq\",\"level\":878337,\"proto\":1,\"predecessor\":\"BLjNoXoXv6Go7PbepKssSeJHM4TeqmCJbPnJA3NQxDtYMJFwUf2\",\"timestamp\":\"2026-06-24T10:06:50Z\",\"validation_pass\":4,\"operations_hash\":\"LLoZKi1iMzbeJrfrGWPFYmkLebcsha6vGskQ4rAXt2uMwQtBfRcjL\",\"fitness\":[\"02\",\"000d6701\",\"\",\"ffffffff\",\"00000000\"],\"context\":\"CoWb42qqDaU8Gr7ukJ7gjWcPYUgha5FxzH3TjgL45cbZor4MnFaX\",\"payload_hash\":\"vh1g87ZG6scSYxKhspAUzprQVuLAyoa5qMBKcUfjgnQGnFb3dJcG\",\"payload_round\":0,\"proof_of_work_nonce\":\"0000000000000000\",\"liquidity_baking_toggle_vote\":\"pass\",\"signature\":\"sigMzJ4GVAvXEd2RjsKGfG2H9QvqTSKCZsuB2KiHbZRGFz72XgF6KaKADznh674fQgBatxw3xdHqTtMHUZAGRprxy64wg1aq\"}\n"
     },
     "GET /chains/main/blocks/head/protocols": {
       "status": 200,
@@ -31,7 +31,7 @@
     "GET /chains/main/blocks/head/context/contracts/tz1ZTKzWZshji8kW45Tg6WPDX7WVrBnRJ9SH": {
       "status": 200,
       "contentType": "application/json",
-      "body": "{\"balance\":\"99886915060\",\"counter\":\"19\"}\n"
+      "body": "{\"balance\":\"99876845984\",\"counter\":\"22\"}\n"
     },
     "GET /chains/main/mempool/filter?include_default=true": {
       "status": 200,
@@ -43,20 +43,20 @@
       "contentType": "application/json",
       "body": "\"NetXY2oPPzkxUW1\"\n"
     },
-    "POST /chains/main/blocks/head/helpers/scripts/simulate_operation #0599eae0": {
+    "POST /chains/main/blocks/head/helpers/scripts/simulate_operation #4e354398": {
       "status": 200,
       "contentType": "application/json",
-      "body": "{\"contents\":[{\"kind\":\"transaction\",\"source\":\"tz1ZTKzWZshji8kW45Tg6WPDX7WVrBnRJ9SH\",\"fee\":\"0\",\"counter\":\"20\",\"gas_limit\":\"3000000\",\"storage_limit\":\"60000\",\"amount\":\"1000\",\"destination\":\"KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw\",\"parameters\":{\"entrypoint\":\"default\",\"value\":{\"string\":\"0xdEAD000000000000000042000000000000000000\"}},\"metadata\":{\"operation_result\":{\"status\":\"applied\",\"balance_updates\":[{\"kind\":\"contract\",\"contract\":\"tz1ZTKzWZshji8kW45Tg6WPDX7WVrBnRJ9SH\",\"change\":\"-1000\",\"origin\":\"block\"},{\"kind\":\"contract\",\"contract\":\"KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw\",\"change\":\"1000\",\"origin\":\"block\"}],\"consumed_milligas\":\"3081510\"}}}],\"signature\":\"edsigtkpiSSschcaCt9pUVrpNPf7TTcgvgDEDD6NCEHMy8NNQJCGnMfLZzYoQj74yLjo9wx6MPVV29CvVzgi7qEcEUok3k7AuMg\"}\n"
+      "body": "{\"contents\":[{\"kind\":\"transaction\",\"source\":\"tz1ZTKzWZshji8kW45Tg6WPDX7WVrBnRJ9SH\",\"fee\":\"0\",\"counter\":\"23\",\"gas_limit\":\"3000000\",\"storage_limit\":\"60000\",\"amount\":\"1000\",\"destination\":\"KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw\",\"parameters\":{\"entrypoint\":\"call\",\"value\":{\"prim\":\"Pair\",\"args\":[{\"string\":\"http://ethereum/0xdEAD000000000000000042000000000000000000\"},{\"prim\":\"Pair\",\"args\":[[],{\"prim\":\"Pair\",\"args\":[{\"bytes\":\"\"},{\"prim\":\"Pair\",\"args\":[{\"int\":\"1\"},{\"prim\":\"None\"}]}]}]}]}},\"metadata\":{\"operation_result\":{\"status\":\"applied\",\"balance_updates\":[{\"kind\":\"contract\",\"contract\":\"tz1ZTKzWZshji8kW45Tg6WPDX7WVrBnRJ9SH\",\"change\":\"-1000\",\"origin\":\"block\"},{\"kind\":\"contract\",\"contract\":\"KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw\",\"change\":\"1000\",\"origin\":\"block\"}],\"consumed_milligas\":\"3084495\"}}}],\"signature\":\"edsigtkpiSSschcaCt9pUVrpNPf7TTcgvgDEDD6NCEHMy8NNQJCGnMfLZzYoQj74yLjo9wx6MPVV29CvVzgi7qEcEUok3k7AuMg\"}\n"
     },
-    "POST /chains/main/blocks/head/helpers/preapply/operations #83071710": {
+    "POST /chains/main/blocks/head/helpers/preapply/operations #f27fd4bc": {
       "status": 200,
       "contentType": "application/json",
-      "body": "[{\"contents\":[{\"kind\":\"transaction\",\"source\":\"tz1ZTKzWZshji8kW45Tg6WPDX7WVrBnRJ9SH\",\"fee\":\"1452\",\"counter\":\"20\",\"gas_limit\":\"3182\",\"storage_limit\":\"1\",\"amount\":\"1000\",\"destination\":\"KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw\",\"parameters\":{\"entrypoint\":\"default\",\"value\":{\"string\":\"0xdEAD000000000000000042000000000000000000\"}},\"metadata\":{\"balance_updates\":[{\"kind\":\"contract\",\"contract\":\"tz1ZTKzWZshji8kW45Tg6WPDX7WVrBnRJ9SH\",\"change\":\"-1452\",\"origin\":\"block\"},{\"kind\":\"accumulator\",\"category\":\"block fees\",\"change\":\"1452\",\"origin\":\"block\"},{\"kind\":\"contract\",\"contract\":\"tz1ZTKzWZshji8kW45Tg6WPDX7WVrBnRJ9SH\",\"change\":\"1422\",\"origin\":\"block\"},{\"kind\":\"accumulator\",\"category\":\"block fees\",\"change\":\"-1422\",\"origin\":\"block\"}],\"operation_result\":{\"status\":\"applied\",\"balance_updates\":[{\"kind\":\"contract\",\"contract\":\"tz1ZTKzWZshji8kW45Tg6WPDX7WVrBnRJ9SH\",\"change\":\"-1000\",\"origin\":\"block\"},{\"kind\":\"contract\",\"contract\":\"KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw\",\"change\":\"1000\",\"origin\":\"block\"}],\"consumed_milligas\":\"3081411\"}}}],\"signature\":\"edsigtz8fnzNUwBwrSNs3Zz3vCnWdeK62WNopaT3jyQ3WYpPnnQog2qHMTzCiZ99pgqPBBFK44qg2JLqoTBkpPTK2Xai7x7LSZM\"}]\n"
+      "body": "[{\"contents\":[{\"kind\":\"transaction\",\"source\":\"tz1ZTKzWZshji8kW45Tg6WPDX7WVrBnRJ9SH\",\"fee\":\"1710\",\"counter\":\"23\",\"gas_limit\":\"3185\",\"storage_limit\":\"1\",\"amount\":\"1000\",\"destination\":\"KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw\",\"parameters\":{\"entrypoint\":\"call\",\"value\":{\"prim\":\"Pair\",\"args\":[{\"string\":\"http://ethereum/0xdEAD000000000000000042000000000000000000\"},{\"prim\":\"Pair\",\"args\":[[],{\"prim\":\"Pair\",\"args\":[{\"bytes\":\"\"},{\"prim\":\"Pair\",\"args\":[{\"int\":\"1\"},{\"prim\":\"None\"}]}]}]}]}},\"metadata\":{\"balance_updates\":[{\"kind\":\"contract\",\"contract\":\"tz1ZTKzWZshji8kW45Tg6WPDX7WVrBnRJ9SH\",\"change\":\"-1710\",\"origin\":\"block\"},{\"kind\":\"accumulator\",\"category\":\"block fees\",\"change\":\"1710\",\"origin\":\"block\"},{\"kind\":\"contract\",\"contract\":\"tz1ZTKzWZshji8kW45Tg6WPDX7WVrBnRJ9SH\",\"change\":\"1680\",\"origin\":\"block\"},{\"kind\":\"accumulator\",\"category\":\"block fees\",\"change\":\"-1680\",\"origin\":\"block\"}],\"operation_result\":{\"status\":\"applied\",\"balance_updates\":[{\"kind\":\"contract\",\"contract\":\"tz1ZTKzWZshji8kW45Tg6WPDX7WVrBnRJ9SH\",\"change\":\"-1000\",\"origin\":\"block\"},{\"kind\":\"contract\",\"contract\":\"KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw\",\"change\":\"1000\",\"origin\":\"block\"}],\"consumed_milligas\":\"3084395\"}}}],\"signature\":\"edsigti9ANYk8AqJ3gnC2vc8KqTpbXnjqU435HgHNDLVgA47vfEAPyDrzg7NTnqrsUc7uTTFvbtJeYWp4C2bm78R44EtnzeQmcg\"}]\n"
     },
-    "POST /injection/operation #f7c88eea": {
+    "POST /injection/operation #d6b59726": {
       "status": 200,
       "contentType": "application/json",
-      "body": "\"onjN8ntLjZsS8pY85dGk7FFVo66JxjziEiM6iTZwmXvrcC6cBNV\"\n"
+      "body": "\"onxJWJrmimVDRiWxUS5a696Mr8qABj1JJbntht682NYeatH5cd6\"\n"
     }
   }
 }
