@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { Keyring } from '../../background/keyring';
+import { WebCryptoPort } from '../../adapters/crypto/web-crypto-port';
 import { ApprovalQueue } from '../../background/approval-queue';
 import { ContainerCache } from '../container-cache';
 import { dispatch, type SwDeps } from '../sw-wiring';
@@ -65,7 +66,7 @@ interface Harness {
 }
 
 async function setupHarness(): Promise<Harness> {
-  const keyring        = new Keyring(new MemoryVault());
+  const keyring        = new Keyring(new MemoryVault(), new WebCryptoPort());
   const sessionStore   = new MemorySessions();
   await keyring.create(PASSWORD);
 

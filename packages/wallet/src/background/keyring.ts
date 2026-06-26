@@ -24,7 +24,9 @@ import {
   renameOnPayload,
   normaliseLabel,
 } from '../domain/vault';
-import type { VaultStore, EncryptedVault } from '../ports/vault-store';
+import type { VaultStore } from '../ports/vault-store';
+import type { CryptoPort } from '../ports/crypto-port';
+import { encryptVault, decryptVault } from '../shared/vault-crypto';
 
 // Re-exports for callers that imported from keyring directly.
 export type { AccountSecret, MultiAccountVaultPayload } from '../domain/vault';
@@ -46,81 +48,6 @@ export interface UnlockedKeyring extends UnlockedSession {
   password: string;
 }
 
-// OWASP-recommended floor for PBKDF2-HMAC-SHA256 (also MetaMask's setting).
-// The encrypted vault sits in chrome.storage.local — plaintext on disk — so
-// this work factor is the only cost an offline brute-force has to pay.
-// Decryption reads the per-vault `iterations` field, so existing vaults
-// created at lower counts keep unlocking and are re-encrypted at this count
-// on their next mutation.
-const PBKDF2_ITERATIONS = 600_000;
-const SALT_BYTES        = 16;
-const IV_BYTES          = 12;
-
-function randomBytes(len: number): Uint8Array {
-  const bytes = new Uint8Array(len);
-  crypto.getRandomValues(bytes);
-  return bytes;
-}
-
-function toBase64(bytes: Uint8Array): string {
-  let s = '';
-  for (const b of bytes) s += String.fromCharCode(b);
-  return btoa(s);
-}
-
-function fromBase64(b64: string): Uint8Array {
-  const s = atob(b64);
-  const bytes = new Uint8Array(s.length);
-  for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
-  return bytes;
-}
-
-async function deriveAesKey(password: string, salt: Uint8Array, iterations: number): Promise<CryptoKey> {
-  const baseKey = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(password),
-    { name: 'PBKDF2' },
-    false,
-    ['deriveKey'],
-  );
-  return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: salt as BufferSource, iterations, hash: 'SHA-256' },
-    baseKey,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt'],
-  );
-}
-
-async function encryptJson<T>(payload: T, password: string): Promise<EncryptedVault> {
-  const salt = randomBytes(SALT_BYTES);
-  const iv   = randomBytes(IV_BYTES);
-  const key  = await deriveAesKey(password, salt, PBKDF2_ITERATIONS);
-  const ciphertext = new Uint8Array(
-    await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv: iv as BufferSource },
-      key,
-      new TextEncoder().encode(JSON.stringify(payload)),
-    ),
-  );
-  return {
-    ciphertext: toBase64(ciphertext),
-    iv:         toBase64(iv),
-    salt:       toBase64(salt),
-    iterations: PBKDF2_ITERATIONS,
-  };
-}
-
-async function decryptVaultRaw(vault: EncryptedVault, password: string): Promise<string> {
-  const key = await deriveAesKey(password, fromBase64(vault.salt), vault.iterations);
-  const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: fromBase64(vault.iv) as BufferSource },
-    key,
-    fromBase64(vault.ciphertext) as BufferSource,
-  );
-  return new TextDecoder().decode(plaintext);
-}
-
 function parseV2(raw: string): MultiAccountVaultPayload {
   const parsed = JSON.parse(raw) as Record<string, unknown>;
   if (parsed.version !== 2 || !Array.isArray(parsed.accounts)) throw new Error('Vault format unsupported');
@@ -137,8 +64,8 @@ async function deriveSigningKey(account: Account, secret: AccountSecret): Promis
   return secret.value;
 }
 
-function freshEvmPrivkeyHex(): string {
-  const bytes = randomBytes(32);
+function freshEvmPrivkeyHex(crypto: CryptoPort): string {
+  const bytes = crypto.randomBytes(32);
   let hex = '0x';
   for (const b of bytes) hex += b.toString(16).padStart(2, '0');
   return hex;
@@ -147,7 +74,10 @@ function freshEvmPrivkeyHex(): string {
 export class Keyring {
   private unlocked: UnlockedKeyring | null = null;
 
-  constructor(private readonly vaultStore: VaultStore) {}
+  constructor(
+    private readonly vaultStore: VaultStore,
+    private readonly crypto: CryptoPort,
+  ) {}
 
   async hasVault(): Promise<boolean> {
     return (await this.vaultStore.load()) != null;
@@ -172,7 +102,7 @@ export class Keyring {
     if (!isValidMnemonic(trimmed)) throw new Error('Invalid BIP39 mnemonic');
     if (password.length < 8)      throw new Error('Password must be at least 8 characters');
     const { tz1, publicKey, secretKey } = await deriveTezosIdentity(trimmed);
-    const account: TezosAccount = newTezosAccount(tz1, publicKey);
+    const account: TezosAccount = newTezosAccount(this.crypto, tz1, publicKey);
     return this.initialiseVault(account, { kind: 'mnemonic', value: trimmed }, secretKey, password);
   }
 
@@ -183,14 +113,14 @@ export class Keyring {
     const { tz1, publicKey, secretKey } = await deriveTezosIdentityFromSecretKey(trimmed).catch(() => {
       throw new Error('Could not decode the secret key');
     });
-    const account: TezosAccount = newTezosAccount(tz1, publicKey);
+    const account: TezosAccount = newTezosAccount(this.crypto, tz1, publicKey);
     return this.initialiseVault(account, { kind: 'edsk', value: trimmed }, secretKey, password);
   }
 
   async importFromEvmPrivkey(privateKeyHex: string, password: string): Promise<UnlockedKeyring> {
     if (password.length < 8) throw new Error('Password must be at least 8 characters');
     const { address, publicKey, privateKey } = deriveEvmAccount(privateKeyHex);
-    const account: EvmAccount = newEvmAccount(address, publicKey);
+    const account: EvmAccount = newEvmAccount(this.crypto, address, publicKey);
     return this.initialiseVault(account, { kind: 'evm-pk', value: privateKey }, privateKey, password);
   }
 
@@ -199,7 +129,7 @@ export class Keyring {
     if (vault == null) throw new Error('No wallet found');
     let raw: string;
     try {
-      raw = await decryptVaultRaw(vault, password);
+      raw = await decryptVault(vault, password, this.crypto);
     } catch {
       throw new Error('Incorrect password');
     }
@@ -261,7 +191,7 @@ export class Keyring {
       throw new Error('Invalid source for Tezos account');
     }
 
-    const account = newTezosAccount(tz1, publicKey, label);
+    const account = newTezosAccount(this.crypto, tz1, publicKey, label);
     await this.persist(addAccountToPayload(u.payload, account, secret), u.password);
     return { accountId: account.id, account, mnemonic };
   }
@@ -274,7 +204,7 @@ export class Keyring {
     let privateKeyHex: string;
     let returnPriv:    string | undefined;
     if (src.source === 'fresh') {
-      privateKeyHex = freshEvmPrivkeyHex();
+      privateKeyHex = freshEvmPrivkeyHex(this.crypto);
       returnPriv    = privateKeyHex;
     } else if (src.source === 'privkey') {
       privateKeyHex = src.privateKey;
@@ -283,7 +213,7 @@ export class Keyring {
     }
 
     const { address, publicKey, privateKey } = deriveEvmAccount(privateKeyHex);
-    const account = newEvmAccount(address, publicKey, label);
+    const account = newEvmAccount(this.crypto, address, publicKey, label);
     await this.persist(addAccountToPayload(u.payload, account, { kind: 'evm-pk', value: privateKey }), u.password);
     return { accountId: account.id, account, privateKey: returnPriv };
   }
@@ -354,13 +284,13 @@ export class Keyring {
       active:   account.id,
       secrets:  { [account.id]: secret },
     };
-    await this.vaultStore.save(await encryptJson(payload, password));
+    await this.vaultStore.save(await encryptVault(JSON.stringify(payload), password, this.crypto));
     this.unlocked = { account, secretKey, payload, password };
     return this.unlocked;
   }
 
   private async persist(newPayload: MultiAccountVaultPayload, password: string): Promise<void> {
-    await this.vaultStore.save(await encryptJson(newPayload, password));
+    await this.vaultStore.save(await encryptVault(JSON.stringify(newPayload), password, this.crypto));
     const active = newPayload.accounts.find(a => a.id === newPayload.active);
     const secret = newPayload.secrets[newPayload.active];
     if (active == null || secret == null) throw new Error('Vault corrupted after mutation');
@@ -385,17 +315,17 @@ export class Keyring {
     const vault = await this.vaultStore.load();
     if (vault == null) throw new Error('No wallet found');
     try {
-      return await decryptVaultRaw(vault, password);
+      return await decryptVault(vault, password, this.crypto);
     } catch {
       throw new Error('Incorrect password');
     }
   }
 }
 
-function newTezosAccount(tz1: string, publicKey: string, label?: string): TezosAccount {
+function newTezosAccount(crypto: CryptoPort, tz1: string, publicKey: string, label?: string): TezosAccount {
   return { kind: 'tezos', id: crypto.randomUUID(), label: normaliseLabel(label), tz1, publicKey, createdAt: Date.now() };
 }
 
-function newEvmAccount(address: `0x${string}`, publicKey: `0x${string}`, label?: string): EvmAccount {
+function newEvmAccount(crypto: CryptoPort, address: `0x${string}`, publicKey: `0x${string}`, label?: string): EvmAccount {
   return { kind: 'evm', id: crypto.randomUUID(), label: normaliseLabel(label), address, publicKey, createdAt: Date.now() };
 }

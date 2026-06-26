@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { Keyring } from '../../background/keyring';
+import { WebCryptoPort } from '../../adapters/crypto/web-crypto-port';
 import {
   CannotRemoveLastAccountError,
   AccountNotFoundError,
@@ -39,7 +40,7 @@ class MemoryTokenStore implements TokenStore {
 const PASSWORD = 'correct-horse-battery';
 
 async function setupWithOneTezosAccount(): Promise<{ keyring: Keyring; tokenStore: TokenStore; firstId: string }> {
-  const keyring    = new Keyring(new MemoryVaultStore());
+  const keyring    = new Keyring(new MemoryVaultStore(), new WebCryptoPort());
   const tokenStore = new MemoryTokenStore();
   await keyring.create(PASSWORD);
   const firstId = keyring.getUnlocked()!.account.id;

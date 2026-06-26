@@ -5,6 +5,7 @@ import { ChromeVaultStore } from '../adapters/chrome/chrome-vault-store';
 import { ChromeSessionStore } from '../adapters/chrome/chrome-session-store';
 import { ChromeTokenStore } from '../adapters/chrome/chrome-token-store';
 import { ChromeNotificationPort } from '../adapters/chrome/chrome-notification';
+import { WebCryptoPort } from '../adapters/crypto/web-crypto-port';
 import type { PersistentPorts } from '../composition/container';
 import { ContainerCache } from '../composition/container-cache';
 import { ensureContainerFor } from '../composition/container-builder';
@@ -28,7 +29,11 @@ const persistentPorts: PersistentPorts = {
 
 void persistentPorts.notifications.setPendingCount(0);
 
-const keyring        = new Keyring(persistentPorts.vaultStore);
+// Web Crypto is the platform's crypto primitive here; a mobile shell would
+// inject a @noble-backed CryptoPort instead (see adapters/crypto).
+const cryptoPort = new WebCryptoPort();
+
+const keyring        = new Keyring(persistentPorts.vaultStore, cryptoPort);
 const queue          = new ApprovalQueue(persistentPorts.notifications);
 const containerCache = new ContainerCache();
 

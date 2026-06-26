@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { Keyring } from '../../background/keyring';
+import { WebCryptoPort } from '../../adapters/crypto/web-crypto-port';
 import { ApprovalQueue } from '../../background/approval-queue';
 import { ContainerCache } from '../container-cache';
 import { dispatch, type SwDeps } from '../sw-wiring';
@@ -38,7 +39,7 @@ const PASSWORD    = 'correct-horse-battery';
 const OWN_EXT_ID  = 'test-ext-id';
 
 async function setupHarness() {
-  const keyring = new Keyring(new MemoryVault());
+  const keyring = new Keyring(new MemoryVault(), new WebCryptoPort());
   await keyring.create(PASSWORD);
   const broadcasts: ContentPush[] = [];
   const deps: SwDeps = {

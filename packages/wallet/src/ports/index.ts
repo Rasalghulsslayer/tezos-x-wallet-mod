@@ -5,6 +5,7 @@
 export * from './signer-port';
 export * from './provider-port';
 export * from './vault-store';
+export * from './crypto-port';
 export * from './session-store';
 export * from './balance-fetcher';
 export * from './activity-fetcher';

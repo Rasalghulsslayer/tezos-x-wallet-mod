@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Keyring } from '../keyring';
+import { WebCryptoPort } from '../../adapters/crypto/web-crypto-port';
 import type { VaultStore, EncryptedVault } from '../../ports/vault-store';
 
 class MemoryVaultStore implements VaultStore {
@@ -34,7 +35,7 @@ async function forgeVault(payload: unknown, password: string): Promise<Encrypted
 describe('keyring — vault crypto', () => {
   it('unlock rejects a wrong password and accepts the right one', async () => {
     const store = new MemoryVaultStore();
-    const k = new Keyring(store);
+    const k = new Keyring(store, new WebCryptoPort());
     await k.create(PASSWORD);
     k.lock();
 
@@ -45,7 +46,7 @@ describe('keyring — vault crypto', () => {
 
   it('rejects a tampered ciphertext (AES-GCM authentication)', async () => {
     const store = new MemoryVaultStore();
-    const k = new Keyring(store);
+    const k = new Keyring(store, new WebCryptoPort());
     await k.create(PASSWORD);
     k.lock();
 
@@ -59,7 +60,7 @@ describe('keyring — vault crypto', () => {
 
   it('uses a fresh random salt and IV on every save', async () => {
     const store = new MemoryVaultStore();
-    const k = new Keyring(store);
+    const k = new Keyring(store, new WebCryptoPort());
     await k.create(PASSWORD);
     const first = store.vault!;
     // Hardened to the OWASP/MetaMask floor (#77). Old 200k vaults still unlock
@@ -74,14 +75,14 @@ describe('keyring — vault crypto', () => {
 
   it('rejects a vault whose decrypted payload is not version 2 (parseV2 guard)', async () => {
     const store = new MemoryVaultStore();
-    const k = new Keyring(store);
+    const k = new Keyring(store, new WebCryptoPort());
     store.vault = await forgeVault({ version: 1, accounts: [] }, PASSWORD);
     await expect(k.unlock(PASSWORD)).rejects.toThrow(/Vault format unsupported/);
   });
 
   it('rejects a v2 vault whose accounts field is not an array (parseV2 guard)', async () => {
     const store = new MemoryVaultStore();
-    const k = new Keyring(store);
+    const k = new Keyring(store, new WebCryptoPort());
     store.vault = await forgeVault({ version: 2, accounts: 'nope' }, PASSWORD);
     await expect(k.unlock(PASSWORD)).rejects.toThrow(/Vault format unsupported/);
   });
