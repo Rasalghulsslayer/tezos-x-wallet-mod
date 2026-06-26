@@ -4,16 +4,17 @@
  * and by the EIP-1193 handler (pinned account for a pending approval).
  */
 
-import { buildContainer, type Container, type UnlockedSecrets } from './container';
+import { buildContainer, type Container, type UnlockedSecrets, type PersistentPorts } from './container';
 import type { ContainerCache } from './container-cache';
 import type { Keyring } from '../background/keyring';
 import type { AccountId, Account } from '../domain/account';
 import type { ContentPush } from '../shared/messages';
 
 export interface EnsureContainerDeps {
-  keyring:         Keyring;
-  containerCache:  ContainerCache;
-  onProviderEvent: (push: ContentPush) => Promise<void>;
+  keyring:          Keyring;
+  containerCache:   ContainerCache;
+  persistentPorts:  PersistentPorts;
+  onProviderEvent:  (push: ContentPush) => Promise<void>;
 }
 
 export async function ensureContainerFor(accountId: AccountId, deps: EnsureContainerDeps): Promise<Container> {
@@ -21,7 +22,7 @@ export async function ensureContainerFor(accountId: AccountId, deps: EnsureConta
   if (cached != null) return cached;
 
   const { account, secretKey } = await deps.keyring.getSigningKeyFor(accountId);
-  const built = buildContainer(toUnlockedSecrets(account, secretKey));
+  const built = buildContainer(toUnlockedSecrets(account, secretKey), deps.persistentPorts);
   attachProviderListeners(built, deps.onProviderEvent);
   deps.containerCache.put(accountId, built);
   return built;

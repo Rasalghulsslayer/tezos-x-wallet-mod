@@ -1,7 +1,11 @@
 import '@/shared/buffer-shim';
 import { Keyring } from './keyring';
 import { ApprovalQueue } from './approval-queue';
-import { persistentPorts } from '../composition/container';
+import { ChromeVaultStore } from '../adapters/chrome/chrome-vault-store';
+import { ChromeSessionStore } from '../adapters/chrome/chrome-session-store';
+import { ChromeTokenStore } from '../adapters/chrome/chrome-token-store';
+import { ChromeNotificationPort } from '../adapters/chrome/chrome-notification';
+import type { PersistentPorts } from '../composition/container';
 import { ContainerCache } from '../composition/container-cache';
 import { ensureContainerFor } from '../composition/container-builder';
 import { dispatch, type SwState, type SwDeps } from '../composition/sw-wiring';
@@ -10,6 +14,16 @@ import type { ContentPush } from '../shared/messages';
 const state: SwState = {
   container: null,
   evmAlias:  null,
+};
+
+// The extension shell owns the platform adapters and injects them into the
+// shared core (keyring, container, dispatch). A mobile shell would build its
+// own PersistentPorts here (Keychain / MMKV / …) instead.
+const persistentPorts: PersistentPorts = {
+  vaultStore:    new ChromeVaultStore(),
+  sessionStore:  new ChromeSessionStore(),
+  tokenStore:    new ChromeTokenStore(),
+  notifications: new ChromeNotificationPort(),
 };
 
 void persistentPorts.notifications.setPendingCount(0);
@@ -41,6 +55,7 @@ async function rebuildContainer(): Promise<void> {
   state.container = await ensureContainerFor(unlocked.account.id, {
     keyring,
     containerCache,
+    persistentPorts,
     onProviderEvent: broadcastEvent,
   });
   await broadcastEvent({ type: 'WALLET_ROLE', routesViaRelayer: unlocked.account.kind === 'tezos' });

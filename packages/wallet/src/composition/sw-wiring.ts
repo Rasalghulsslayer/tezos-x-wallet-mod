@@ -496,6 +496,7 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
       container = await ensureContainerFor(pinnedAccountId, {
         keyring:         deps.keyring,
         containerCache:  deps.containerCache,
+        persistentPorts: deps.persistentPorts,
         onProviderEvent: deps.broadcastEvent,
       });
     } catch (err) {

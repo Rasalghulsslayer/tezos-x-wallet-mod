@@ -1,8 +1,9 @@
 /**
- * buildContainer: factory wiring the concrete adapters that match the
- * active account's kind. persistentPorts holds the chrome.storage- and
- * chrome.action-backed singletons that exist whether the wallet is locked
- * or unlocked.
+ * buildContainer: factory wiring the concrete adapters that match the active
+ * account's kind. The platform-specific persistent ports (vault / session /
+ * token / notification) are injected by the host shell — the extension service
+ * worker passes its chrome.* adapters — so this module stays free of any
+ * platform coupling and can be shared with a future mobile shell.
  */
 
 import { RelayerProvider } from '@tezosx/relayer/provider';
@@ -15,9 +16,6 @@ import { EvmSigner } from '../adapters/evm/evm-signer';
 import { EvmProvider } from '../adapters/evm/evm-provider';
 import { EvmBalanceFetcher } from '../adapters/evm/evm-balance-fetcher';
 import { EvmActivityFetcher } from '../adapters/evm/evm-activity-fetcher';
-import { ChromeVaultStore } from '../adapters/chrome/chrome-vault-store';
-import { ChromeSessionStore } from '../adapters/chrome/chrome-session-store';
-import { ChromeNotificationPort } from '../adapters/chrome/chrome-notification';
 import type { SignerPort } from '../ports/signer-port';
 import type { ProviderPort } from '../ports/provider-port';
 import type { BalanceFetcher } from '../ports/balance-fetcher';
@@ -26,7 +24,6 @@ import type { VaultStore } from '../ports/vault-store';
 import type { SessionStore } from '../ports/session-store';
 import type { NotificationPort } from '../ports/notification-port';
 import type { TokenStore } from '../ports/token-store';
-import { ChromeTokenStore } from '../adapters/chrome/chrome-token-store';
 import type { TezosAccount, EvmAccount, AccountId } from '../domain/account';
 
 export type UnlockedSecrets =
@@ -73,14 +70,8 @@ export interface PersistentPorts {
   notifications: NotificationPort;
 }
 
-const vaultStore:    VaultStore       = new ChromeVaultStore();
-const sessionStore:  SessionStore     = new ChromeSessionStore();
-const tokenStore:    TokenStore       = new ChromeTokenStore();
-const notifications: NotificationPort = new ChromeNotificationPort();
-
-export const persistentPorts: PersistentPorts = { vaultStore, sessionStore, tokenStore, notifications };
-
-export function buildContainer(secrets: UnlockedSecrets): Container {
+export function buildContainer(secrets: UnlockedSecrets, ports: PersistentPorts): Container {
+  const { vaultStore, sessionStore, tokenStore, notifications } = ports;
   if (secrets.kind === 'tezos') {
     const account: TezosAccount = {
       kind:      'tezos',
