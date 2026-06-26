@@ -1,9 +1,23 @@
 # Plan — faire une app mobile en plus de l'extension Chrome — tezos-x-wallet
 
-- **Repo / HEAD** : `trilitech/tezos-x-wallet`, branche `dev`, `e537352` (wallet 0.9.0 / relayer 0.5.1)
-- **Date** : 2026-06-01
+- **Repo / HEAD** : `trilitech/tezos-x-wallet`, branche `main` (origine : `dev` `e537352`, wallet 0.9.0 / relayer 0.5.1)
+- **Date** : 2026-06-01 — **rafraîchi le 2026-06-25 contre `main`, wallet 0.12.0 / relayer 0.6.0**
 - **Méthode** : 2 auditeurs (lecture de code) — refonte monorepo / cœur partagé + intégration plateforme mobile. Bâti sur l'audit d'extensibilité initial.
 - **Convention** : *CONFIRMÉ* = lu dans le code ; *INFÉRÉ* = jugement d'ingénierie / connaissance lib.
+
+---
+
+## Δ depuis le 2026-06-01 (rafraîchi le 2026-06-25)
+
+Le repo est passé de wallet 0.9.0 / relayer 0.5.1 à **0.12.0 / 0.6.0** (lots de tests, fixes sécurité denver #73–#77, migration `call`/`%call`). L'analyse et le plan phasé ci-dessous restent valides ; plusieurs prérequis ont déjà atterri. **Déjà fait :**
+- ✅ **PBKDF2 200k → 600k** (`keyring.ts:55`, PR #77) — satisfait en partie la reco B.2 (reste Argon2id / vault v3 + **auto-lock**).
+- ✅ **Garde sender du SW durcie** (`sw-wiring.ts:76-92`, PR #75) — n'est plus le simple `sender.id === chrome.runtime.id`, mais `sender.tab` (trafic dApp) + `sender.url` ⊂ `getURL('')` (pages d'extension). L'abstraction transport (A.6 étape 3) doit encapsuler **cette** logique.
+- ✅ **`requestId` minté côté ISOLATED** (`content/bridge.ts:31`, PR #73) — la page ne choisit plus la clé de file d'approbation ; le transport mobile (WC / WebView) devra faire pareil.
+- ✅ **Fondations test-vectors crypto** (KAT EIP-1559 / RLP / dérivation tz1 / crypto keyring) — voir B.3 ; le vecteur vault **cross-device** (chiffrer extension → déchiffrer mobile) reste à ajouter.
+
+**Toujours TODO** (refactos [R] de Phase 1) : inverser l'injection d'adapters dans `container.ts` (toujours des singletons chrome au chargement de module, `76-81`), extraire `CryptoPort` + `ApprovalPresenter`, abstraire le transport de `dispatch`. **Aucun `packages/core` ni `packages/mobile` créé.**
+
+**Surface élargie depuis 0.9.0** : 2 ports ajoutés — **`token-store.ts`** et **`clock.ts`** (cf. A.2) ; nouveaux fichiers `shared/` à inclure dans `core` — `log.ts`, `erc20-metadata.ts`, `seed-default-tokens.ts`, `e2e.ts`.
 
 ---
 
@@ -20,14 +34,14 @@
 ### A.1 Forme cible : extraire `packages/core` (`@tezosx/wallet-core`)
 Consommé par `packages/wallet` (extension) **et** un futur `packages/mobile`. **Ne pas** garder le cœur dans `packages/wallet` et cross-importer (sinon mobile hériterait de `react-dom`, `@crxjs`, `tailwindcss`, `@types/chrome`).
 
-**Entre dans `core` (CONFIRMÉ propre)** : `domain/**` (~628 LOC), `use-cases/**` (~762), `ports/**` (~139), `shared/**` sauf `messaging.ts` (~796 ; garde `seed.ts`, `evm-signing/*`, `constants.ts`, `format.ts`, `messages.ts`, `tx-status.ts`, `poller.ts`, `buffer-shim.ts`), `adapters/evm/**` + `adapters/tezos/**` (~925), `background/keyring.ts` + `background/approval-queue.ts` (logique), `composition/container*.ts` + `sw-wiring.ts`, `ui/view-models/**` (CONFIRMÉ purs : importent seulement `domain/`, `ports/`, types `shared/messages`).
+**Entre dans `core` (CONFIRMÉ propre)** : `domain/**` (~628 LOC), `use-cases/**` (~762), `ports/**` (~139), `shared/**` sauf `messaging.ts` (garde `seed.ts`, `evm-signing/*`, `constants.ts`, `format.ts`, `messages.ts`, `tx-status.ts`, `poller.ts`, `buffer-shim.ts`, et — ajoutés depuis 0.9.0 — `log.ts`, `erc20-metadata.ts`, `seed-default-tokens.ts`, `e2e.ts`), `adapters/evm/**` + `adapters/tezos/**` (~925), `background/keyring.ts` + `background/approval-queue.ts` (logique), `composition/container*.ts` + `sw-wiring.ts`, `ui/view-models/**` (CONFIRMÉ purs : importent seulement `domain/`, `ports/`, types `shared/messages`).
 
 **Reste extension-only** : `adapters/chrome/**`, `background/service-worker.ts`, `content/bridge.ts`, `injected/provider.ts`, `shared/messaging.ts`, tout `ui/**` sauf `view-models/`, `manifest.json`, `*.html`, `vite.config.ts`.
 
 **Imports qui cassent le split (à corriger d'abord)** :
 1. **L'UI importe le cœur directement** (~30 fichiers, CONFIRMÉ : `ui/App.tsx`→`../domain/error`, `ui/pages/Send.tsx`→`@/domain/*`, `ui/pages/Connections.tsx`→`@/ports/session-store`…). → deviennent `@tezosx/wallet-core` ; scinder l'alias tsconfig `@/*` en `@core/*` + `@/*`.
-2. **`container.ts` instancie les adapters chrome au chargement de module** (CONFIRMÉ lignes 72-76 : `new ChromeVaultStore()` en singletons + `persistentPorts` exporté). → inverser : `buildContainer` **reçoit** les `PersistentPorts` en argument ; `service-worker.ts` construit les adapters chrome et les injecte. **Changement structurel n°1, débloque tout le reste.**
-3. **`sw-wiring.dispatch` prend un `chrome.runtime.MessageSender`** (CONFIRMÉ ligne 66) + check `chrome.runtime.id` (73-74). → la logique du routeur est réutilisable ; le type chrome + le check sender doivent être abstraits (transport port).
+2. **`container.ts` instancie les adapters chrome au chargement de module** (CONFIRMÉ lignes 76-81 : `new ChromeVaultStore()`/`ChromeSessionStore()`/`ChromeTokenStore()`/`ChromeNotificationPort()` en singletons + `persistentPorts` exporté ; `buildContainer` l.83). → inverser : `buildContainer` **reçoit** les `PersistentPorts` en argument ; `service-worker.ts` construit les adapters chrome et les injecte. **Changement structurel n°1, débloque tout le reste. (Toujours pas fait au 2026-06-25.)**
+3. **`sw-wiring.dispatch` prend un `chrome.runtime.MessageSender`** (CONFIRMÉ lignes 71-75) + une garde sender (76-92) qui, depuis la PR #75, valide `sender.tab` pour `ETHEREUM_REQUEST` et `sender.url` ⊂ `chrome.runtime.getURL('')` pour les commandes privilégiées (plus le simple `chrome.runtime.id`). → la logique du routeur est réutilisable ; le type chrome **et cette garde** doivent être abstraits (transport port).
 4. `relayer/src/index.ts` = seul fichier relayer couplé navigateur → laisser ; mobile importe via le `exports` map granulaire existant.
 
 ### A.2 Inventaire des ports (extension → mobile)
@@ -35,11 +49,12 @@ Consommé par `packages/wallet` (extension) **et** un futur `packages/mobile`. *
 |---|---|---|
 | `VaultStore` | `chrome-vault-store` (`chrome.storage.local`) | **NEW** : Keychain / SecureStore (blob déjà chiffré) |
 | `SessionStore` | `chrome-session-store` | **NEW** : MMKV / AsyncStorage (métadonnées non-secrètes) |
+| `TokenStore` *(ajouté depuis 0.9.0)* | `chrome-token-store` | **NEW** : MMKV / AsyncStorage (registre de tokens custom, non-secret) |
 | `NotificationPort` | `chrome.action.setBadgeText` | **NEW** : no-op / `expo-notifications` |
 | `SignerPort` | tezos/evm signers | **réutilisé tel quel** (noble/Taquito) |
 | `ProviderPort` | RelayerProvider/EvmProvider | **réutilisé tel quel** |
 | `BalanceFetcher` / `ActivityFetcher` | fetchers | **réutilisés tels quels** |
-| `Clock` | trivial | **réutilisé** |
+| `Clock` *(port concret `clock.ts` depuis 0.9.0)* | horloge système | **réutilisé** (source de temps injectable) |
 
 **Fuites pas encore derrière un port (à extraire avant le split)** :
 - **(a) Crypto pas derrière un port** : `keyring.ts` appelle directement `crypto.subtle`, `getRandomValues`, `btoa/atob`, `TextEncoder`, `randomUUID` (CONFIRMÉ 53-116, 390/394). → extraire un `CryptoPort` autour du vault.
@@ -50,17 +65,17 @@ Consommé par `packages/wallet` (extension) **et** un futur `packages/mobile`. *
 ### A.3 Portabilité crypto (React Native — pas de WebCrypto)
 | Lieu | Primitive | Fix RN |
 |---|---|---|
-| `keyring.ts:73-114` | `crypto.subtle` PBKDF2 200k + AES-GCM | **réimplémenter sur `@noble/hashes` (pbkdf2/argon2id) + `@noble/ciphers` (gcm)** — déjà dans l'arbre, pur-JS, format wire identique. (Alt : `react-native-quick-crypto`, natif, mais bloque Expo-managed.) |
-| `keyring.ts:53-57` | `getRandomValues` | `react-native-get-random-values` (import en 1er) ou `@noble/hashes/utils randomBytes` |
-| `keyring.ts:59-70`, `domain/activity.ts:105,111` | `btoa/atob` | `@scure/base` base64 ou `Buffer` |
-| `keyring.ts:390,394` | `randomUUID` | polyfillé par get-random-values |
+| `keyring.ts:79-120` | `crypto.subtle` PBKDF2 600k + AES-GCM | **réimplémenter sur `@noble/hashes` (pbkdf2/argon2id) + `@noble/ciphers` (gcm)** — déjà dans l'arbre, pur-JS, format wire identique. (Alt : `react-native-quick-crypto`, natif, mais bloque Expo-managed.) |
+| `keyring.ts:61` | `getRandomValues` | `react-native-get-random-values` (import en 1er) ou `@noble/hashes/utils randomBytes` |
+| `keyring.ts:68,72`, `domain/activity.ts` | `btoa/atob` | `@scure/base` base64 ou `Buffer` |
+| `keyring.ts:396,400` | `randomUUID` | polyfillé par get-random-values |
 | evm-signing + keyring | `TextEncoder/Decoder` | polyfill `text-encoding` (Hermes récent l'a) |
 | `buffer-shim.ts` | `Buffer` global (Taquito) | installer `buffer` à l'entry mobile |
 
 Le gros de la crypto courbe (ed25519 Taquito/noble, secp256k1 `@noble/curves`) est **pur-JS et tourne sur Hermes** (INFÉRÉ établi).
 
 ### A.4 Gap connectivité dApp
-Le modèle extension (inject `window.ethereum` via content-script) **n'a pas d'équivalent mobile**. Mais l'enveloppe de requête est transport-agnostique : tout transport doit juste produire `{type:'ETHEREUM_REQUEST', origin, requestId, args}` (`shared/messages.ts:101`) et appeler **`dispatch`** (`sw-wiring.ts:283-387`), qui fait déjà approval-gating + routage NAC + sessions.
+Le modèle extension (inject `window.ethereum` via content-script) **n'a pas d'équivalent mobile**. Mais l'enveloppe de requête est transport-agnostique : tout transport doit juste produire `{type:'ETHEREUM_REQUEST', origin, requestId, args}` (`shared/messages.ts:101`) et appeler **`dispatch`** (`sw-wiring.ts:345-536`), qui fait déjà approval-gating + routage NAC + sessions.
 - **Option A (recommandée) — WalletConnect v2** : transport qui mappe les requêtes WC sur l'enveloppe existante → `dispatch`. Events (`accountsChanged`/`chainChanged`) réémis via le point d'injection `SwDeps.broadcastEvent` (`sw-wiring.ts:55`). Net-new.
 - **Option B — navigateur dApp in-app (WebView)** : réutilise `injected/provider.ts` (CONFIRMÉ chrome-free) quasi verbatim, remplace `window.postMessage`↔content-script par le bridge WebView. Couvre seulement les dApps ouvertes dans l'app.
 - Les deux se branchent au même seam → le refactor A.2c sert les deux.
@@ -70,8 +85,8 @@ Aujourd'hui `react-dom` 19 + `react-router-dom` `HashRouter` + Tailwind v4 → r
 
 ### A.6 Étapes séquencées ([R]=refacto pur, extension reste verte ; [N]=code neuf)
 1. **[R]** Inverser la construction d'adapters dans `container.ts` (param au lieu de `new Chrome…`). *Débloque le split.*
-2. **[R]** Extraire `CryptoPort` + réécrire la crypto vault sur `@noble` (format `EncryptedVault` préservé ; vérifier le round-trip d'un vault existant).
-3. **[R]** Abstraire le sender/transport de `dispatch` (`{trusted}` au lieu du sender chrome ; check `sender.id` déplacé dans `service-worker.ts`).
+2. **[R]** Extraire `CryptoPort` + réécrire la crypto vault sur `@noble` (format `EncryptedVault` préservé, **work-factor déjà à 600k depuis #77** ; vérifier le round-trip d'un vault existant). *(CryptoPort toujours pas extrait au 2026-06-25.)*
+3. **[R]** Abstraire le sender/transport de `dispatch` (`{trusted}` au lieu du sender chrome ; la garde sender actuelle — `sender.tab` + `sender.url`⊂`getURL('')`, PR #75 — déplacée dans `service-worker.ts`).
 4. **[R]** Extraire `ApprovalPresenter` de `approval-queue.ts` (logique en core, ouverture de fenêtre côté extension).
 5. **[R]** Créer `packages/core`, déplacer les modules, `exports` map (modèle = relayer), scinder l'alias `@/*`, mettre à jour ~30 imports UI. Typecheck + vitest verts.
 6. **[N]** Scaffold `packages/mobile` (RN/Expo-prebuild) : adapters `RnVaultStore`/`RnSessionStore`/notif, polyfills crypto, transport in-process. Objectif : unlock + balances on-device.
@@ -91,13 +106,13 @@ Aujourd'hui `react-dom` 19 + `react-router-dom` `HashRouter` + Tailwind v4 → r
 - Risque : **medium, front-loaded** — le spike crypto-runtime + Taquito-signe-on-device est le go/no-go.
 
 ### B.2 Stockage sécurisé — **modèle 2 couches : garder le vault app-level, sceller son secret d'unlock dans le keystore OS derrière la biométrie**
-Modèle actuel CONFIRMÉ : blob `{ciphertext, iv, salt, iterations}` PBKDF2(200k)→AES-GCM-256, dans `chrome.storage.local` ; password en mémoire SW ; **pas d'auto-lock**.
+Modèle actuel CONFIRMÉ : blob `{ciphertext, iv, salt, iterations}` PBKDF2(600k depuis #77)→AES-GCM-256, dans `chrome.storage.local` ; password en mémoire SW ; **toujours pas d'auto-lock**.
 - Le menace mobile bascule vers **vol d'appareil + brute-force offline du blob**. Mobile apporte **keystore hardware** (Secure Enclave / StrongBox/TEE) + **biométrie**.
 - **Recommandation** : (1) garder le vault AES-GCM tel quel (réutilise `domain/vault.ts`) ; (2) `VaultStore` sur **`react-native-keychain`** avec `accessControl: BIOMETRY_CURRENT_SET` + `accessible: WHEN_PASSCODE_SET_THIS_DEVICE_ONLY` + `securityLevel: SECURE_HARDWARE` (Android) ; (3) unlock biométrique libère le secret keychain qui déchiffre le vault (password en fallback / re-auth export) ; (4) état non-secret (sessions/activity) sur **MMKV chiffré** / `expo-secure-store`.
-- **Corriger les gaps audit ici (le menace mobile l'exige)** : monter le work-factor (PBKDF2 ≥600k, idéalement **Argon2id** memory-hard ; le champ `iterations` permet le versioning → vault v3) ; **ajouter l'auto-lock** via `AppState` (le use-case `lock()` existe, il manque le déclencheur).
+- **Corriger les gaps audit ici (le menace mobile l'exige)** : ✅ work-factor déjà monté à **PBKDF2 600k** (#77) — reste à viser **Argon2id** memory-hard (le champ `iterations` permet le versioning → vault v3) ; **ajouter l'auto-lock** via `AppState` (le use-case `lock()` existe, il manque le déclencheur — toujours TODO au 2026-06-25).
 - Risque : **élevé — c'est le cœur sécurité.** Le câblage lib = jours ; les flags d'access-control + fallback biométrique + migration KDF corrects et **validés sur vrais appareils** = non-compressible + revue sécurité.
 
-### B.3 Runtime crypto — voir A.3 ; **exigence critique** : si on veut l'import de vault cross-device (extension ↔ mobile), la crypto mobile doit produire des résultats **byte-identiques** au `keyring.ts` (mêmes octets UTF-8 password, salt/IV base64, itérations, gestion tag GCM). **Suite de test-vectors cross-implémentation en CI** (chiffrer extension → déchiffrer mobile et inverse). Un mismatch silencieux = **fonds irrécupérables**. Travail non-compressible par nature.
+### B.3 Runtime crypto — voir A.3 ; **exigence critique** : si on veut l'import de vault cross-device (extension ↔ mobile), la crypto mobile doit produire des résultats **byte-identiques** au `keyring.ts` (mêmes octets UTF-8 password, salt/IV base64, itérations, gestion tag GCM). **Suite de test-vectors cross-implémentation en CI** (chiffrer extension → déchiffrer mobile et inverse). Un mismatch silencieux = **fonds irrécupérables**. Travail non-compressible par nature. **Statut 2026-06-25 — partiellement amorcé** : KAT déjà en place côté extension — EIP-1559/RLP (`shared/evm-signing/__tests__/`), dérivation tz1 contre le vecteur alice (`shared/__tests__/seed.test.ts`), et crypto keyring (`background/__tests__/keyring-crypto.test.ts` : tamper AES-GCM, unicité salt/IV, garde version v2, upgrade-on-read). Le **vecteur vault cross-device** lui-même reste à écrire quand la crypto RN (`@noble`) atterrira.
 
 ### B.4 Connectivité dApp — **WalletConnect v2 d'abord, navigateur dApp in-app ensuite ; deep-links transverses**
 - **(a) WalletConnect v2 (primaire)** : SDK wallet-side (Reown WalletKit), pairing QR/deep-link, chaque requête mappée sur l'enveloppe existante → file d'approbation + `provider.request`. Seul moyen pour les dApps **externes**. Events réémis via le seam `broadcastEvent`. Caveat dual-runtime : WC-over-EVM couvre le chemin Michelson+NAC comme l'extension (via `isTezosXRelayer`, CONFIRMÉ).
@@ -142,4 +157,4 @@ Modèle actuel CONFIRMÉ : blob `{ciphertext, iv, salt, iterations}` PBKDF2(200k
 5. **Review store wallet crypto** (B.6) — risque calendrier, pas ingénierie.
 
 ## E. Fichiers d'ancrage (où le fork mobile se branche)
-`packages/wallet/src/ports/{vault-store,session-store,notification-port}.ts` (interfaces à ré-implémenter) ; `background/keyring.ts:53-116` (crypto vault à valider/migrer) ; `composition/container.ts:72-76` (câblage adapters à inverser) ; `composition/sw-wiring.ts:64,73,283-387` (dispatch + routeur à réutiliser derrière un nouveau transport) ; `background/approval-queue.ts:43-46` (présentateur à extraire) ; `content/bridge.ts` + `injected/provider.ts` (transport EIP-1193 à remplacer par WC + bridge WebView) ; `ui/view-models/*` (seule UI réutilisable) ; `packages/relayer/package.json` exports map (modèle pour `core`).
+`packages/wallet/src/ports/{vault-store,session-store,token-store,notification-port}.ts` (interfaces à ré-implémenter) ; `background/keyring.ts:59-122` (crypto vault à valider/migrer — PBKDF2 600k) ; `composition/container.ts:76-83` (câblage adapters à inverser) ; `composition/sw-wiring.ts:71-92` (garde sender) + `345-536` (`handleEthereumRequest`) (dispatch + routeur à réutiliser derrière un nouveau transport) ; `background/approval-queue.ts:55-62` (présentateur à extraire) ; `content/bridge.ts` (`requestId` minté l.31) + `injected/provider.ts` (transport EIP-1193 à remplacer par WC + bridge WebView) ; `ui/view-models/*` (seule UI réutilisable) ; `packages/relayer/package.json` exports map (modèle pour `core`).
