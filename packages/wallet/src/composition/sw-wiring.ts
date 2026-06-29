@@ -1,8 +1,11 @@
 /**
- * sw-wiring: the service worker's routing table. dispatch() forwards an
- * incoming chrome.runtime message to the matching use case (or to the
- * EIP-1193 handler for dApp content-script traffic) and wraps the result
- * in a WalletResponse envelope.
+ * sw-wiring: the service worker's routing table. dispatch() takes a message and
+ * the transport-neutral ClassifiedSource the host attests for it, enforces the
+ * sender guard (privileged commands from the trusted-ui channel only; dApp
+ * traffic from the dapp channel with a matching origin), forwards to the
+ * matching use case (or the EIP-1193 handler for dApp traffic), and wraps the
+ * result in a WalletResponse envelope. It holds no platform coupling — the host
+ * shell classifies its native sender before calling in.
  */
 
 import type { Keyring } from '../background/keyring';
@@ -19,6 +22,7 @@ import type {
   WalletResponse,
 } from '../shared/messages';
 import type { StoredSession } from '../ports/session-store';
+import type { ClassifiedSource } from '../ports/message-source';
 import { AccountNotFoundError } from '../domain/vault';
 
 import { getState }                from '../use-cases/get-state';
@@ -70,24 +74,30 @@ const JSON_RPC_INTERNAL         = -32603;
 
 export async function dispatch(
   msg:    PopupRequest | ApproveRequest | EthereumRequest,
-  sender: chrome.runtime.MessageSender,
+  source: ClassifiedSource,
   deps:   SwDeps,
 ): Promise<WalletResponse> {
   if ('type' in msg && msg.type === 'ETHEREUM_REQUEST') {
-    // dApp traffic is relayed exclusively by the content bridge, which runs
-    // in a tab and stamps msg.origin from its own window.location. Reject
-    // tab-less senders so extension pages can't impersonate a dApp, and
-    // senders whose real origin disagrees with the stamped one.
-    if (sender.tab == null || (sender.origin != null && sender.origin !== msg.origin)) {
+    // dApp traffic must arrive over the untrusted dApp channel, and when the
+    // host attests an origin it must match the origin stamped into the
+    // envelope. Reject trusted-ui / unrecognized sources so they can't
+    // impersonate a dApp, and reject a stamped origin that disagrees with the
+    // host-verified one.
+    if (
+      source == null ||
+      source.channel !== 'dapp' ||
+      (source.verifiedOrigin != null && source.verifiedOrigin !== msg.origin)
+    ) {
       return { ok: false, code: EIP_UNAUTHORIZED, message: 'Forbidden sender' };
     }
     return handleEthereumRequest(msg, deps);
   }
 
   // Everything else is privileged (unlock, seed export, approval decisions):
-  // only the extension's own pages may issue it. A bare runtime.id check is
-  // not enough — content scripts share the extension id.
-  if (sender.url == null || !sender.url.startsWith(chrome.runtime.getURL(''))) {
+  // only the trusted first-party UI surface may issue it. The host attests this
+  // channel from facts core can't see (an extension-page URL on Chrome,
+  // in-process identity on mobile) — never from anything a dApp can supply.
+  if (source == null || source.channel !== 'trusted-ui') {
     return { ok: false, code: EIP_UNAUTHORIZED, message: 'Forbidden sender' };
   }
   if ('type' in msg && (msg.type === 'GET_PENDING' || msg.type === 'RESOLVE_PENDING')) {

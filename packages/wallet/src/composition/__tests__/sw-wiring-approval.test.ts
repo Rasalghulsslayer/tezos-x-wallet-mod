@@ -9,6 +9,7 @@ import type { VaultStore, EncryptedVault } from '../../ports/vault-store';
 import type { SessionStore, StoredSession } from '../../ports/session-store';
 import type { TokenStore } from '../../ports/token-store';
 import type { NotificationPort } from '../../ports/notification-port';
+import type { ClassifiedSource } from '../../ports/message-source';
 import type { RegisteredToken } from '../../domain/token';
 
 class MemoryVault implements VaultStore {
@@ -54,18 +55,22 @@ async function setupHarness() {
   return { keyring, deps, broadcasts };
 }
 
-const senderWithId = (id: string) => ({ id } as chrome.runtime.MessageSender);
-// Since #75, dispatch validates senders by shape: privileged popup/approve
-// commands must come from an extension-page URL, dApp traffic from a tab.
-const extensionPageSender = { url: `chrome-extension://${OWN_EXT_ID}/approve.html` } as chrome.runtime.MessageSender;
-const contentSender       = { tab: { id: 1 } as chrome.tabs.Tab } as chrome.runtime.MessageSender;
+// dispatch() takes a transport-neutral ClassifiedSource — the host classifies the
+// raw chrome sender first (see adapters/chrome/chrome-message-source). Since #75,
+// privileged approve commands are allowed only from the trusted-ui channel; dApp
+// traffic from the dapp channel. An unrecognized sender classifies as null.
+/** The wallet's own trusted UI surface (the approve page). */
+const extensionPageSender: ClassifiedSource = { channel: 'trusted-ui' };
+/** The content bridge relaying dApp traffic from a tab. */
+const contentSender: ClassifiedSource = { channel: 'dapp', verifiedOrigin: undefined };
 
 describe('sw-wiring — approval gating', () => {
   let h: Awaited<ReturnType<typeof setupHarness>>;
 
   beforeEach(async () => {
-    // The sender-id guard reads chrome.runtime.id; the enqueue path opens a
-    // chrome.windows popup. Stub the minimum the SW touches in these branches.
+    // dispatch no longer reads chrome (the host classifies the sender first),
+    // but the approval enqueue path still opens a chrome.windows popup. Stub the
+    // minimum the SW touches in that branch.
     vi.stubGlobal('chrome', {
       runtime: { id: OWN_EXT_ID, getURL: (p: string) => `chrome-extension://${OWN_EXT_ID}/${p}` },
       windows: { create: async () => ({ id: 1 }), remove: async () => {} },
@@ -77,7 +82,7 @@ describe('sw-wiring — approval gating', () => {
   it('rejects RESOLVE_PENDING from a foreign sender (4100 Forbidden sender)', async () => {
     const res = await dispatch(
       { type: 'RESOLVE_PENDING', requestId: 'whatever', decision: 'approve' },
-      senderWithId('malicious-extension'),
+      null, // unrecognized/foreign sender: the classifier attests nothing
       h.deps,
     );
     expect(res.ok).toBe(false);
@@ -89,7 +94,7 @@ describe('sw-wiring — approval gating', () => {
   it('rejects GET_PENDING from a foreign sender (4100)', async () => {
     const res = await dispatch(
       { type: 'GET_PENDING', requestId: 'whatever' },
-      senderWithId('malicious-extension'),
+      null, // unrecognized/foreign sender: the classifier attests nothing
       h.deps,
     );
     expect(res.ok).toBe(false);

@@ -6,6 +6,7 @@ import { ChromeSessionStore } from '../adapters/chrome/chrome-session-store';
 import { ChromeTokenStore } from '../adapters/chrome/chrome-token-store';
 import { ChromeNotificationPort } from '../adapters/chrome/chrome-notification';
 import { WebCryptoPort } from '../adapters/crypto/web-crypto-port';
+import { classifyChromeSender } from '../adapters/chrome/chrome-message-source';
 import type { PersistentPorts } from '../composition/container';
 import { ContainerCache } from '../composition/container-cache';
 import { ensureContainerFor } from '../composition/container-builder';
@@ -78,7 +79,7 @@ const deps: SwDeps = {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   void (async () => {
-    sendResponse(await dispatch(msg, sender, deps));
+    sendResponse(await dispatch(msg, classifyChromeSender(sender), deps));
   })();
   return true;
 });

@@ -9,6 +9,7 @@ import type { VaultStore, EncryptedVault } from '../../ports/vault-store';
 import type { SessionStore, StoredSession } from '../../ports/session-store';
 import type { TokenStore } from '../../ports/token-store';
 import type { NotificationPort } from '../../ports/notification-port';
+import type { ClassifiedSource } from '../../ports/message-source';
 import type { RegisteredToken } from '../../domain/token';
 
 class MemoryVault implements VaultStore {
@@ -44,17 +45,13 @@ const stubNotifications: NotificationPort = {
   async setPendingCount() {},
 };
 
-// dispatch() validates senders against chrome.runtime.getURL — stub the
-// minimal chrome surface the node test environment lacks.
-const EXTENSION_URL = 'chrome-extension://test-extension-id/';
-globalThis.chrome = {
-  runtime: { id: 'test-extension-id', getURL: (path: string) => EXTENSION_URL + path },
-} as unknown as typeof chrome;
-
-/** Sender shape of the extension's own pages (popup, approve, side panel). */
-const popupSender = { url: `${EXTENSION_URL}popup.html` } as chrome.runtime.MessageSender;
-/** Sender shape of the content bridge relaying dApp traffic from a tab. */
-const contentSender = { tab: { id: 1 } as chrome.tabs.Tab } as chrome.runtime.MessageSender;
+// dispatch() takes a transport-neutral ClassifiedSource — the host classifies
+// the raw chrome sender before calling it (see adapters/chrome/chrome-message-source,
+// which has its own test). These fixtures stand in for the two channels.
+/** The wallet's own trusted UI surface (popup / approve page / side panel). */
+const popupSender: ClassifiedSource = { channel: 'trusted-ui' };
+/** The content bridge relaying dApp traffic from a tab (no attested origin). */
+const contentSender: ClassifiedSource = { channel: 'dapp', verifiedOrigin: undefined };
 
 const PASSWORD = 'correct-horse-battery';
 
@@ -311,7 +308,7 @@ describe('dispatch sender validation', () => {
   let h: Harness;
   beforeEach(async () => { h = await setupHarness(); });
 
-  it('rejects ETHEREUM_REQUEST from a tab-less sender (extension page)', async () => {
+  it('rejects ETHEREUM_REQUEST from a trusted-ui source (cannot pose as a dApp)', async () => {
     const res = await dispatch(
       { type: 'ETHEREUM_REQUEST', origin: 'https://any.example', requestId: 'req-1', args: { method: 'eth_accounts' } },
       popupSender,
@@ -322,11 +319,8 @@ describe('dispatch sender validation', () => {
     expect(res.code).toBe(4100);
   });
 
-  it('rejects ETHEREUM_REQUEST when sender.origin disagrees with the stamped origin', async () => {
-    const spoofingSender = {
-      tab:    { id: 1 } as chrome.tabs.Tab,
-      origin: 'https://evil.example',
-    } as chrome.runtime.MessageSender;
+  it('rejects ETHEREUM_REQUEST when the host-verified origin disagrees with the stamped origin', async () => {
+    const spoofingSender: ClassifiedSource = { channel: 'dapp', verifiedOrigin: 'https://evil.example' };
     const res = await dispatch(
       { type: 'ETHEREUM_REQUEST', origin: 'https://victim.example', requestId: 'req-2', args: { method: 'eth_accounts' } },
       spoofingSender,
@@ -337,14 +331,14 @@ describe('dispatch sender validation', () => {
     expect(res.code).toBe(4100);
   });
 
-  it('rejects privileged popup commands from a content-script sender', async () => {
+  it('rejects privileged popup commands from a dApp-channel source', async () => {
     const res = await dispatch({ type: 'EXPORT_SEED', password: PASSWORD }, contentSender, h.deps);
     expect(res.ok).toBe(false);
     if (res.ok) throw new Error('unreachable');
     expect(res.code).toBe(4100);
   });
 
-  it('rejects RESOLVE_PENDING from a content-script sender', async () => {
+  it('rejects RESOLVE_PENDING from a dApp-channel source', async () => {
     const res = await dispatch(
       { type: 'RESOLVE_PENDING', requestId: 'req-3', decision: 'approve' },
       contentSender,
@@ -355,9 +349,10 @@ describe('dispatch sender validation', () => {
     expect(res.code).toBe(4100);
   });
 
-  it('rejects popup commands from a web-page sender url', async () => {
-    const webSender = { url: 'https://evil.example/page' } as chrome.runtime.MessageSender;
-    const res = await dispatch({ type: 'GET_STATE' }, webSender, h.deps);
+  it('rejects privileged popup commands from an unrecognized source', async () => {
+    // The host could attest no trusted facts (a web page, a foreign extension):
+    // the classifier returns null and the privileged guard rejects it.
+    const res = await dispatch({ type: 'GET_STATE' }, null, h.deps);
     expect(res.ok).toBe(false);
     if (res.ok) throw new Error('unreachable');
     expect(res.code).toBe(4100);
