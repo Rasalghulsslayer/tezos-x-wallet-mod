@@ -8,7 +8,7 @@ import type {
   ActivityFetcher,
   ActivityFetcherPage,
 } from '@tezosx/wallet-core/ports/activity-fetcher';
-import type { Container } from '../../composition/container';
+import type { Container } from '@tezosx/wallet-core/ports/container';
 import { XTZ_L1_ASSET, XTZ_L2_ASSET } from '@tezosx/wallet-core/domain/asset';
 
 // Mock the relayer's l1OpHashToEvmHash so the dedup is deterministic.
@@ -86,6 +86,7 @@ function tezosContainer(tezos: ActivityFetcher, evm: ActivityFetcher, pendingOps
     provider:        {} as Container['provider'],
     balanceFetcher:  {} as Container['balanceFetcher'],
     activitySources: { tezos, evm, pendingOps },
+    crossRuntimeBuilder: {} as Container['crossRuntimeBuilder'],
     vaultStore:      {} as Container['vaultStore'],
     sessionStore:    {} as Container['sessionStore'],
     tokenStore:      {} as Container['tokenStore'],
@@ -99,6 +100,7 @@ function evmAccountContainer(evm: ActivityFetcher): Container {
     provider:        {} as Container['provider'],
     balanceFetcher:  {} as Container['balanceFetcher'],
     activitySources: { evm },
+    crossRuntimeBuilder: {} as Container['crossRuntimeBuilder'],
     vaultStore:      {} as Container['vaultStore'],
     sessionStore:    {} as Container['sessionStore'],
     tokenStore:      {} as Container['tokenStore'],

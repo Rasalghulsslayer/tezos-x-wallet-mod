@@ -10,7 +10,7 @@
 
 import type { Keyring } from '../background/keyring';
 import { DuplicateRequestIdError, type ApprovalQueue } from '../background/approval-queue';
-import type { Container, PersistentPorts } from './container';
+import type { Container, PersistentPorts } from '@tezosx/wallet-core/ports/container';
 import type { ContainerCache } from './container-cache';
 import { ensureContainerFor } from './container-builder';
 import type {

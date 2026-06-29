@@ -21,7 +21,7 @@ import {
 } from '@tezosx/wallet-core/domain/activity';
 import { XTZ_L1_ASSET } from '@tezosx/wallet-core/domain/asset';
 import type { ActivityFetcher, ActivityFetcherPage } from '@tezosx/wallet-core/ports/activity-fetcher';
-import type { Container } from '../composition/container';
+import type { Container } from '@tezosx/wallet-core/ports/container';
 
 export interface ListActivityReq {
   cursor?: string;

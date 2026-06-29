@@ -8,7 +8,7 @@ import { ChromeNotificationPort } from '../adapters/chrome/chrome-notification';
 import { WebCryptoPort } from '../adapters/crypto/web-crypto-port';
 import { classifyChromeSender } from '../adapters/chrome/chrome-message-source';
 import { ChromeApprovalPresenter } from '../adapters/chrome/chrome-approval-presenter';
-import type { PersistentPorts } from '../composition/container';
+import type { PersistentPorts } from '@tezosx/wallet-core/ports/container';
 import { ContainerCache } from '../composition/container-cache';
 import { ensureContainerFor } from '../composition/container-builder';
 import { dispatch, type SwState, type SwDeps } from '../composition/sw-wiring';

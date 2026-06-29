@@ -4,7 +4,8 @@
  * and by the EIP-1193 handler (pinned account for a pending approval).
  */
 
-import { buildContainer, type Container, type UnlockedSecrets, type PersistentPorts } from './container';
+import { buildContainer } from './container';
+import type { Container, UnlockedSecrets, PersistentPorts } from '@tezosx/wallet-core/ports/container';
 import type { ContainerCache } from './container-cache';
 import type { Keyring } from '../background/keyring';
 import type { AccountId, Account } from '@tezosx/wallet-core/domain/account';

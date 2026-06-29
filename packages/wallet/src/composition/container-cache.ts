@@ -4,7 +4,7 @@
  * latency under ~50 ms for the realistic 1–15 account range.
  */
 
-import type { Container } from './container';
+import type { Container } from '@tezosx/wallet-core/ports/container';
 import type { AccountId } from '@tezosx/wallet-core/domain/account';
 import { CONTAINER_CACHE_SIZE } from '@tezosx/wallet-core/shared/constants';
 

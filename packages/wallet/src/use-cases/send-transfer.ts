@@ -9,8 +9,7 @@
 
 import type { CrossRuntimeIntent } from '@tezosx/relayer/types';
 import { decideRoute } from '@tezosx/wallet-core/domain/transfer';
-import { buildEvmToTezosTx } from '../adapters/evm/nac-precompile-builder';
-import type { Container } from '../composition/container';
+import type { Container } from '@tezosx/wallet-core/ports/container';
 import type { Asset } from '@tezosx/wallet-core/domain/asset';
 
 export interface SendTransferReq {
@@ -78,7 +77,7 @@ export async function sendTransfer(
       destination: req.to,
       amount:      mutezAmount,
     };
-    const tx        = await buildEvmToTezosTx(intent, signer.account.address);
+    const tx        = await deps.container.crossRuntimeBuilder.buildEvmToTezosTx(intent, signer.account.address);
 
     const gasPriceHex = await deps.container.provider.request({ method: 'eth_gasPrice' }) as string;
     const maxFeePerGas = BigInt(gasPriceHex) * 2n;

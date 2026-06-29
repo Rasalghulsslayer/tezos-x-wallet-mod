@@ -4,7 +4,7 @@
  * resolver times out.
  */
 
-import type { Container } from '../composition/container';
+import type { Container } from '@tezosx/wallet-core/ports/container';
 
 export interface ResolveTxReq {
   syntheticHash: string;

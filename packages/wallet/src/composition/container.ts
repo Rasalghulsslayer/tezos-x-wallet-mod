@@ -8,7 +8,6 @@
 
 import { RelayerProvider } from '@tezosx/relayer/provider';
 import { TEZLINK_EVM_RPC } from '@tezosx/relayer/constants';
-import type { PendingOpView } from '@tezosx/relayer/tezos';
 import { TezosSigner } from '../adapters/tezos/tezos-signer';
 import { TezosBalanceFetcher } from '../adapters/tezos/tezos-balance-fetcher';
 import { TezosActivityFetcher } from '../adapters/tezos/tezos-activity-fetcher';
@@ -16,59 +15,13 @@ import { EvmSigner } from '../adapters/evm/evm-signer';
 import { EvmProvider } from '../adapters/evm/evm-provider';
 import { EvmBalanceFetcher } from '../adapters/evm/evm-balance-fetcher';
 import { EvmActivityFetcher } from '../adapters/evm/evm-activity-fetcher';
-import type { SignerPort } from '@tezosx/wallet-core/ports/signer-port';
-import type { ProviderPort } from '@tezosx/wallet-core/ports/provider-port';
-import type { BalanceFetcher } from '@tezosx/wallet-core/ports/balance-fetcher';
-import type { ActivityFetcher } from '@tezosx/wallet-core/ports/activity-fetcher';
-import type { VaultStore } from '@tezosx/wallet-core/ports/vault-store';
-import type { SessionStore } from '@tezosx/wallet-core/ports/session-store';
-import type { NotificationPort } from '@tezosx/wallet-core/ports/notification-port';
-import type { TokenStore } from '@tezosx/wallet-core/ports/token-store';
-import type { TezosAccount, EvmAccount, AccountId } from '@tezosx/wallet-core/domain/account';
+import { buildEvmToTezosTx } from '../adapters/evm/nac-precompile-builder';
+import type { TezosAccount, EvmAccount } from '@tezosx/wallet-core/domain/account';
+import type { Container, UnlockedSecrets, PersistentPorts } from '@tezosx/wallet-core/ports/container';
 
-export type UnlockedSecrets =
-  | {
-      kind:       'tezos';
-      tz1:        string;
-      publicKey:  string;
-      secretKey:  string;
-      accountId:  AccountId;
-      label?:     string;
-      createdAt:  number;
-    }
-  | {
-      kind:       'evm';
-      address:    `0x${string}`;
-      publicKey:  `0x${string}`;
-      privateKey: string;
-      accountId:  AccountId;
-      label?:     string;
-      createdAt:  number;
-    };
-
-export interface ActivitySources {
-  tezos?:       ActivityFetcher;                              // Tezos accounts only
-  evm:          ActivityFetcher;                              // always populated
-  pendingOps?:  () => readonly PendingOpView[];               // Tezos accounts only (via RelayerProvider)
-}
-
-export interface Container {
-  signer:           SignerPort;
-  provider:         ProviderPort;
-  balanceFetcher:   BalanceFetcher;
-  activitySources:  ActivitySources;
-  vaultStore:       VaultStore;
-  sessionStore:     SessionStore;
-  tokenStore:       TokenStore;
-  notifications:    NotificationPort;
-}
-
-export interface PersistentPorts {
-  vaultStore:    VaultStore;
-  sessionStore:  SessionStore;
-  tokenStore:    TokenStore;
-  notifications: NotificationPort;
-}
+// The cross-runtime builder is stateless and account-agnostic — the same wrapper
+// serves both account kinds (only EVM-source sends actually invoke it).
+const crossRuntimeBuilder = { buildEvmToTezosTx };
 
 export function buildContainer(secrets: UnlockedSecrets, ports: PersistentPorts): Container {
   const { vaultStore, sessionStore, tokenStore, notifications } = ports;
@@ -93,6 +46,7 @@ export function buildContainer(secrets: UnlockedSecrets, ports: PersistentPorts)
         evm:         new EvmActivityFetcher(undefined, tokenList),
         pendingOps:  () => provider.listPendingOps(),
       },
+      crossRuntimeBuilder,
       vaultStore, sessionStore, tokenStore, notifications,
     };
   }
@@ -113,6 +67,7 @@ export function buildContainer(secrets: UnlockedSecrets, ports: PersistentPorts)
     provider,
     balanceFetcher:  new EvmBalanceFetcher(),
     activitySources: { evm: new EvmActivityFetcher(undefined, tokenList) },
+    crossRuntimeBuilder,
     vaultStore, sessionStore, tokenStore, notifications,
   };
 }
