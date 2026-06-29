@@ -6,7 +6,7 @@
  */
 
 import type { Keyring } from '../background/keyring';
-import type { AccountId } from '@tezosx/wallet-core/domain/account';
+import type { AccountId } from '../domain/account';
 
 export interface RemoveAccountReq {
   accountId: AccountId;

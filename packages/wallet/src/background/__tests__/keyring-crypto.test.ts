@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Keyring } from '../keyring';
+import { Keyring } from '@tezosx/wallet-core/keyring';
 import { WebCryptoPort } from '../../adapters/crypto/web-crypto-port';
 import type { VaultStore, EncryptedVault } from '@tezosx/wallet-core/ports/vault-store';
 

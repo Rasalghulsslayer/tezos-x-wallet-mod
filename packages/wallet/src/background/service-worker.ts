@@ -1,6 +1,6 @@
 import '@tezosx/wallet-core/shared/buffer-shim';
-import { Keyring } from './keyring';
-import { ApprovalQueue } from './approval-queue';
+import { Keyring } from '@tezosx/wallet-core/keyring';
+import { ApprovalQueue } from '@tezosx/wallet-core/approval-queue';
 import { ChromeVaultStore } from '../adapters/chrome/chrome-vault-store';
 import { ChromeSessionStore } from '../adapters/chrome/chrome-session-store';
 import { ChromeTokenStore } from '../adapters/chrome/chrome-token-store';

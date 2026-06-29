@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { Keyring } from '../../background/keyring';
+import { Keyring } from '@tezosx/wallet-core/keyring';
 import { WebCryptoPort } from '../../adapters/crypto/web-crypto-port';
-import { ApprovalQueue } from '../../background/approval-queue';
+import { ApprovalQueue } from '@tezosx/wallet-core/approval-queue';
 import { ContainerCache } from '../container-cache';
 import { dispatch, type SwDeps } from '../sw-wiring';
 import type { ContentPush } from '@tezosx/wallet-core/shared/messages';

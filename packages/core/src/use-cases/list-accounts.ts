@@ -3,7 +3,7 @@
  */
 
 import type { Keyring } from '../background/keyring';
-import type { AccountSummary } from '@tezosx/wallet-core/domain/account';
+import type { AccountSummary } from '../domain/account';
 
 export interface ListAccountsDeps {
   keyring: Keyring;

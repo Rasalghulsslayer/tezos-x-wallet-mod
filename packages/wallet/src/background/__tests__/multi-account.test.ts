@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { Keyring } from '../../background/keyring';
+import { Keyring } from '@tezosx/wallet-core/keyring';
 import { WebCryptoPort } from '../../adapters/crypto/web-crypto-port';
 import {
   CannotRemoveLastAccountError,
@@ -7,11 +7,11 @@ import {
   MaxAccountsReachedError,
 } from '@tezosx/wallet-core/domain/vault';
 import { MAX_ACCOUNTS_PER_VAULT, MAX_LABEL_LENGTH } from '@tezosx/wallet-core/shared/constants';
-import { addAccount } from '../add-account';
-import { removeAccount } from '../remove-account';
-import { setActiveAccount } from '../set-active-account';
-import { renameAccount } from '../rename-account';
-import { listAccounts } from '../list-accounts';
+import { addAccount } from '@tezosx/wallet-core/use-cases/add-account';
+import { removeAccount } from '@tezosx/wallet-core/use-cases/remove-account';
+import { setActiveAccount } from '@tezosx/wallet-core/use-cases/set-active-account';
+import { renameAccount } from '@tezosx/wallet-core/use-cases/rename-account';
+import { listAccounts } from '@tezosx/wallet-core/use-cases/list-accounts';
 import type { VaultStore, EncryptedVault } from '@tezosx/wallet-core/ports/vault-store';
 import type { TokenStore } from '@tezosx/wallet-core/ports/token-store';
 import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';

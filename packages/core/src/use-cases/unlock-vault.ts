@@ -5,8 +5,8 @@
  */
 
 import type { Keyring } from '../background/keyring';
-import type { TokenStore } from '@tezosx/wallet-core/ports/token-store';
-import { seedDefaultTokensForAccount } from '@tezosx/wallet-core/shared/seed-default-tokens';
+import type { TokenStore } from '../ports/token-store';
+import { seedDefaultTokensForAccount } from '../shared/seed-default-tokens';
 
 export interface UnlockVaultReq {
   password: string;

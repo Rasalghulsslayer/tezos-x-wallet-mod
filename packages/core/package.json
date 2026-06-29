@@ -13,6 +13,9 @@
     "./shared/evm-signing": "./src/shared/evm-signing/index.ts",
     "./shared/evm-signing/*": "./src/shared/evm-signing/*.ts",
     "./shared/*": "./src/shared/*.ts",
+    "./use-cases/*": "./src/use-cases/*.ts",
+    "./keyring": "./src/background/keyring.ts",
+    "./approval-queue": "./src/background/approval-queue.ts",
     "./package.json": "./package.json"
   },
   "scripts": {

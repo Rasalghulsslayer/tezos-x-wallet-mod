@@ -9,7 +9,7 @@
 
 import { l1OpHashToEvmHash } from '@tezosx/relayer/tezos';
 import { deriveEvmAlias } from '@tezosx/relayer/utils/derive';
-import { ACTIVITY_PAGE_SIZE, EVM_EXPLORER, TEZOS_EXPLORER } from '@tezosx/wallet-core/shared/constants';
+import { ACTIVITY_PAGE_SIZE, EVM_EXPLORER, TEZOS_EXPLORER } from '../shared/constants';
 import {
   decodeActivityCursor,
   encodeActivityCursor,
@@ -18,10 +18,10 @@ import {
   type ActivityItem,
   type ActivityPage,
   type ActivityTransferItem,
-} from '@tezosx/wallet-core/domain/activity';
-import { XTZ_L1_ASSET } from '@tezosx/wallet-core/domain/asset';
-import type { ActivityFetcher, ActivityFetcherPage } from '@tezosx/wallet-core/ports/activity-fetcher';
-import type { Container } from '@tezosx/wallet-core/ports/container';
+} from '../domain/activity';
+import { XTZ_L1_ASSET } from '../domain/asset';
+import type { ActivityFetcher, ActivityFetcherPage } from '../ports/activity-fetcher';
+import type { Container } from '../ports/container';
 
 export interface ListActivityReq {
   cursor?: string;

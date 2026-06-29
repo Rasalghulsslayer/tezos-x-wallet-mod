@@ -8,9 +8,9 @@
  */
 
 import type { CrossRuntimeIntent } from '@tezosx/relayer/types';
-import { decideRoute } from '@tezosx/wallet-core/domain/transfer';
-import type { Container } from '@tezosx/wallet-core/ports/container';
-import type { Asset } from '@tezosx/wallet-core/domain/asset';
+import { decideRoute } from '../domain/transfer';
+import type { Container } from '../ports/container';
+import type { Asset } from '../domain/asset';
 
 export interface SendTransferReq {
   to:     string;

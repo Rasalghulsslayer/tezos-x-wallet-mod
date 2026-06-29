@@ -8,8 +8,8 @@
  * shell classifies its native sender before calling in.
  */
 
-import type { Keyring } from '../background/keyring';
-import { DuplicateRequestIdError, type ApprovalQueue } from '../background/approval-queue';
+import type { Keyring } from '@tezosx/wallet-core/keyring';
+import { DuplicateRequestIdError, type ApprovalQueue } from '@tezosx/wallet-core/approval-queue';
 import type { Container, PersistentPorts } from '@tezosx/wallet-core/ports/container';
 import type { ContainerCache } from './container-cache';
 import { ensureContainerFor } from './container-builder';
@@ -25,29 +25,29 @@ import type { StoredSession } from '@tezosx/wallet-core/ports/session-store';
 import type { ClassifiedSource } from '@tezosx/wallet-core/ports/message-source';
 import { AccountNotFoundError } from '@tezosx/wallet-core/domain/vault';
 
-import { getState }                from '../use-cases/get-state';
-import { createAccount }           from '../use-cases/create-account';
-import { importAccount }           from '../use-cases/import-account';
-import { unlockVault }             from '../use-cases/unlock-vault';
-import { lockVault }               from '../use-cases/lock-vault';
-import { exportSecret }            from '../use-cases/export-secret';
-import { listPending }             from '../use-cases/list-pending';
-import { listSessions }            from '../use-cases/list-sessions';
-import { disconnectOrigin }        from '../use-cases/disconnect-origin';
-import { sendTransfer }            from '../use-cases/send-transfer';
-import { resolveTx }               from '../use-cases/resolve-tx';
-import { listActivity }            from '../use-cases/list-activity';
-import { getPendingApproval }      from '../use-cases/get-pending-approval';
-import { resolvePendingApproval }  from '../use-cases/resolve-pending-approval';
-import { addAccount }              from '../use-cases/add-account';
-import { removeAccount }           from '../use-cases/remove-account';
-import { setActiveAccount }        from '../use-cases/set-active-account';
-import { renameAccount }           from '../use-cases/rename-account';
-import { listAccounts }            from '../use-cases/list-accounts';
-import { peekCustomToken }         from '../use-cases/peek-custom-token';
-import { addCustomToken }          from '../use-cases/add-custom-token';
-import { removeCustomToken }       from '../use-cases/remove-custom-token';
-import { listRegisteredTokens }    from '../use-cases/list-registered-tokens';
+import { getState }                from '@tezosx/wallet-core/use-cases/get-state';
+import { createAccount }           from '@tezosx/wallet-core/use-cases/create-account';
+import { importAccount }           from '@tezosx/wallet-core/use-cases/import-account';
+import { unlockVault }             from '@tezosx/wallet-core/use-cases/unlock-vault';
+import { lockVault }               from '@tezosx/wallet-core/use-cases/lock-vault';
+import { exportSecret }            from '@tezosx/wallet-core/use-cases/export-secret';
+import { listPending }             from '@tezosx/wallet-core/use-cases/list-pending';
+import { listSessions }            from '@tezosx/wallet-core/use-cases/list-sessions';
+import { disconnectOrigin }        from '@tezosx/wallet-core/use-cases/disconnect-origin';
+import { sendTransfer }            from '@tezosx/wallet-core/use-cases/send-transfer';
+import { resolveTx }               from '@tezosx/wallet-core/use-cases/resolve-tx';
+import { listActivity }            from '@tezosx/wallet-core/use-cases/list-activity';
+import { getPendingApproval }      from '@tezosx/wallet-core/use-cases/get-pending-approval';
+import { resolvePendingApproval }  from '@tezosx/wallet-core/use-cases/resolve-pending-approval';
+import { addAccount }              from '@tezosx/wallet-core/use-cases/add-account';
+import { removeAccount }           from '@tezosx/wallet-core/use-cases/remove-account';
+import { setActiveAccount }        from '@tezosx/wallet-core/use-cases/set-active-account';
+import { renameAccount }           from '@tezosx/wallet-core/use-cases/rename-account';
+import { listAccounts }            from '@tezosx/wallet-core/use-cases/list-accounts';
+import { peekCustomToken }         from '@tezosx/wallet-core/use-cases/peek-custom-token';
+import { addCustomToken }          from '@tezosx/wallet-core/use-cases/add-custom-token';
+import { removeCustomToken }       from '@tezosx/wallet-core/use-cases/remove-custom-token';
+import { listRegisteredTokens }    from '@tezosx/wallet-core/use-cases/list-registered-tokens';
 import { TEZLINK_EVM_RPC }         from '@tezosx/relayer/constants';
 import { buildTezosToEvmCall, UnknownSelectorError, SubMutezPrecisionError } from '@tezosx/relayer/use-cases/build-tezos-to-evm-call';
 
