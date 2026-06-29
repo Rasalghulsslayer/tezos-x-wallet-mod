@@ -10,6 +10,7 @@ import type { SessionStore, StoredSession } from '../../ports/session-store';
 import type { TokenStore } from '../../ports/token-store';
 import type { NotificationPort } from '../../ports/notification-port';
 import type { ClassifiedSource } from '../../ports/message-source';
+import type { ApprovalPresenter } from '../../ports/approval-presenter';
 import type { RegisteredToken } from '../../domain/token';
 
 class MemoryVault implements VaultStore {
@@ -45,6 +46,10 @@ const stubNotifications: NotificationPort = {
   async setPendingCount() {},
 };
 
+// No multi-account test reaches the approval enqueue path (signing requests
+// reject before it), so a no-op presenter is enough to satisfy the constructor.
+const stubPresenter: ApprovalPresenter = { async open() { return undefined; }, close() {} };
+
 // dispatch() takes a transport-neutral ClassifiedSource — the host classifies
 // the raw chrome sender before calling it (see adapters/chrome/chrome-message-source,
 // which has its own test). These fixtures stand in for the two channels.
@@ -72,7 +77,7 @@ async function setupHarness(): Promise<Harness> {
 
   const deps: SwDeps = {
     keyring,
-    approvalQueue:  new ApprovalQueue(stubNotifications),
+    approvalQueue:  new ApprovalQueue(stubNotifications, stubPresenter),
     persistentPorts: { vaultStore: new MemoryVault(), sessionStore, tokenStore: new MemoryTokens(), notifications: stubNotifications },
     state:          { container: null, evmAlias: null },
     containerCache: new ContainerCache(),

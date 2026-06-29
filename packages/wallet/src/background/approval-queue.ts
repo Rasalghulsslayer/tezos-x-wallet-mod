@@ -1,5 +1,6 @@
 import type { PendingRequest } from '../shared/messages';
 import type { NotificationPort } from '../ports/notification-port';
+import type { ApprovalPresenter, ApprovalHandle } from '../ports/approval-presenter';
 
 type Decision = 'approve' | 'reject';
 
@@ -15,20 +16,25 @@ export class DuplicateRequestIdError extends Error {
 interface Pending {
   request: PendingRequest;
   resolve: (decision: Decision) => void;
-  window?: chrome.windows.Window;
+  handle?: ApprovalHandle;
 }
 
 /**
- * Tracks dApp requests awaiting user approval. Opens an approve.html popup
- * window for each new request and resolves the associated promise when the
- * user confirms or rejects from that UI.
+ * Tracks dApp requests awaiting user approval. For each new request it asks the
+ * ApprovalPresenter to show the approval UI, and resolves the associated promise
+ * when the user confirms or rejects from that UI (or dismisses it, which counts
+ * as a rejection). The queue logic is platform-neutral; the presenter is the
+ * only platform-specific piece.
  */
 export class ApprovalQueue {
   private readonly queue = new Map<string, Pending>();
 
-  constructor(private readonly notifications: NotificationPort) {}
+  constructor(
+    private readonly notifications: NotificationPort,
+    private readonly presenter: ApprovalPresenter,
+  ) {}
 
-  /** List pending requests (read by approve.html to render the UI). */
+  /** List pending requests (read by the approval UI to render). */
   list(): PendingRequest[] {
     return Array.from(this.queue.values()).map((p) => p.request);
   }
@@ -38,43 +44,38 @@ export class ApprovalQueue {
     return this.queue.get(requestId)?.request;
   }
 
-  /** Read-only iterator over pending entries. Used by the SW to map a
-   *  closed approval window back to its request id. */
-  entries(): IterableIterator<[string, Readonly<Pending>]> {
-    return this.queue.entries();
-  }
-
   /**
    * Enqueue a new dApp request and return a promise that resolves with the
-   * user's decision. Opens the approve.html window side by side.
+   * user's decision. Presents the approval UI for it.
    */
   async enqueue(request: PendingRequest): Promise<Decision> {
     if (this.queue.has(request.requestId)) {
       throw new DuplicateRequestIdError(request.requestId);
     }
-    const approvalUrl = chrome.runtime.getURL(
-      `approve.html?requestId=${encodeURIComponent(request.requestId)}`,
-    );
-    const window = await chrome.windows.create({
-      url:    approvalUrl,
-      type:   'popup',
-      width:  420,
-      height: 620,
-    });
 
-    return new Promise<Decision>((resolve) => {
-      this.queue.set(request.requestId, {
-        request,
-        resolve,
-        window: window ?? undefined,
+    let resolveDecision!: (decision: Decision) => void;
+    const decision = new Promise<Decision>((resolve) => { resolveDecision = resolve; });
+
+    // Register the entry before presenting so a near-instant user-dismiss — or
+    // an explicit RESOLVE_PENDING — always finds it.
+    const entry: Pending = { request, resolve: resolveDecision };
+    this.queue.set(request.requestId, entry);
+    this.syncBadge();
+
+    try {
+      entry.handle = await this.presenter.open(request.requestId, () => {
+        this.resolve(request.requestId, 'reject');
       });
-      this.syncBadge();
-    });
+    } catch {
+      // The approval UI could not be shown — don't leave the request dangling.
+      this.resolve(request.requestId, 'reject');
+    }
+    return decision;
   }
 
   /**
-   * Resolve a pending request from the approval UI. Closes the approval
-   * window if still open. Returns true if the request was found.
+   * Resolve a pending request from the approval UI. Dismisses the approval
+   * surface. Returns true if the request was found.
    */
   resolve(requestId: string, decision: Decision): boolean {
     const pending = this.queue.get(requestId);
@@ -83,18 +84,15 @@ export class ApprovalQueue {
     this.queue.delete(requestId);
     pending.resolve(decision);
     this.syncBadge();
-
-    if (pending.window?.id != null) {
-      chrome.windows.remove(pending.window.id).catch(() => {});
-    }
+    this.presenter.close(pending.handle);
     return true;
   }
 
   /** Reject every pending request (e.g. on lock). */
   rejectAll(reason: string): void {
-    for (const { resolve, window } of this.queue.values()) {
+    for (const { resolve, handle } of this.queue.values()) {
       resolve('reject');
-      if (window?.id != null) chrome.windows.remove(window.id).catch(() => {});
+      this.presenter.close(handle);
     }
     this.queue.clear();
     this.syncBadge();

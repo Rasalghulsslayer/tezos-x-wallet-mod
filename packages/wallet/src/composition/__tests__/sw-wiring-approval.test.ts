@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { Keyring } from '../../background/keyring';
 import { WebCryptoPort } from '../../adapters/crypto/web-crypto-port';
 import { ApprovalQueue } from '../../background/approval-queue';
@@ -10,6 +10,7 @@ import type { SessionStore, StoredSession } from '../../ports/session-store';
 import type { TokenStore } from '../../ports/token-store';
 import type { NotificationPort } from '../../ports/notification-port';
 import type { ClassifiedSource } from '../../ports/message-source';
+import type { ApprovalPresenter } from '../../ports/approval-presenter';
 import type { RegisteredToken } from '../../domain/token';
 
 class MemoryVault implements VaultStore {
@@ -36,8 +37,11 @@ class MemoryTokens implements TokenStore {
 }
 
 const stubNotifications: NotificationPort = { async setPendingCount() {} };
+// dispatch is chrome-free and the queue takes an injected presenter, so this
+// suite no longer needs a chrome stub. The presenter is a no-op: tests resolve
+// pending requests directly via approvalQueue.resolve.
+const stubPresenter: ApprovalPresenter = { async open() { return undefined; }, close() {} };
 const PASSWORD    = 'correct-horse-battery';
-const OWN_EXT_ID  = 'test-ext-id';
 
 async function setupHarness() {
   const keyring = new Keyring(new MemoryVault(), new WebCryptoPort());
@@ -45,7 +49,7 @@ async function setupHarness() {
   const broadcasts: ContentPush[] = [];
   const deps: SwDeps = {
     keyring,
-    approvalQueue:   new ApprovalQueue(stubNotifications),
+    approvalQueue:   new ApprovalQueue(stubNotifications, stubPresenter),
     persistentPorts: { vaultStore: new MemoryVault(), sessionStore: new MemorySessions(), tokenStore: new MemoryTokens(), notifications: stubNotifications },
     state:           { container: null, evmAlias: null },
     containerCache:  new ContainerCache(),
@@ -68,16 +72,8 @@ describe('sw-wiring — approval gating', () => {
   let h: Awaited<ReturnType<typeof setupHarness>>;
 
   beforeEach(async () => {
-    // dispatch no longer reads chrome (the host classifies the sender first),
-    // but the approval enqueue path still opens a chrome.windows popup. Stub the
-    // minimum the SW touches in that branch.
-    vi.stubGlobal('chrome', {
-      runtime: { id: OWN_EXT_ID, getURL: (p: string) => `chrome-extension://${OWN_EXT_ID}/${p}` },
-      windows: { create: async () => ({ id: 1 }), remove: async () => {} },
-    });
     h = await setupHarness();
   });
-  afterEach(() => vi.unstubAllGlobals());
 
   it('rejects RESOLVE_PENDING from a foreign sender (4100 Forbidden sender)', async () => {
     const res = await dispatch(

@@ -7,6 +7,7 @@ import { ChromeTokenStore } from '../adapters/chrome/chrome-token-store';
 import { ChromeNotificationPort } from '../adapters/chrome/chrome-notification';
 import { WebCryptoPort } from '../adapters/crypto/web-crypto-port';
 import { classifyChromeSender } from '../adapters/chrome/chrome-message-source';
+import { ChromeApprovalPresenter } from '../adapters/chrome/chrome-approval-presenter';
 import type { PersistentPorts } from '../composition/container';
 import { ContainerCache } from '../composition/container-cache';
 import { ensureContainerFor } from '../composition/container-builder';
@@ -35,7 +36,7 @@ void persistentPorts.notifications.setPendingCount(0);
 const cryptoPort = new WebCryptoPort();
 
 const keyring        = new Keyring(persistentPorts.vaultStore, cryptoPort);
-const queue          = new ApprovalQueue(persistentPorts.notifications);
+const queue          = new ApprovalQueue(persistentPorts.notifications, new ChromeApprovalPresenter());
 const containerCache = new ContainerCache();
 
 async function broadcastEvent(push: ContentPush): Promise<void> {
@@ -87,12 +88,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 chrome.runtime.onInstalled.addListener(() => {
   void persistentPorts.notifications.setPendingCount(0);
   console.info('[TezosX Wallet] service worker installed, v0.11.3');
-});
-
-chrome.windows.onRemoved.addListener((windowId) => {
-  for (const [requestId, pending] of queue.entries()) {
-    if (pending.window?.id === windowId) queue.resolve(requestId, 'reject');
-  }
 });
 
 chrome.sidePanel
