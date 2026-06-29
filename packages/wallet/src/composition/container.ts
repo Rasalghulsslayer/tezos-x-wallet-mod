@@ -16,15 +16,15 @@ import { EvmSigner } from '../adapters/evm/evm-signer';
 import { EvmProvider } from '../adapters/evm/evm-provider';
 import { EvmBalanceFetcher } from '../adapters/evm/evm-balance-fetcher';
 import { EvmActivityFetcher } from '../adapters/evm/evm-activity-fetcher';
-import type { SignerPort } from '../ports/signer-port';
-import type { ProviderPort } from '../ports/provider-port';
-import type { BalanceFetcher } from '../ports/balance-fetcher';
-import type { ActivityFetcher } from '../ports/activity-fetcher';
-import type { VaultStore } from '../ports/vault-store';
-import type { SessionStore } from '../ports/session-store';
-import type { NotificationPort } from '../ports/notification-port';
-import type { TokenStore } from '../ports/token-store';
-import type { TezosAccount, EvmAccount, AccountId } from '../domain/account';
+import type { SignerPort } from '@tezosx/wallet-core/ports/signer-port';
+import type { ProviderPort } from '@tezosx/wallet-core/ports/provider-port';
+import type { BalanceFetcher } from '@tezosx/wallet-core/ports/balance-fetcher';
+import type { ActivityFetcher } from '@tezosx/wallet-core/ports/activity-fetcher';
+import type { VaultStore } from '@tezosx/wallet-core/ports/vault-store';
+import type { SessionStore } from '@tezosx/wallet-core/ports/session-store';
+import type { NotificationPort } from '@tezosx/wallet-core/ports/notification-port';
+import type { TokenStore } from '@tezosx/wallet-core/ports/token-store';
+import type { TezosAccount, EvmAccount, AccountId } from '@tezosx/wallet-core/domain/account';
 
 export type UnlockedSecrets =
   | {

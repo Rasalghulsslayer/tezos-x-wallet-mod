@@ -4,7 +4,7 @@
  * "+" footer affordance navigates to the AddToken flow (wired in CT3b).
  */
 
-import type { Asset } from '../../domain/asset';
+import type { Asset } from '@tezosx/wallet-core/domain/asset';
 import { AssetMark } from './AssetMark';
 import { Icon } from './Icon';
 

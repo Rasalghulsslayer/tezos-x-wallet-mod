@@ -1,6 +1,6 @@
-import type { PendingRequest } from '../shared/messages';
-import type { NotificationPort } from '../ports/notification-port';
-import type { ApprovalPresenter, ApprovalHandle } from '../ports/approval-presenter';
+import type { PendingRequest } from '@tezosx/wallet-core/shared/messages';
+import type { NotificationPort } from '@tezosx/wallet-core/ports/notification-port';
+import type { ApprovalPresenter, ApprovalHandle } from '@tezosx/wallet-core/ports/approval-presenter';
 
 type Decision = 'approve' | 'reject';
 

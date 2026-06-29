@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { PendingRequest } from '@/shared/messages';
+import type { PendingRequest } from '@tezosx/wallet-core/shared/messages';
 import { Button } from '../../tx/Button';
 import { Line } from '../../tx/Line';
 import { truncAddr } from '../../tx/utils';

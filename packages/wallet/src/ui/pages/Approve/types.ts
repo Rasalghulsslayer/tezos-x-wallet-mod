@@ -1,4 +1,4 @@
-import type { AccountSummary } from '@/shared/messages';
+import type { AccountSummary } from '@tezosx/wallet-core/shared/messages';
 
 export type Stage = 'request' | 'signing' | 'done' | 'error';
 

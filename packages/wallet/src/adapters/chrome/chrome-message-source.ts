@@ -9,7 +9,7 @@
  * MessageSource) and calls the same dispatch().
  */
 
-import type { ClassifiedSource } from '../../ports/message-source';
+import type { ClassifiedSource } from '@tezosx/wallet-core/ports/message-source';
 
 export function classifyChromeSender(sender: chrome.runtime.MessageSender): ClassifiedSource {
   // Order matters: the trusted-UI check is the privileged gate and is decided

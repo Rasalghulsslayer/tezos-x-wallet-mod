@@ -1,4 +1,4 @@
-import '@/shared/buffer-shim';
+import '@tezosx/wallet-core/shared/buffer-shim';
 import { Keyring } from './keyring';
 import { ApprovalQueue } from './approval-queue';
 import { ChromeVaultStore } from '../adapters/chrome/chrome-vault-store';
@@ -12,7 +12,7 @@ import type { PersistentPorts } from '../composition/container';
 import { ContainerCache } from '../composition/container-cache';
 import { ensureContainerFor } from '../composition/container-builder';
 import { dispatch, type SwState, type SwDeps } from '../composition/sw-wiring';
-import type { ContentPush } from '../shared/messages';
+import type { ContentPush } from '@tezosx/wallet-core/shared/messages';
 
 const state: SwState = {
   container: null,

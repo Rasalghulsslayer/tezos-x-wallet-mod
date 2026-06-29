@@ -5,7 +5,7 @@
  * queue's dismiss callback, so closing the popup with the X rejects the request.
  */
 
-import type { ApprovalPresenter, ApprovalHandle } from '../../ports/approval-presenter';
+import type { ApprovalPresenter, ApprovalHandle } from '@tezosx/wallet-core/ports/approval-presenter';
 
 const APPROVAL_WINDOW = { type: 'popup' as const, width: 420, height: 620 };
 

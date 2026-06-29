@@ -6,9 +6,9 @@
  */
 
 import type { Keyring } from '../background/keyring';
-import type { AccountKind, AccountId, AddAccountSource, Account } from '../domain/account';
-import type { TokenStore } from '../ports/token-store';
-import { seedDefaultTokensForAccount } from '../shared/seed-default-tokens';
+import type { AccountKind, AccountId, AddAccountSource, Account } from '@tezosx/wallet-core/domain/account';
+import type { TokenStore } from '@tezosx/wallet-core/ports/token-store';
+import { seedDefaultTokensForAccount } from '@tezosx/wallet-core/shared/seed-default-tokens';
 
 export interface AddAccountReq {
   kind:   AccountKind;

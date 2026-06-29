@@ -1,4 +1,4 @@
-import '@/shared/buffer-shim';
+import '@tezosx/wallet-core/shared/buffer-shim';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import './styles.css';

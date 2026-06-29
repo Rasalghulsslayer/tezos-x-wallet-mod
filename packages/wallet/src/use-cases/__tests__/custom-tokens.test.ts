@@ -8,9 +8,9 @@ import {
   NotErc20Error,
   BuiltinTokenError,
   type RegisteredToken,
-} from '../../domain/token';
-import type { TokenStore } from '../../ports/token-store';
-import { MAX_TOKENS_PER_ACCOUNT } from '../../shared/constants';
+} from '@tezosx/wallet-core/domain/token';
+import type { TokenStore } from '@tezosx/wallet-core/ports/token-store';
+import { MAX_TOKENS_PER_ACCOUNT } from '@tezosx/wallet-core/shared/constants';
 
 class MemoryTokens implements TokenStore {
   private map = new Map<string, RegisteredToken[]>();

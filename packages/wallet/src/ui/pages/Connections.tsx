@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { VaultState } from '@/shared/messages';
-import type { StoredSession } from '@/ports/session-store';
+import type { VaultState } from '@tezosx/wallet-core/shared/messages';
+import type { StoredSession } from '@tezosx/wallet-core/ports/session-store';
 import { sendPopupRequest } from '@/shared/messaging';
-import { timeAgo } from '@/shared/format';
+import { timeAgo } from '@tezosx/wallet-core/shared/format';
 import { TopBar } from '../tx/TopBar';
 import { Icon } from '../tx/Icon';
 import { Button } from '../tx/Button';

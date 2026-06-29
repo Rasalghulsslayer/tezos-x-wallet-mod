@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Keyring } from '../keyring';
 import { WebCryptoPort } from '../../adapters/crypto/web-crypto-port';
-import type { VaultStore, EncryptedVault } from '../../ports/vault-store';
+import type { VaultStore, EncryptedVault } from '@tezosx/wallet-core/ports/vault-store';
 
 class MemoryVaultStore implements VaultStore {
   vault: EncryptedVault | undefined;

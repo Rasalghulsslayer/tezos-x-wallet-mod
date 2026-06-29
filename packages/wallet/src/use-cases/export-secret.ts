@@ -6,7 +6,7 @@
  */
 
 import type { Keyring, VaultPayload } from '../background/keyring';
-import type { AccountId } from '../domain/account';
+import type { AccountId } from '@tezosx/wallet-core/domain/account';
 
 export interface ExportSecretReq {
   password:   string;

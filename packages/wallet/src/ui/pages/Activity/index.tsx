@@ -7,12 +7,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { VaultState, ActivityFilter, ActivityPage } from '@/shared/messages';
-import type { ActivityItem } from '@/domain/activity';
-import { ACTIVITY_AUTO_REFRESH_MS, ACTIVITY_PAGE_SIZE } from '@/shared/constants';
+import type { VaultState, ActivityFilter, ActivityPage } from '@tezosx/wallet-core/shared/messages';
+import type { ActivityItem } from '@tezosx/wallet-core/domain/activity';
+import { ACTIVITY_AUTO_REFRESH_MS, ACTIVITY_PAGE_SIZE } from '@tezosx/wallet-core/shared/constants';
 import { sendPopupRequest } from '@/shared/messaging';
-import { startPoller } from '@/shared/poller';
-import { formatError } from '@/domain/error';
+import { startPoller } from '@tezosx/wallet-core/shared/poller';
+import { formatError } from '@tezosx/wallet-core/domain/error';
 import { TopBar } from '../../tx/TopBar';
 import { BottomTabs } from '../../tx/BottomTabs';
 import { ActivityFilters, type DirectionFilter, type RuntimeFilter } from '../../tx/ActivityFilters';

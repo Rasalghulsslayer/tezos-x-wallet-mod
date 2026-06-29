@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AccountSummary } from '../../shared/messages';
-import { shortAddr } from '../../shared/format';
+import type { AccountSummary } from '@tezosx/wallet-core/shared/messages';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
 import { ModalBackdrop } from './ModalBackdrop';
 
 export function RemoveAccountModal({

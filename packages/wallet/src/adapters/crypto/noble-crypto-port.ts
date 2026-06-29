@@ -13,7 +13,7 @@
 import { pbkdf2Async } from '@noble/hashes/pbkdf2.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { gcm } from '@noble/ciphers/aes';
-import type { CryptoPort } from '../../ports/crypto-port';
+import type { CryptoPort } from '@tezosx/wallet-core/ports/crypto-port';
 
 export class NobleCryptoPort implements CryptoPort {
   randomBytes(length: number): Uint8Array {

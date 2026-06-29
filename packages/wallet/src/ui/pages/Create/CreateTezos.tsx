@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { newMnemonic } from '@/shared/seed';
+import { newMnemonic } from '@tezosx/wallet-core/shared/seed';
 import { sendPopupRequest } from '@/shared/messaging';
 import { Button } from '../../tx/Button';
 import { Icon } from '../../tx/Icon';

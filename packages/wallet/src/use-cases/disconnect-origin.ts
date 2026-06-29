@@ -2,7 +2,7 @@
  * disconnectOrigin: removes the stored session for a given dApp origin.
  */
 
-import type { SessionStore } from '../ports/session-store';
+import type { SessionStore } from '@tezosx/wallet-core/ports/session-store';
 
 export interface DisconnectOriginReq {
   origin: string;

@@ -9,8 +9,8 @@
 import { Identicon } from './Identicon';
 import { Icon } from './Icon';
 import { toast } from './Toast';
-import { shortAddr } from '@/shared/format';
-import type { VaultStateUnlocked } from '@/shared/messages';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
+import type { VaultStateUnlocked } from '@tezosx/wallet-core/shared/messages';
 
 export function AccountHeader({
   state,

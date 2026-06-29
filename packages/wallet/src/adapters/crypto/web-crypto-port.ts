@@ -8,7 +8,7 @@
  * drives both.
  */
 
-import type { CryptoPort } from '../../ports/crypto-port';
+import type { CryptoPort } from '@tezosx/wallet-core/ports/crypto-port';
 
 export class WebCryptoPort implements CryptoPort {
   randomBytes(length: number): Uint8Array {

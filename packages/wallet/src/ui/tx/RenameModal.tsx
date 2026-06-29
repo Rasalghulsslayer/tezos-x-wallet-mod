@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AccountId } from '../../domain/account';
-import { MAX_LABEL_LENGTH } from '../../shared/constants';
+import type { AccountId } from '@tezosx/wallet-core/domain/account';
+import { MAX_LABEL_LENGTH } from '@tezosx/wallet-core/shared/constants';
 import { ModalBackdrop } from './ModalBackdrop';
 
 export function RenameModal({

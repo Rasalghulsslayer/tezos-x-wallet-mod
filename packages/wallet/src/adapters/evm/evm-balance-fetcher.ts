@@ -5,8 +5,8 @@
  */
 
 import { TEZLINK_EVM_RPC } from '@tezosx/relayer/constants';
-import type { BalanceFetcher } from '../../ports/balance-fetcher';
-import type { Asset } from '../../domain/asset';
+import type { BalanceFetcher } from '@tezosx/wallet-core/ports/balance-fetcher';
+import type { Asset } from '@tezosx/wallet-core/domain/asset';
 
 const BALANCE_OF_SELECTOR = '0x70a08231';
 

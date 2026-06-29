@@ -1,5 +1,5 @@
-import type { DestRuntime } from '@/domain/chain';
-import type { Asset } from '@/domain/asset';
+import type { DestRuntime } from '@tezosx/wallet-core/domain/chain';
+import type { Asset } from '@tezosx/wallet-core/domain/asset';
 import { ChainPill } from './ChainPill';
 import { Icon } from './Icon';
 

@@ -1,6 +1,6 @@
-import { MAX_LABEL_LENGTH } from '@/shared/constants';
-import { formatError } from '@/domain/error';
-import { shortAddr } from '@/shared/format';
+import { MAX_LABEL_LENGTH } from '@tezosx/wallet-core/shared/constants';
+import { formatError } from '@tezosx/wallet-core/domain/error';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
 import { Identicon } from '../../tx/Identicon';
 import { Icon } from '../../tx/Icon';
 import { EVM_LABEL_CHIPS, TEZOS_LABEL_CHIPS, type Pick, type Preview } from './types';

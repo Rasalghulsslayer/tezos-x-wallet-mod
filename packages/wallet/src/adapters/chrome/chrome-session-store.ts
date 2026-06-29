@@ -3,7 +3,7 @@
  * keying sessions by origin.
  */
 
-import type { SessionStore, StoredSession } from '../../ports/session-store';
+import type { SessionStore, StoredSession } from '@tezosx/wallet-core/ports/session-store';
 
 export class ChromeSessionStore implements SessionStore {
   async list(): Promise<StoredSession[]> {

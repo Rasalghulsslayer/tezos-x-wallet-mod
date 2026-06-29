@@ -2,7 +2,7 @@
  * ChromeVaultStore: VaultStore implementation backed by chrome.storage.local.
  */
 
-import type { VaultStore, EncryptedVault } from '../../ports/vault-store';
+import type { VaultStore, EncryptedVault } from '@tezosx/wallet-core/ports/vault-store';
 
 export class ChromeVaultStore implements VaultStore {
   async load(): Promise<EncryptedVault | undefined> {

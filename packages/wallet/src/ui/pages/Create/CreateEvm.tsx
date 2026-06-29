@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { randomEvmPrivateKey, deriveEvmAccount } from '@/shared/evm-signing';
+import { randomEvmPrivateKey, deriveEvmAccount } from '@tezosx/wallet-core/shared/evm-signing';
 import { sendPopupRequest } from '@/shared/messaging';
 import { Button } from '../../tx/Button';
 import { Icon } from '../../tx/Icon';

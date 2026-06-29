@@ -1,5 +1,5 @@
-import type { TxStatus } from '@/domain/tx-status';
-import { TEZOS_EXPLORER, EVM_EXPLORER } from '@/shared/constants';
+import type { TxStatus } from '@tezosx/wallet-core/domain/tx-status';
+import { TEZOS_EXPLORER, EVM_EXPLORER } from '@tezosx/wallet-core/shared/constants';
 import { Icon } from './Icon';
 
 interface Props {

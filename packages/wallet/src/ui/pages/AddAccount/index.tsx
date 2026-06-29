@@ -8,15 +8,15 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { VaultState, AccountSummary } from '@/shared/messages';
-import type { AddAccountSource, AccountId } from '@/domain/account';
-import { newMnemonic, deriveTezosIdentity, deriveTezosIdentityFromSecretKey } from '@/shared/seed';
-import { deriveEvmAccount, normaliseEvmPrivateKey, randomEvmPrivateKey } from '@/shared/evm-signing';
+import type { VaultState, AccountSummary } from '@tezosx/wallet-core/shared/messages';
+import type { AddAccountSource, AccountId } from '@tezosx/wallet-core/domain/account';
+import { newMnemonic, deriveTezosIdentity, deriveTezosIdentityFromSecretKey } from '@tezosx/wallet-core/shared/seed';
+import { deriveEvmAccount, normaliseEvmPrivateKey, randomEvmPrivateKey } from '@tezosx/wallet-core/shared/evm-signing';
 import { deriveEvmAlias } from '@tezosx/relayer/utils/derive';
-import { isValidEdsk, isValidMnemonic } from '@/domain/validation';
+import { isValidEdsk, isValidMnemonic } from '@tezosx/wallet-core/domain/validation';
 import { sendPopupRequest } from '@/shared/messaging';
-import { formatError } from '@/domain/error';
-import { MAX_ACCOUNTS_PER_VAULT } from '@/shared/constants';
+import { formatError } from '@tezosx/wallet-core/domain/error';
+import { MAX_ACCOUNTS_PER_VAULT } from '@tezosx/wallet-core/shared/constants';
 import { toast } from '../../tx/Toast';
 
 import { AddAccountTopBar } from './AddAccountTopBar';

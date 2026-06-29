@@ -21,8 +21,8 @@ import {
   decryptVault,
   bytesToBase64,
   base64ToBytes,
-} from '../../../shared/vault-crypto';
-import type { EncryptedVault } from '../../../ports/vault-store';
+} from '@tezosx/wallet-core/shared/vault-crypto';
+import type { EncryptedVault } from '@tezosx/wallet-core/ports/vault-store';
 
 const PASSWORD  = 'correct-horse-battery-staple';
 const PLAINTEXT = JSON.stringify({

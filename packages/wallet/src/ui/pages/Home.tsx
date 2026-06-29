@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { VaultState, AccountSummary } from '@/shared/messages';
-import type { AccountId } from '@/domain/account';
+import type { VaultState, AccountSummary } from '@tezosx/wallet-core/shared/messages';
+import type { AccountId } from '@tezosx/wallet-core/domain/account';
 import {
   fetchL1XtzBalance,
   fetchXtzBalance,
   fetchErc20Balance,
 } from '@/adapters/tezos/tezos-balance-fetcher';
-import { FAUCET_URL } from '@/shared/constants';
-import { mutezToXtz, weiToXtz } from '@/shared/format';
+import { FAUCET_URL } from '@tezosx/wallet-core/shared/constants';
+import { mutezToXtz, weiToXtz } from '@tezosx/wallet-core/shared/format';
 import { sendPopupRequest } from '@/shared/messaging';
-import { formatError } from '@/domain/error';
+import { formatError } from '@tezosx/wallet-core/domain/error';
 import { AccountHeader } from '../tx/AccountHeader';
 import { LogoMark } from '../tx/LogoMark';
 import { AccountSwitcher } from '../tx/AccountSwitcher';
@@ -20,8 +20,8 @@ import { IconBtn } from '../tx/Button';
 import { Icon } from '../tx/Icon';
 import { AssetRow } from '../tx/AssetRow';
 import { assetRowVM } from '../view-models/asset-row-vm';
-import { XTZ_L1_ASSET, XTZ_L2_ASSET, type Erc20Asset } from '@/domain/asset';
-import type { RegisteredToken } from '@/domain/token';
+import { XTZ_L1_ASSET, XTZ_L2_ASSET, type Erc20Asset } from '@tezosx/wallet-core/domain/asset';
+import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
 import { TopBar } from '../tx/TopBar';
 import { BottomTabs } from '../tx/BottomTabs';
 import { Badge } from '../tx/Badge';

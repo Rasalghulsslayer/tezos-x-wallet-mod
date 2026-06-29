@@ -1,4 +1,4 @@
-import type { FormattedError } from '@/domain/error';
+import type { FormattedError } from '@tezosx/wallet-core/domain/error';
 
 export function ErrorInline({ error, showDetail = true }: { error: FormattedError; showDetail?: boolean }) {
   return (

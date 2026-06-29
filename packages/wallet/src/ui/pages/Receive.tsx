@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { VaultState } from '@/shared/messages';
+import type { VaultState } from '@tezosx/wallet-core/shared/messages';
 import { TopBar } from '../tx/TopBar';
 import { QrCode } from '../tx/QrCode';
 import { Button } from '../tx/Button';

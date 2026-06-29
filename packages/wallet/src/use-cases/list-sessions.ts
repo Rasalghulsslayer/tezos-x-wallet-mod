@@ -2,7 +2,7 @@
  * listSessions: returns every persisted per-origin dApp session.
  */
 
-import type { SessionStore, StoredSession } from '../ports/session-store';
+import type { SessionStore, StoredSession } from '@tezosx/wallet-core/ports/session-store';
 
 export interface ListSessionsDeps {
   sessionStore: SessionStore;

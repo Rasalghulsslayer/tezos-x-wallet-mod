@@ -1,4 +1,4 @@
-import type { FormattedError } from '@/domain/error';
+import type { FormattedError } from '@tezosx/wallet-core/domain/error';
 
 const BUILD_VERSION = '0.5.0';
 

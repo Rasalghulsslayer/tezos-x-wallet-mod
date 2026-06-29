@@ -20,10 +20,10 @@ import type {
   PendingTransaction,
   PopupRequest,
   WalletResponse,
-} from '../shared/messages';
-import type { StoredSession } from '../ports/session-store';
-import type { ClassifiedSource } from '../ports/message-source';
-import { AccountNotFoundError } from '../domain/vault';
+} from '@tezosx/wallet-core/shared/messages';
+import type { StoredSession } from '@tezosx/wallet-core/ports/session-store';
+import type { ClassifiedSource } from '@tezosx/wallet-core/ports/message-source';
+import { AccountNotFoundError } from '@tezosx/wallet-core/domain/vault';
 
 import { getState }                from '../use-cases/get-state';
 import { createAccount }           from '../use-cases/create-account';

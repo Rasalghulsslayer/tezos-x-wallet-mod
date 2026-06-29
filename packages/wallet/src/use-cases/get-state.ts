@@ -7,7 +7,7 @@
 
 import { deriveEvmAlias } from '@tezosx/relayer/utils/derive';
 import type { Keyring } from '../background/keyring';
-import type { VaultState } from '../shared/messages';
+import type { VaultState } from '@tezosx/wallet-core/shared/messages';
 
 export interface GetStateDeps {
   keyring:       Keyring;

@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import type { TxStatus } from '@/domain/tx-status';
-import type { Asset } from '@/domain/asset';
-import { TEZOS_L1_FINALITY_BLOCKS } from '@/shared/constants';
+import type { TxStatus } from '@tezosx/wallet-core/domain/tx-status';
+import type { Asset } from '@tezosx/wallet-core/domain/asset';
+import { TEZOS_L1_FINALITY_BLOCKS } from '@tezosx/wallet-core/shared/constants';
 
 interface Props {
   status:  TxStatus;

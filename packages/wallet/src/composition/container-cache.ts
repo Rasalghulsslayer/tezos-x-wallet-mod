@@ -5,8 +5,8 @@
  */
 
 import type { Container } from './container';
-import type { AccountId } from '../domain/account';
-import { CONTAINER_CACHE_SIZE } from '../shared/constants';
+import type { AccountId } from '@tezosx/wallet-core/domain/account';
+import { CONTAINER_CACHE_SIZE } from '@tezosx/wallet-core/shared/constants';
 
 export class ContainerCache {
   private readonly map = new Map<AccountId, Container>();

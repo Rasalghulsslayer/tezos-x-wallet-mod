@@ -7,9 +7,9 @@
 
 import { describe, it, expect } from 'vitest';
 import { ApprovalQueue, DuplicateRequestIdError } from '../approval-queue';
-import type { NotificationPort } from '../../ports/notification-port';
-import type { ApprovalPresenter, ApprovalHandle } from '../../ports/approval-presenter';
-import type { PendingRequest } from '../../shared/messages';
+import type { NotificationPort } from '@tezosx/wallet-core/ports/notification-port';
+import type { ApprovalPresenter, ApprovalHandle } from '@tezosx/wallet-core/ports/approval-presenter';
+import type { PendingRequest } from '@tezosx/wallet-core/shared/messages';
 
 class FakePresenter implements ApprovalPresenter {
   opened: string[] = [];

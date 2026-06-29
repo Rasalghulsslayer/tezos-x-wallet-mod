@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { TxStatus } from '@/domain/tx-status';
+import type { TxStatus } from '@tezosx/wallet-core/domain/tx-status';
 
 type StepKey   = 'broadcasting' | 'included' | 'finalized';
 type StepState = 'pending' | 'active' | 'done' | 'failed';

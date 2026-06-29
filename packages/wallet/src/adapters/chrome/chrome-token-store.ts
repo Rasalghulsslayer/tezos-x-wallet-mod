@@ -4,10 +4,10 @@
  * forward-compat (0.10.0 ships single-network).
  */
 
-import type { TokenStore } from '../../ports/token-store';
-import type { AccountId } from '../../domain/account';
-import type { RegisteredToken } from '../../domain/token';
-import { PREVIEWNET_CHAIN_ID } from '../../shared/constants';
+import type { TokenStore } from '@tezosx/wallet-core/ports/token-store';
+import type { AccountId } from '@tezosx/wallet-core/domain/account';
+import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
+import { PREVIEWNET_CHAIN_ID } from '@tezosx/wallet-core/shared/constants';
 
 const KEY_PREFIX = 'customTokens';
 const KEY_INDEX  = `${KEY_PREFIX}:index`;

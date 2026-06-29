@@ -13,8 +13,8 @@ import {
   deriveEvmAccount,
   normalizePersonalSignMessage,
   signPersonalMessage,
-} from '../../../shared/evm-signing';
-import type { EvmAccount } from '../../../domain/account';
+} from '@tezosx/wallet-core/shared/evm-signing';
+import type { EvmAccount } from '@tezosx/wallet-core/domain/account';
 
 // Reference vectors (viem). Hardhat test account #1.
 const PK        = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';

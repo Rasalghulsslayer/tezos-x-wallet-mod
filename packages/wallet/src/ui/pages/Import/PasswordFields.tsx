@@ -1,4 +1,4 @@
-import { formatError } from '@/domain/error';
+import { formatError } from '@tezosx/wallet-core/domain/error';
 import { ErrorInline } from '../../tx/ErrorInline';
 
 export function PasswordFields({

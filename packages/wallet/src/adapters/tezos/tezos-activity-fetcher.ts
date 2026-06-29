@@ -4,19 +4,19 @@
  * Blockscout's kernel-synthesized mirror) happens in the listActivity use case.
  */
 
-import { TZKT_API_BASE, TEZOS_EXPLORER, EVM_EXPLORER } from '../../shared/constants';
+import { TZKT_API_BASE, TEZOS_EXPLORER, EVM_EXPLORER } from '@tezosx/wallet-core/shared/constants';
 import { NAC_CONTRACT } from '@tezosx/relayer/constants';
 import type {
   ActivityFetcher,
   ActivityFetcherPage,
-} from '../../ports/activity-fetcher';
+} from '@tezosx/wallet-core/ports/activity-fetcher';
 import type {
   ActivityItem,
   ActivityContractCallItem,
   ActivityTransferItem,
   ActivityUnknownItem,
-} from '../../domain/activity';
-import { XTZ_L1_ASSET } from '../../domain/asset';
+} from '@tezosx/wallet-core/domain/activity';
+import { XTZ_L1_ASSET } from '@tezosx/wallet-core/domain/asset';
 
 interface TzktAccountAddress { address: string }
 

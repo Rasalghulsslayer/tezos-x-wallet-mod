@@ -1,26 +1,26 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { ResolveTxResult, SendTxResult, VaultState, VaultStateUnlocked } from '@/shared/messages';
+import type { ResolveTxResult, SendTxResult, VaultState, VaultStateUnlocked } from '@tezosx/wallet-core/shared/messages';
 import { sendPopupRequest } from '@/shared/messaging';
-import { detectRuntime } from '@/domain/validation';
-import type { DestRuntime } from '@/domain/chain';
-import type { RegisteredToken } from '@/domain/token';
+import { detectRuntime } from '@tezosx/wallet-core/domain/validation';
+import type { DestRuntime } from '@tezosx/wallet-core/domain/chain';
+import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
 import {
   fetchL1XtzBalance,
   fetchXtzBalance,
   fetchErc20Balance,
 } from '@/adapters/tezos/tezos-balance-fetcher';
-import { mutezToXtz, weiToXtz, formatTokenAmount } from '@/shared/format';
-import { formatError } from '@/domain/error';
-import { trackTx } from '@/shared/tx-status';
-import { e2eConfig } from '@/shared/e2e';
-import type { TxStatus } from '@/domain/tx-status';
+import { mutezToXtz, weiToXtz, formatTokenAmount } from '@tezosx/wallet-core/shared/format';
+import { formatError } from '@tezosx/wallet-core/domain/error';
+import { trackTx } from '@tezosx/wallet-core/shared/tx-status';
+import { e2eConfig } from '@tezosx/wallet-core/shared/e2e';
+import type { TxStatus } from '@tezosx/wallet-core/domain/tx-status';
 import { signingSourceAddress } from '../view-models/account-card-vm';
 import { Button } from '../tx/Button';
 import { Icon } from '../tx/Icon';
 import { TopBar } from '../tx/TopBar';
 import { AssetSelector, type AssetOption } from '../tx/AssetSelector';
-import { XTZ_L1_ASSET, XTZ_L2_ASSET, type Asset, type Erc20Asset } from '@/domain/asset';
+import { XTZ_L1_ASSET, XTZ_L2_ASSET, type Asset, type Erc20Asset } from '@tezosx/wallet-core/domain/asset';
 import { ChainPill } from '../tx/ChainPill';
 import { Line } from '../tx/Line';
 import { RoutingCard } from '../tx/RoutingCard';
@@ -30,7 +30,7 @@ import { ErrorCard } from '../tx/ErrorCard';
 import { StatusTimeline } from '../tx/StatusTimeline';
 import { StatusHero } from '../tx/StatusHero';
 import { StatusMeta } from '../tx/StatusMeta';
-import { TEZOS_EXPLORER, EVM_EXPLORER } from '@/shared/constants';
+import { TEZOS_EXPLORER, EVM_EXPLORER } from '@tezosx/wallet-core/shared/constants';
 import { truncAddr } from '../tx/utils';
 
 type Stage = 'form' | 'review' | 'done';

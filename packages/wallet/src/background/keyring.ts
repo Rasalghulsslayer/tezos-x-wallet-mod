@@ -9,11 +9,11 @@ import {
   deriveTezosIdentity,
   deriveTezosIdentityFromSecretKey,
   newMnemonic,
-} from '../shared/seed';
-import { deriveEvmAccount } from '../shared/evm-signing';
-import { isValidEdsk, isValidMnemonic } from '../domain/validation';
+} from '@tezosx/wallet-core/shared/seed';
+import { deriveEvmAccount } from '@tezosx/wallet-core/shared/evm-signing';
+import { isValidEdsk, isValidMnemonic } from '@tezosx/wallet-core/domain/validation';
 import { deriveEvmAlias } from '@tezosx/relayer/utils/derive';
-import type { Account, AccountId, EvmAccount, TezosAccount, AccountSummary, AddAccountSource } from '../domain/account';
+import type { Account, AccountId, EvmAccount, TezosAccount, AccountSummary, AddAccountSource } from '@tezosx/wallet-core/domain/account';
 import {
   type AccountSecret,
   type MultiAccountVaultPayload,
@@ -23,18 +23,18 @@ import {
   setActiveOnPayload,
   renameOnPayload,
   normaliseLabel,
-} from '../domain/vault';
-import type { VaultStore } from '../ports/vault-store';
-import type { CryptoPort } from '../ports/crypto-port';
-import { encryptVault, decryptVault } from '../shared/vault-crypto';
+} from '@tezosx/wallet-core/domain/vault';
+import type { VaultStore } from '@tezosx/wallet-core/ports/vault-store';
+import type { CryptoPort } from '@tezosx/wallet-core/ports/crypto-port';
+import { encryptVault, decryptVault } from '@tezosx/wallet-core/shared/vault-crypto';
 
 // Re-exports for callers that imported from keyring directly.
-export type { AccountSecret, MultiAccountVaultPayload } from '../domain/vault';
+export type { AccountSecret, MultiAccountVaultPayload } from '@tezosx/wallet-core/domain/vault';
 export {
   MaxAccountsReachedError,
   CannotRemoveLastAccountError,
   AccountNotFoundError,
-} from '../domain/vault';
+} from '@tezosx/wallet-core/domain/vault';
 
 export type VaultPayload = AccountSecret;
 

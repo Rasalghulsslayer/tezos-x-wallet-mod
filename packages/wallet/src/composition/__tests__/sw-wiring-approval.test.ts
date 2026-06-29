@@ -4,14 +4,14 @@ import { WebCryptoPort } from '../../adapters/crypto/web-crypto-port';
 import { ApprovalQueue } from '../../background/approval-queue';
 import { ContainerCache } from '../container-cache';
 import { dispatch, type SwDeps } from '../sw-wiring';
-import type { ContentPush } from '../../shared/messages';
-import type { VaultStore, EncryptedVault } from '../../ports/vault-store';
-import type { SessionStore, StoredSession } from '../../ports/session-store';
-import type { TokenStore } from '../../ports/token-store';
-import type { NotificationPort } from '../../ports/notification-port';
-import type { ClassifiedSource } from '../../ports/message-source';
-import type { ApprovalPresenter } from '../../ports/approval-presenter';
-import type { RegisteredToken } from '../../domain/token';
+import type { ContentPush } from '@tezosx/wallet-core/shared/messages';
+import type { VaultStore, EncryptedVault } from '@tezosx/wallet-core/ports/vault-store';
+import type { SessionStore, StoredSession } from '@tezosx/wallet-core/ports/session-store';
+import type { TokenStore } from '@tezosx/wallet-core/ports/token-store';
+import type { NotificationPort } from '@tezosx/wallet-core/ports/notification-port';
+import type { ClassifiedSource } from '@tezosx/wallet-core/ports/message-source';
+import type { ApprovalPresenter } from '@tezosx/wallet-core/ports/approval-presenter';
+import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
 
 class MemoryVault implements VaultStore {
   private v: EncryptedVault | undefined;

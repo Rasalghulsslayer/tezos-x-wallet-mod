@@ -39,6 +39,17 @@ jobs:
       - run: npm ci
       - run: npm run typecheck:wallet
 
+  typecheck-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck:core
+
   typecheck-website:
     runs-on: ubuntu-latest
     steps:
@@ -71,6 +82,17 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test -w @tezosx/relayer
+
+  test-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test -w @tezosx/wallet-core
 
   build-relayer:
     needs: [lint, typecheck-relayer]
@@ -107,7 +129,7 @@ jobs:
           retention-days: 7
 
   build-wallet:
-    needs: [lint, typecheck-wallet, test-wallet]
+    needs: [lint, typecheck-wallet, typecheck-core, test-wallet, test-core]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

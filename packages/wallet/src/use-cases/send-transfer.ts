@@ -8,10 +8,10 @@
  */
 
 import type { CrossRuntimeIntent } from '@tezosx/relayer/types';
-import { decideRoute } from '../domain/transfer';
+import { decideRoute } from '@tezosx/wallet-core/domain/transfer';
 import { buildEvmToTezosTx } from '../adapters/evm/nac-precompile-builder';
 import type { Container } from '../composition/container';
-import type { Asset } from '../domain/asset';
+import type { Asset } from '@tezosx/wallet-core/domain/asset';
 
 export interface SendTransferReq {
   to:     string;

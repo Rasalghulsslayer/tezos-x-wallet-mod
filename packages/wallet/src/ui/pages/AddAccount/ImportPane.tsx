@@ -1,6 +1,6 @@
-import { isValidEdsk, isValidMnemonic } from '@/domain/validation';
-import { shortAddr } from '@/shared/format';
-import type { AccountSummary } from '@/shared/messages';
+import { isValidEdsk, isValidMnemonic } from '@tezosx/wallet-core/domain/validation';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
+import type { AccountSummary } from '@tezosx/wallet-core/shared/messages';
 import { Identicon } from '../../tx/Identicon';
 import { Icon } from '../../tx/Icon';
 import type { Pick, TzMode } from './types';

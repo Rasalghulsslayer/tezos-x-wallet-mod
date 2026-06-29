@@ -5,7 +5,7 @@
  * expose only their 0x address.
  */
 
-import type { VaultStateUnlocked } from '../../shared/messages';
+import type { VaultStateUnlocked } from '@tezosx/wallet-core/shared/messages';
 
 export interface AccountFace {
   chain:   'l1' | 'l2';

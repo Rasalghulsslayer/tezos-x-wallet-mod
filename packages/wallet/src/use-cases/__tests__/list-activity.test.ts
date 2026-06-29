@@ -3,13 +3,13 @@ import { listActivity } from '../list-activity';
 import type {
   ActivityItem,
   ActivityTransferItem,
-} from '../../domain/activity';
+} from '@tezosx/wallet-core/domain/activity';
 import type {
   ActivityFetcher,
   ActivityFetcherPage,
-} from '../../ports/activity-fetcher';
+} from '@tezosx/wallet-core/ports/activity-fetcher';
 import type { Container } from '../../composition/container';
-import { XTZ_L1_ASSET, XTZ_L2_ASSET } from '../../domain/asset';
+import { XTZ_L1_ASSET, XTZ_L2_ASSET } from '@tezosx/wallet-core/domain/asset';
 
 // Mock the relayer's l1OpHashToEvmHash so the dedup is deterministic.
 vi.mock('@tezosx/relayer/tezos', () => ({

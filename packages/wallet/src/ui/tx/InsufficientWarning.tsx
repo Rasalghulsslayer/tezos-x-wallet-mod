@@ -1,4 +1,4 @@
-import type { Asset } from '@/domain/asset';
+import type { Asset } from '@tezosx/wallet-core/domain/asset';
 
 export function InsufficientWarning({
   requested,

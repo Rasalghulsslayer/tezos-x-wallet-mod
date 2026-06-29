@@ -3,9 +3,9 @@
  * registered. Refuses to remove a builtin (CT4 marks the USDC seed).
  */
 
-import type { AccountId } from '../domain/account';
-import { BuiltinTokenError } from '../domain/token';
-import type { TokenStore } from '../ports/token-store';
+import type { AccountId } from '@tezosx/wallet-core/domain/account';
+import { BuiltinTokenError } from '@tezosx/wallet-core/domain/token';
+import type { TokenStore } from '@tezosx/wallet-core/ports/token-store';
 
 export interface RemoveCustomTokenReq {
   accountId: AccountId;

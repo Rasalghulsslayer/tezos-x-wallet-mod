@@ -3,9 +3,9 @@
  * (addedAt ASC) per the Phase 0 decision; renames don't shift peers' position.
  */
 
-import type { AccountId } from '../domain/account';
-import type { RegisteredToken } from '../domain/token';
-import type { TokenStore } from '../ports/token-store';
+import type { AccountId } from '@tezosx/wallet-core/domain/account';
+import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
+import type { TokenStore } from '@tezosx/wallet-core/ports/token-store';
 
 export interface ListRegisteredTokensReq {
   accountId: AccountId;

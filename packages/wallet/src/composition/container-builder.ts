@@ -7,8 +7,8 @@
 import { buildContainer, type Container, type UnlockedSecrets, type PersistentPorts } from './container';
 import type { ContainerCache } from './container-cache';
 import type { Keyring } from '../background/keyring';
-import type { AccountId, Account } from '../domain/account';
-import type { ContentPush } from '../shared/messages';
+import type { AccountId, Account } from '@tezosx/wallet-core/domain/account';
+import type { ContentPush } from '@tezosx/wallet-core/shared/messages';
 
 export interface EnsureContainerDeps {
   keyring:          Keyring;

@@ -5,9 +5,9 @@
  * renamed account doesn't shift its peers' default labels.
  */
 
-import type { VaultStateUnlocked } from '../../shared/messages';
-import type { AccountId } from '../../domain/account';
-import { shortAddr } from '../../shared/format';
+import type { VaultStateUnlocked } from '@tezosx/wallet-core/shared/messages';
+import type { AccountId } from '@tezosx/wallet-core/domain/account';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
 
 export interface AccountRowVM {
   id:                AccountId;

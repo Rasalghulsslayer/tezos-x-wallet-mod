@@ -7,8 +7,8 @@
  */
 
 import { useEffect, useRef } from 'react';
-import type { VaultStateUnlocked } from '../../shared/messages';
-import type { AccountId } from '../../domain/account';
+import type { VaultStateUnlocked } from '@tezosx/wallet-core/shared/messages';
+import type { AccountId } from '@tezosx/wallet-core/domain/account';
 import { Icon } from './Icon';
 import { AccountSwitcherRow } from './AccountSwitcherRow';
 import { accountSwitcherVM } from '../view-models/account-switcher-vm';

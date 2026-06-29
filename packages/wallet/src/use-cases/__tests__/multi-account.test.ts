@@ -5,16 +5,16 @@ import {
   CannotRemoveLastAccountError,
   AccountNotFoundError,
   MaxAccountsReachedError,
-} from '../../domain/vault';
-import { MAX_ACCOUNTS_PER_VAULT, MAX_LABEL_LENGTH } from '../../shared/constants';
+} from '@tezosx/wallet-core/domain/vault';
+import { MAX_ACCOUNTS_PER_VAULT, MAX_LABEL_LENGTH } from '@tezosx/wallet-core/shared/constants';
 import { addAccount } from '../add-account';
 import { removeAccount } from '../remove-account';
 import { setActiveAccount } from '../set-active-account';
 import { renameAccount } from '../rename-account';
 import { listAccounts } from '../list-accounts';
-import type { VaultStore, EncryptedVault } from '../../ports/vault-store';
-import type { TokenStore } from '../../ports/token-store';
-import type { RegisteredToken } from '../../domain/token';
+import type { VaultStore, EncryptedVault } from '@tezosx/wallet-core/ports/vault-store';
+import type { TokenStore } from '@tezosx/wallet-core/ports/token-store';
+import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
 
 class MemoryVaultStore implements VaultStore {
   private vault: EncryptedVault | undefined;

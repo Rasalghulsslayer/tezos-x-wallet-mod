@@ -12,20 +12,20 @@
  * suppressed (the Transfer row is the meaningful one).
  */
 
-import { BLOCKSCOUT_API_BASE, EVM_EXPLORER, TEZOS_EXPLORER } from '../../shared/constants';
+import { BLOCKSCOUT_API_BASE, EVM_EXPLORER, TEZOS_EXPLORER } from '@tezosx/wallet-core/shared/constants';
 import { NAC_PRECOMPILE_ADDR } from '@tezosx/relayer/constants';
 import type {
   ActivityFetcher,
   ActivityFetcherPage,
-} from '../../ports/activity-fetcher';
+} from '@tezosx/wallet-core/ports/activity-fetcher';
 import type {
   ActivityContractCallItem,
   ActivityItem,
   ActivityTransferItem,
-} from '../../domain/activity';
-import type { Asset, Erc20Asset } from '../../domain/asset';
-import { XTZ_L2_ASSET } from '../../domain/asset';
-import type { RegisteredToken } from '../../domain/token';
+} from '@tezosx/wallet-core/domain/activity';
+import type { Asset, Erc20Asset } from '@tezosx/wallet-core/domain/asset';
+import { XTZ_L2_ASSET } from '@tezosx/wallet-core/domain/asset';
+import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
 
 interface BlockscoutTx {
   blockNumber:       string;

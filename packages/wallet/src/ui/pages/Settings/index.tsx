@@ -6,10 +6,10 @@
 
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { VaultState } from '@/shared/messages';
-import type { AccountId } from '@/domain/account';
+import type { VaultState } from '@tezosx/wallet-core/shared/messages';
+import type { AccountId } from '@tezosx/wallet-core/domain/account';
 import { sendPopupRequest } from '@/shared/messaging';
-import { EVM_EXPLORER, TEZOS_EXPLORER } from '@/shared/constants';
+import { EVM_EXPLORER, TEZOS_EXPLORER } from '@tezosx/wallet-core/shared/constants';
 import { accountCardVM } from '../../view-models/account-card-vm';
 import { TopBar } from '../../tx/TopBar';
 import { BottomTabs } from '../../tx/BottomTabs';

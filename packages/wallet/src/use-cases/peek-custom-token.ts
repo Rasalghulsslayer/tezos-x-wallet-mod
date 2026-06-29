@@ -5,18 +5,18 @@
  * registry when the user confirms (via addCustomToken).
  */
 
-import type { AccountId } from '../domain/account';
+import type { AccountId } from '@tezosx/wallet-core/domain/account';
 import {
   type RegisteredToken,
   type TokenMetadata,
   TokenAlreadyRegisteredError,
   MaxTokensReachedError,
   NotErc20Error,
-} from '../domain/token';
-import type { TokenStore } from '../ports/token-store';
-import { fetchErc20Metadata } from '../shared/erc20-metadata';
-import { MAX_TOKENS_PER_ACCOUNT } from '../shared/constants';
-import { shortAddr } from '../shared/format';
+} from '@tezosx/wallet-core/domain/token';
+import type { TokenStore } from '@tezosx/wallet-core/ports/token-store';
+import { fetchErc20Metadata } from '@tezosx/wallet-core/shared/erc20-metadata';
+import { MAX_TOKENS_PER_ACCOUNT } from '@tezosx/wallet-core/shared/constants';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
 
 export interface PeekCustomTokenReq {
   accountId:  AccountId;
