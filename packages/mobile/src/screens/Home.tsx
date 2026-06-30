@@ -9,7 +9,15 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import type { VaultStateUnlocked } from '@tezosx/wallet-core/shared/messages';
 import { accountCardVM } from '@tezosx/wallet-core/view-models/account-card-vm';
 import {
@@ -22,6 +30,13 @@ import { mutezToXtz, weiToXtz, formatTokenAmount, shortAddr } from '@tezosx/wall
 import { formatError } from '@tezosx/wallet-core/domain/error';
 import { deriveEvmAlias } from '@tezosx/relayer/utils/derive';
 import { tokenStore, evmAliasCache } from '../composition/wiring';
+import {
+  initWalletKit,
+  pairWithUri,
+  proposalPeerName,
+  proposalPeerUrl,
+  type SessionProposal,
+} from '../transport/walletconnect';
 import { colors } from '../theme';
 
 interface TokenRow { symbol: string; amount: string; }
@@ -35,6 +50,31 @@ export function Home({ state, onLock }: { state: VaultStateUnlocked; onLock: () 
   const [tokens, setTokens] = useState<TokenRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // WalletConnect: paste a dApp's wc: URI, pair, and surface the proposal. This
+  // proves the connection path on-device; approving the session comes next.
+  const [wcUri, setWcUri] = useState('');
+  const [wcStatus, setWcStatus] = useState<string | null>(null);
+  const [proposal, setProposal] = useState<SessionProposal | null>(null);
+
+  useEffect(() => {
+    initWalletKit({ onProposal: setProposal }).catch((e) => {
+      const f = formatError(e);
+      setWcStatus(`WalletConnect init failed — ${f.detail}`);
+    });
+  }, []);
+
+  const connect = useCallback(async (): Promise<void> => {
+    setProposal(null);
+    setWcStatus('Pairing…');
+    try {
+      await pairWithUri(wcUri);
+      setWcStatus('Paired — waiting for the dApp proposal…');
+    } catch (e) {
+      const f = formatError(e);
+      setWcStatus(`${f.title} — ${f.detail}`);
+    }
+  }, [wcUri]);
 
   // Resolve the EVM alias asynchronously (Tezos only) — never blocks the screen.
   useEffect(() => {
@@ -119,6 +159,35 @@ export function Home({ state, onLock }: { state: VaultStateUnlocked; onLock: () 
       <Pressable style={styles.refresh} disabled={loading} onPress={() => void refreshXtz()}>
         <Text style={styles.refreshText}>Refresh</Text>
       </Pressable>
+
+      <View style={styles.card}>
+        <Text style={styles.kicker}>WalletConnect</Text>
+        <TextInput
+          style={styles.wcInput}
+          value={wcUri}
+          onChangeText={setWcUri}
+          placeholder="Paste a wc: URI"
+          placeholderTextColor={colors.fgMuted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          multiline
+        />
+        <Pressable
+          style={[styles.refresh, wcUri.trim() === '' && styles.refreshDisabled]}
+          disabled={wcUri.trim() === ''}
+          onPress={() => void connect()}
+        >
+          <Text style={styles.refreshText}>Connect</Text>
+        </Pressable>
+        {wcStatus != null && <Text style={styles.wcStatus}>{wcStatus}</Text>}
+        {proposal != null && (
+          <View style={styles.wcProposal}>
+            <Text style={styles.wcProposalName}>{proposalPeerName(proposal)}</Text>
+            <Text style={styles.wcProposalUrl}>{proposalPeerUrl(proposal)}</Text>
+            <Text style={styles.wcProposalHint}>Session proposal received.</Text>
+          </View>
+        )}
+      </View>
     </ScrollView>
   );
 }
@@ -153,5 +222,12 @@ const styles = StyleSheet.create({
   token:     { color: colors.fg, fontSize: 16 },
   error:     { color: colors.danger, fontSize: 14 },
   refresh:   { borderColor: colors.border, borderWidth: 1, borderRadius: 8, padding: 14, alignItems: 'center' },
+  refreshDisabled: { opacity: 0.4 },
   refreshText: { color: colors.fg, fontSize: 15, fontWeight: '600' },
+  wcInput:   { color: colors.fg, fontSize: 13, borderColor: colors.border, borderWidth: 1, borderRadius: 8, padding: 12, minHeight: 56 },
+  wcStatus:  { color: colors.fgMuted, fontSize: 13 },
+  wcProposal: { borderColor: colors.cyan, borderWidth: 1, borderRadius: 8, padding: 12, gap: 4 },
+  wcProposalName: { color: colors.fg, fontSize: 15, fontWeight: '700' },
+  wcProposalUrl:  { color: colors.cyan, fontSize: 13 },
+  wcProposalHint: { color: colors.fgMuted, fontSize: 12 },
 });
