@@ -31,7 +31,11 @@ export function startAutoLock(onLock: () => void, idleMs: number = DEFAULT_IDLE_
   };
 
   const onChange = (status: AppStateStatus): void => {
-    if (status === 'background' || status === 'inactive') {
+    if (status === 'background') {
+      // True backgrounding only. 'inactive' is transient (a Face ID / keychain
+      // sheet, the app switcher peek, a notification banner) and would otherwise
+      // lock the vault mid-flow — e.g. during the biometric unlock or the
+      // import's keychain seal — so we deliberately ignore it.
       disarm();
       onLock();
     } else if (status === 'active') {
