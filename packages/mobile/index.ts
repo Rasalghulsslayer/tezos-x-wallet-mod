@@ -1,7 +1,8 @@
-// Polyfill globalThis.Buffer before anything else — Taquito's signer and the
-// seed derivation expect it, and Hermes does not provide it. (Secure RNG via
-// react-native-get-random-values is only needed once we add key generation /
-// encryption; the smoke check's decrypt + derive paths don't touch it.)
+// Polyfills must load before any core/Taquito code. Order matters:
+// 1) secure RNG — patches global crypto.getRandomValues, which NobleCryptoPort
+//    uses for the salt/IV at vault encryption (import) and key generation;
+// 2) Buffer — Taquito's signer and the seed derivation expect it, Hermes lacks it.
+import 'react-native-get-random-values';
 import '@tezosx/wallet-core/shared/buffer-shim';
 
 import { registerRootComponent } from 'expo';
