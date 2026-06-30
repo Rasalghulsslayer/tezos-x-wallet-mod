@@ -12,4 +12,5 @@ export const colors = {
   cyan:    '#22d3ee', // L2 / EVM accent
   danger:  '#ff6b6b',
   success: '#4ade80',
+  scrim:   'rgba(0,0,0,0.6)', // modal backdrop
 } as const;

@@ -30,13 +30,7 @@ import { mutezToXtz, weiToXtz, formatTokenAmount, shortAddr } from '@tezosx/wall
 import { formatError } from '@tezosx/wallet-core/domain/error';
 import { deriveEvmAlias } from '@tezosx/relayer/utils/derive';
 import { tokenStore, evmAliasCache } from '../composition/wiring';
-import {
-  initWalletKit,
-  pairWithUri,
-  proposalPeerName,
-  proposalPeerUrl,
-  type SessionProposal,
-} from '../transport/walletconnect';
+import { connect } from '../composition/walletconnect-connect';
 import { colors } from '../theme';
 
 interface TokenRow { symbol: string; amount: string; }
@@ -51,25 +45,18 @@ export function Home({ state, onLock }: { state: VaultStateUnlocked; onLock: () 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // WalletConnect: paste a dApp's wc: URI, pair, and surface the proposal. This
-  // proves the connection path on-device; approving the session comes next.
+  // WalletConnect: paste a dApp's wc: URI and pair. The incoming proposal is
+  // routed through the core dispatch and surfaced as the Approve modal (wired in
+  // App), so there's nothing to render inline here beyond the pairing status.
   const [wcUri, setWcUri] = useState('');
   const [wcStatus, setWcStatus] = useState<string | null>(null);
-  const [proposal, setProposal] = useState<SessionProposal | null>(null);
 
-  useEffect(() => {
-    initWalletKit({ onProposal: setProposal }).catch((e) => {
-      const f = formatError(e);
-      setWcStatus(`WalletConnect init failed — ${f.detail}`);
-    });
-  }, []);
-
-  const connect = useCallback(async (): Promise<void> => {
-    setProposal(null);
+  const pair = useCallback(async (): Promise<void> => {
     setWcStatus('Pairing…');
     try {
-      await pairWithUri(wcUri);
-      setWcStatus('Paired — waiting for the dApp proposal…');
+      await connect(wcUri);
+      setWcUri('');
+      setWcStatus('Paired — review the connection request.');
     } catch (e) {
       const f = formatError(e);
       setWcStatus(`${f.title} — ${f.detail}`);
@@ -175,18 +162,11 @@ export function Home({ state, onLock }: { state: VaultStateUnlocked; onLock: () 
         <Pressable
           style={[styles.refresh, wcUri.trim() === '' && styles.refreshDisabled]}
           disabled={wcUri.trim() === ''}
-          onPress={() => void connect()}
+          onPress={() => void pair()}
         >
           <Text style={styles.refreshText}>Connect</Text>
         </Pressable>
         {wcStatus != null && <Text style={styles.wcStatus}>{wcStatus}</Text>}
-        {proposal != null && (
-          <View style={styles.wcProposal}>
-            <Text style={styles.wcProposalName}>{proposalPeerName(proposal)}</Text>
-            <Text style={styles.wcProposalUrl}>{proposalPeerUrl(proposal)}</Text>
-            <Text style={styles.wcProposalHint}>Session proposal received.</Text>
-          </View>
-        )}
       </View>
     </ScrollView>
   );
@@ -226,8 +206,4 @@ const styles = StyleSheet.create({
   refreshText: { color: colors.fg, fontSize: 15, fontWeight: '600' },
   wcInput:   { color: colors.fg, fontSize: 13, borderColor: colors.border, borderWidth: 1, borderRadius: 8, padding: 12, minHeight: 56 },
   wcStatus:  { color: colors.fgMuted, fontSize: 13 },
-  wcProposal: { borderColor: colors.cyan, borderWidth: 1, borderRadius: 8, padding: 12, gap: 4 },
-  wcProposalName: { color: colors.fg, fontSize: 15, fontWeight: '700' },
-  wcProposalUrl:  { color: colors.cyan, fontSize: 13 },
-  wcProposalHint: { color: colors.fgMuted, fontSize: 12 },
 });

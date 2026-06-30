@@ -1,14 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import type { VaultState } from '@tezosx/wallet-core/shared/messages';
 import { formatError } from '@tezosx/wallet-core/domain/error';
-import { keyring, evmAliasCache } from './src/composition/wiring';
+import { keyring, evmAliasCache, approvalQueue } from './src/composition/wiring';
 import { readState } from './src/composition/read-state';
+import { startWalletConnect } from './src/composition/walletconnect-connect';
+import { approvalUi } from './src/composition/approval-ui';
 import { startAutoLock, type AutoLockHandle } from './src/lock/auto-lock';
 import { Import } from './src/screens/Import';
 import { Unlock } from './src/screens/Unlock';
 import { Home } from './src/screens/Home';
+import { Approve } from './src/screens/Approve';
 import { colors } from './src/theme';
 
 export default function App(): React.JSX.Element {
@@ -41,6 +44,15 @@ export default function App(): React.JSX.Element {
     return () => lock.current?.stop();
   }, [doLock]);
 
+  // Boot WalletConnect once: it routes incoming dApp proposals/requests through
+  // the core dispatch, which drives the Approve modal below.
+  useEffect(() => {
+    startWalletConnect().catch((e) => console.warn('[mobile] WalletConnect init failed', e));
+  }, []);
+
+  // The requestId of the dApp request awaiting approval (null = none).
+  const pendingApproval = useSyncExternalStore(approvalUi.subscribe, approvalUi.get);
+
   let body: React.JSX.Element;
   if (error != null) {
     body = (
@@ -66,12 +78,26 @@ export default function App(): React.JSX.Element {
     <View style={styles.root} onTouchStart={() => lock.current?.touch()}>
       <StatusBar style="light" />
       {body}
+      <Modal
+        visible={pendingApproval != null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          // Hardware back / swipe-down without a decision = reject.
+          if (pendingApproval != null) approvalQueue.resolve(pendingApproval, 'reject');
+        }}
+      >
+        <View style={styles.scrim}>
+          {pendingApproval != null && <Approve requestId={pendingApproval} />}
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root:       { flex: 1, backgroundColor: colors.bg, justifyContent: 'center' },
+  scrim:      { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.scrim },
   centered:   { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 12 },
   errorTitle: { color: colors.fg, fontSize: 20, fontWeight: '700' },
   errorText:  { color: colors.danger, fontSize: 14, textAlign: 'center' },
