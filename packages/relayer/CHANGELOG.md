@@ -6,6 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.6.1] — 2026-06-30
+
+### Added
+- New export `@tezosx/relayer/use-cases/build-synthetic-receipt`, exposing the
+  pure `l1OpHashToEvmHash` helper directly. It was previously reachable only
+  through the `@tezosx/relayer/tezos` barrel, which also re-exports `BeaconClient`
+  and so pulls the Beacon SDK — including a Node-only `crypto` import — into every
+  consumer's bundle. The React Native (Metro/Hermes) bundle can't resolve that;
+  the wallet core now imports the helper from this dedicated path so the mobile
+  app no longer drags Beacon in. No behaviour change for existing consumers.
+
 ## [0.6.0] — 2026-06-24
 
 Ships alongside `@tezosx/wallet` 0.12.0.

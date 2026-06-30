@@ -7,7 +7,12 @@
  * descending, and returns an ActivityPage with an opaque cursor.
  */
 
-import { l1OpHashToEvmHash } from '@tezosx/relayer/tezos';
+// Import the pure synthetic-hash helper from its own module, NOT the
+// '@tezosx/relayer/tezos' barrel — the barrel re-exports BeaconClient, which
+// pulls the Beacon SDK (and a Node-only `crypto` import) into every consumer's
+// bundle. The mobile (Metro/Hermes) bundle can't resolve that; the extension
+// doesn't need it either.
+import { l1OpHashToEvmHash } from '@tezosx/relayer/use-cases/build-synthetic-receipt';
 import { deriveEvmAlias } from '@tezosx/relayer/utils/derive';
 import { ACTIVITY_PAGE_SIZE, EVM_EXPLORER, TEZOS_EXPLORER } from '../shared/constants';
 import {

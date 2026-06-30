@@ -12,7 +12,7 @@ import type { Container } from '../../ports/container';
 import { XTZ_L1_ASSET, XTZ_L2_ASSET } from '../../domain/asset';
 
 // Mock the relayer's l1OpHashToEvmHash so the dedup is deterministic.
-vi.mock('@tezosx/relayer/tezos', () => ({
+vi.mock('@tezosx/relayer/use-cases/build-synthetic-receipt', () => ({
   l1OpHashToEvmHash: (l1: string) => `0xsynth${l1}`,
 }));
 vi.mock('@tezosx/relayer/utils/derive', () => ({
