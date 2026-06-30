@@ -17,6 +17,7 @@
  */
 
 import { buildApprovedNamespaces } from '@walletconnect/utils';
+import type { SessionTypes } from '@walletconnect/types';
 import { dispatch } from '@tezosx/wallet-core/composition/sw-wiring';
 import type { EthereumRequest } from '@tezosx/wallet-core/shared/messages';
 import type { ClassifiedSource } from '@tezosx/wallet-core/ports/message-source';
@@ -77,24 +78,38 @@ async function handleProposal(proposal: SessionProposal): Promise<void> {
   }
 
   const alias = res.data[0];
+  devLog.info(
+    '[wc] proposal namespaces — required:', JSON.stringify(proposal.params.requiredNamespaces),
+    'optional:', JSON.stringify(proposal.params.optionalNamespaces),
+  );
+
+  // The wallet lives on exactly one EVM chain (Tezos X previewnet). Offer it
+  // with the connecting account.
+  const ownNamespaces = {
+    eip155: {
+      chains:   [EIP155_CHAIN],
+      methods:  SUPPORTED_METHODS,
+      events:   SUPPORTED_EVENTS,
+      accounts: [`${EIP155_CHAIN}:${alias}`],
+    },
+  };
+
+  // Prefer the reconciled namespaces when the dApp actually asked for our chain;
+  // otherwise declare our chain directly (a mainnet-only dApp will then decline
+  // on its side, which is correct — we genuinely can't serve other chains).
+  let namespaces: SessionTypes.Namespaces = ownNamespaces;
   try {
-    const namespaces = buildApprovedNamespaces({
-      proposal: proposal.params,
-      supportedNamespaces: {
-        eip155: {
-          chains:   [EIP155_CHAIN],
-          methods:  SUPPORTED_METHODS,
-          events:   SUPPORTED_EVENTS,
-          accounts: [`${EIP155_CHAIN}:${alias}`],
-        },
-      },
-    });
+    const built = buildApprovedNamespaces({ proposal: proposal.params, supportedNamespaces: ownNamespaces });
+    if (built.eip155 != null && built.eip155.accounts.length > 0) namespaces = built;
+  } catch (err) {
+    devLog.info('[wc] dApp did not request eip155:128064; offering it directly:', (err as Error).message);
+  }
+
+  try {
     await approveProposal({ id: proposal.id, namespaces });
     devLog.info('[wc] session approved for', origin, alias);
   } catch (err) {
-    // buildApprovedNamespaces throws when the dApp requires a chain/method the
-    // wallet doesn't support (e.g. a mainnet-only dApp vs eip155:128064).
-    devLog.warn('[wc] cannot satisfy proposal namespaces:', (err as Error).message);
+    devLog.warn('[wc] approveSession rejected:', (err as Error).message);
     await rejectProposal(proposal.id);
   }
 }
