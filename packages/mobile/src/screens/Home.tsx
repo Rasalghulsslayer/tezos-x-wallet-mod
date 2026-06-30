@@ -1,8 +1,11 @@
 /**
  * Home screen: renders the unlocked account (via the shared accountCardVM) and
- * its real balances read from previewnet. For a Tezos account: L1 XTZ (TzKT) +
- * ERC-20 tokens held on the EVM alias. (No L2-XTZ row for Tezos accounts — the
- * kernel's AliasForwarder keeps it at ~0.) For an EVM account: L2 XTZ balance.
+ * its real balances from previewnet. The Gate hands us state network-free, so
+ * for a Tezos account the EVM alias may not be resolved yet — we derive it here
+ * asynchronously (it's needed only for the L2 face and ERC-20 token balances).
+ * L1 XTZ (TzKT) loads immediately from the tz1; the alias and token balances
+ * fill in when ready. (No L2-XTZ row for Tezos accounts — the kernel's
+ * AliasForwarder keeps it at ~0.)
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -17,35 +20,42 @@ import {
 import { listRegisteredTokens } from '@tezosx/wallet-core/use-cases/list-registered-tokens';
 import { mutezToXtz, weiToXtz, formatTokenAmount, shortAddr } from '@tezosx/wallet-core/shared/format';
 import { formatError } from '@tezosx/wallet-core/domain/error';
-import { tokenStore } from '../composition/wiring';
+import { deriveEvmAlias } from '@tezosx/relayer/utils/derive';
+import { tokenStore, evmAliasCache } from '../composition/wiring';
 import { colors } from '../theme';
 
 interface TokenRow { symbol: string; amount: string; }
 
 export function Home({ state, onLock }: { state: VaultStateUnlocked; onLock: () => void }): React.JSX.Element {
-  const vm = accountCardVM(state);
+  // For a Tezos account the alias may arrive empty from the network-free Gate read.
+  const [alias, setAlias] = useState<string | null>(
+    state.kind === 'tezos' ? (state.evmAlias || null) : null,
+  );
   const [xtz, setXtz] = useState<string | null>(null);
   const [tokens, setTokens] = useState<TokenRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async (): Promise<void> => {
+  // Resolve the EVM alias asynchronously (Tezos only) — never blocks the screen.
+  useEffect(() => {
+    if (state.kind !== 'tezos' || alias != null) return;
+    let live = true;
+    deriveEvmAlias(state.tz1)
+      .then((a) => { if (live) { evmAliasCache.value = a; setAlias(a); } })
+      .catch(() => { /* alias stays pending; L1 balance still shows */ });
+    return () => { live = false; };
+  }, [state, alias]);
+
+  // L1 XTZ (Tezos) or L2 XTZ (EVM) — loads immediately, no alias needed.
+  const refreshXtz = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
-      if (state.kind === 'tezos') {
-        setXtz(mutezToXtz(await fetchL1XtzBalance(state.tz1)));
-        const registered = await listRegisteredTokens({ accountId: state.accountId }, { tokenStore });
-        const results = await Promise.allSettled(
-          registered.map(async (t): Promise<TokenRow> => ({
-            symbol: t.symbol,
-            amount: formatTokenAmount(await fetchErc20Balance(t.address, state.evmAlias), t.decimals),
-          })),
-        );
-        setTokens(results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : [])));
-      } else {
-        setXtz(weiToXtz(await fetchXtzBalance(state.address)));
-      }
+      setXtz(
+        state.kind === 'tezos'
+          ? mutezToXtz(await fetchL1XtzBalance(state.tz1))
+          : weiToXtz(await fetchXtzBalance(state.address)),
+      );
     } catch (e) {
       const f = formatError(e);
       setError(`${f.title} — ${f.detail}`);
@@ -54,7 +64,28 @@ export function Home({ state, onLock }: { state: VaultStateUnlocked; onLock: () 
     }
   }, [state]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { void refreshXtz(); }, [refreshXtz]);
+
+  // ERC-20 token balances need the alias; fetch once it resolves.
+  useEffect(() => {
+    if (state.kind !== 'tezos' || alias == null) return;
+    let live = true;
+    void (async () => {
+      try {
+        const registered = await listRegisteredTokens({ accountId: state.accountId }, { tokenStore });
+        const rows = await Promise.allSettled(
+          registered.map(async (t): Promise<TokenRow> => ({
+            symbol: t.symbol,
+            amount: formatTokenAmount(await fetchErc20Balance(t.address, alias), t.decimals),
+          })),
+        );
+        if (live) setTokens(rows.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : [])));
+      } catch { /* tokens are best-effort */ }
+    })();
+    return () => { live = false; };
+  }, [state, alias]);
+
+  const vm = accountCardVM(state.kind === 'tezos' ? { ...state, evmAlias: alias ?? '' } : state);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -85,7 +116,7 @@ export function Home({ state, onLock }: { state: VaultStateUnlocked; onLock: () 
         {error != null && <Text style={styles.error}>{error}</Text>}
       </View>
 
-      <Pressable style={styles.refresh} disabled={loading} onPress={() => void refresh()}>
+      <Pressable style={styles.refresh} disabled={loading} onPress={() => void refreshXtz()}>
         <Text style={styles.refreshText}>Refresh</Text>
       </Pressable>
     </ScrollView>
@@ -100,7 +131,7 @@ function Face({ chain, label, address }: { chain: 'l1' | 'l2'; label: string; ad
       </View>
       <View>
         <Text style={styles.faceLabel}>{label}</Text>
-        <Text style={styles.faceAddr}>{shortAddr(address)}</Text>
+        <Text style={styles.faceAddr}>{address === '' ? 'resolving…' : shortAddr(address)}</Text>
       </View>
     </View>
   );

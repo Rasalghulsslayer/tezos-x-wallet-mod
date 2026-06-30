@@ -1,26 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { getState } from '@tezosx/wallet-core/use-cases/get-state';
 import type { VaultState } from '@tezosx/wallet-core/shared/messages';
 import { formatError } from '@tezosx/wallet-core/domain/error';
 import { keyring, evmAliasCache } from './src/composition/wiring';
+import { readState } from './src/composition/read-state';
 import { startAutoLock, type AutoLockHandle } from './src/lock/auto-lock';
 import { Import } from './src/screens/Import';
 import { Unlock } from './src/screens/Unlock';
 import { Home } from './src/screens/Home';
 import { colors } from './src/theme';
-
-// getState resolves the EVM alias over the network; bound it so a slow/down RPC
-// surfaces as a visible error instead of an indefinite "nothing happens".
-const STATE_TIMEOUT_MS = 12_000;
-
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    p,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('Timed out reaching previewnet')), ms)),
-  ]);
-}
 
 export default function App(): React.JSX.Element {
   const [state, setState] = useState<VaultState | null>(null);
@@ -30,9 +19,10 @@ export default function App(): React.JSX.Element {
   const refresh = useCallback(async (): Promise<void> => {
     try {
       setError(null);
-      setState(await withTimeout(getState({ keyring, evmAliasCache }), STATE_TIMEOUT_MS));
+      // Network-free: instant transition. Home resolves the alias + balances.
+      setState(await readState());
     } catch (e) {
-      console.warn('[mobile] getState failed', e); // surfaces in the Metro terminal
+      console.warn('[mobile] readState failed', e); // surfaces in the Metro terminal
       const f = formatError(e);
       setError(`${f.title} — ${f.detail}`);
     }
