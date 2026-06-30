@@ -14,6 +14,7 @@
     "@walletconnect/react-native-compat": "2.23.9",
     "@walletconnect/types": "2.23.9",
     "expo": "~56.0.12",
+    "expo-application": "~56.0.3",
     "expo-status-bar": "~56.0.4",
     "react": "19.2.3",
     "react-native": "0.85.3",

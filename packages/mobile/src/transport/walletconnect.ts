@@ -16,6 +16,7 @@
 import { WalletKit, type IWalletKit } from '@reown/walletkit';
 import { Core } from '@walletconnect/core';
 import type { SignClientTypes } from '@walletconnect/types';
+import { devLog } from '@tezosx/wallet-core/shared/log';
 
 export type SessionProposal = SignClientTypes.EventArguments['session_proposal'];
 
@@ -52,7 +53,14 @@ export function initWalletKit(handlers: {
       }
       const core = new Core({ projectId });
       const kit = await WalletKit.init({ core, metadata: METADATA });
-      kit.on('session_proposal', handlers.onProposal);
+      kit.on('session_proposal', (proposal) => {
+        devLog.info('[wc] session_proposal from', proposalPeerName(proposal), proposalPeerUrl(proposal));
+        handlers.onProposal(proposal);
+      });
+      // Lifecycle visibility while we bring the connection path up.
+      kit.on('session_request', (req) => devLog.info('[wc] session_request', req.params.request.method));
+      kit.on('session_delete', (ev) => devLog.info('[wc] session_delete', ev.topic));
+      devLog.info('[wc] WalletKit initialised');
       walletKit = kit;
       return kit;
     })();
@@ -66,7 +74,15 @@ export function initWalletKit(handlers: {
  */
 export async function pairWithUri(uri: string): Promise<void> {
   if (walletKit == null) throw new Error('WalletKit is not initialised yet');
-  await walletKit.pair({ uri: uri.trim() });
+  const trimmed = uri.trim();
+  devLog.info('[wc] pairing', trimmed.slice(0, 24));
+  await walletKit.pair({ uri: trimmed });
+  // Diagnostic: if pairing succeeds but no proposal arrives on the listener, a
+  // non-zero pending count means the proposal was delivered but not via the
+  // event (e.g. a re-pair of an already-consumed URI); zero means the dApp never
+  // sent one (closed modal / expired URI).
+  const pending = Object.values(walletKit.getPendingSessionProposals());
+  devLog.info('[wc] paired; pending proposals:', pending.length);
 }
 
 /** The dApp's display name from a proposal, falling back to its URL. */
