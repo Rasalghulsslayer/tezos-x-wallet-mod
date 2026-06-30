@@ -7,6 +7,34 @@ TypeScript source over the npm-workspace symlink (no build step), by both the
 Chrome extension (`@tezosx/wallet`) and the React Native app
 (`@tezosx/wallet-mobile`).
 
+## [0.3.0] — 2026-06-30
+
+### Added
+- The remaining platform-neutral adapters — the Tezos and EVM signers, the EVM
+  JSON-RPC provider, the two activity fetchers, and the NAC precompile builder —
+  moved out of the extension into `adapters/{tezos,evm}/`, joining the
+  balance-fetchers already there. They are plain I/O (`fetch`, `@taquito`,
+  `@noble`, `@tezosx/relayer`, `eventemitter3`; no `chrome.*`, no DOM), so both
+  shells now sign and read through the same code rather than a parallel mobile
+  implementation. Exposed via `@tezosx/wallet-core/adapters/*`.
+- The composition wiring root — `buildContainer` (`composition/container.ts`),
+  `ensureContainerFor` (`container-builder.ts`), the container cache, and the
+  service-worker message router `dispatch` with its `SwState`/`SwDeps` shapes
+  (`sw-wiring.ts`) — moved to `composition/`. The full EIP-1193 / dApp routing,
+  approval flow, and per-account Container now live in the core, so the mobile
+  WalletConnect transport drives the exact same `dispatch` as the extension's
+  service worker. Exposed via `@tezosx/wallet-core/composition/*`.
+- `shared/log.ts` (the dev-only `devLog`) moved into the core. Its dev flag now
+  reads `process.env.NODE_ENV`, which every consumer's bundler folds to a literal
+  — Vite (extension), Metro/Hermes (mobile), and Node (tests) — so verbose and
+  sensitive diagnostics are dead-code-eliminated from every production build. It
+  previously stayed in the extension because it relied on Vite-only
+  `import.meta.env`, which Metro does not parse.
+
+### Changed
+- Added `@taquito/taquito`, `@taquito/rpc`, and `eventemitter3` to the package's
+  dependencies, now that the signer and provider adapters live here.
+
 ## [0.2.0] — 2026-06-30
 
 ### Added

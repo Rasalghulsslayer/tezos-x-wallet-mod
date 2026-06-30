@@ -16,7 +16,7 @@ import {
   fetchL1XtzBalance,
   fetchXtzBalance,
   fetchErc20Balance,
-} from '@tezosx/wallet-core/adapters/tezos-balance-fetcher';
+} from '@tezosx/wallet-core/adapters/tezos/tezos-balance-fetcher';
 import { listRegisteredTokens } from '@tezosx/wallet-core/use-cases/list-registered-tokens';
 import { mutezToXtz, weiToXtz, formatTokenAmount, shortAddr } from '@tezosx/wallet-core/shared/format';
 import { formatError } from '@tezosx/wallet-core/domain/error';

@@ -6,7 +6,7 @@ import {
   fetchL1XtzBalance,
   fetchXtzBalance,
   fetchErc20Balance,
-} from '@tezosx/wallet-core/adapters/tezos-balance-fetcher';
+} from '@tezosx/wallet-core/adapters/tezos/tezos-balance-fetcher';
 import { FAUCET_URL } from '@tezosx/wallet-core/shared/constants';
 import { mutezToXtz, weiToXtz } from '@tezosx/wallet-core/shared/format';
 import { sendPopupRequest } from '@/shared/messaging';

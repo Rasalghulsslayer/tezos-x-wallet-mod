@@ -9,9 +9,9 @@ import { WebCryptoPort } from '../adapters/crypto/web-crypto-port';
 import { classifyChromeSender } from '../adapters/chrome/chrome-message-source';
 import { ChromeApprovalPresenter } from '../adapters/chrome/chrome-approval-presenter';
 import type { PersistentPorts } from '@tezosx/wallet-core/ports/container';
-import { ContainerCache } from '../composition/container-cache';
-import { ensureContainerFor } from '../composition/container-builder';
-import { dispatch, type SwState, type SwDeps } from '../composition/sw-wiring';
+import { ContainerCache } from '@tezosx/wallet-core/composition/container-cache';
+import { ensureContainerFor } from '@tezosx/wallet-core/composition/container-builder';
+import { dispatch, type SwState, type SwDeps } from '@tezosx/wallet-core/composition/sw-wiring';
 import type { ContentPush } from '@tezosx/wallet-core/shared/messages';
 
 const state: SwState = {

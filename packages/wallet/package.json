@@ -28,7 +28,7 @@
     "@taquito/signer": "^24.3.0",
     "@taquito/taquito": "^24.3.0",
     "@tezosx/relayer": "^0.6.0",
-    "@tezosx/wallet-core": "^0.2.0",
+    "@tezosx/wallet-core": "^0.3.0",
     "buffer": "^6.0.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

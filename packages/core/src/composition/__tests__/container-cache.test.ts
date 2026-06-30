@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ContainerCache } from '../container-cache';
-import type { Container } from '@tezosx/wallet-core/ports/container';
+import type { Container } from '../../ports/container';
 
 const stub = (label: string) => ({ __label: label } as unknown as Container);
 

@@ -4,7 +4,7 @@ import {
   decodePrecompileTransferInput,
   decodePrecompileDestination,
 } from '../evm-activity-fetcher';
-import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
+import type { RegisteredToken } from '../../../domain/token';
 import mixed from '../__fixtures__/blockscout-mixed.json';
 
 const HOLDER = '0x3136Ecd7C0CcCf17fCC821e610B1d9b1865a78e4';

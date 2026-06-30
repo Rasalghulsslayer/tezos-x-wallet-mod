@@ -4,9 +4,9 @@
  * and EIP-191 personal_sign.
  */
 
-import type { EvmSignerPort, EvmUnsignedTx } from '@tezosx/wallet-core/ports/signer-port';
-import type { EvmAccount } from '@tezosx/wallet-core/domain/account';
-import { signTransaction1559, signPersonalMessage } from '@tezosx/wallet-core/shared/evm-signing';
+import type { EvmSignerPort, EvmUnsignedTx } from '../../ports/signer-port';
+import type { EvmAccount } from '../../domain/account';
+import { signTransaction1559, signPersonalMessage } from '../../shared/evm-signing/index';
 
 export class EvmSigner implements EvmSignerPort {
   readonly kind = 'evm' as const;

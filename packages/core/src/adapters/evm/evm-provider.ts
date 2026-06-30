@@ -12,7 +12,7 @@ import type {
 } from '@tezosx/relayer/types';
 import type { EvmSigner } from './evm-signer';
 import { devLog } from '../../shared/log';
-import { normalizePersonalSignMessage } from '@tezosx/wallet-core/shared/evm-signing';
+import { normalizePersonalSignMessage } from '../../shared/evm-signing/index';
 
 const JSON_RPC_INVALID_PARAMS = -32602;
 

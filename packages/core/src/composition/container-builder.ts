@@ -5,11 +5,11 @@
  */
 
 import { buildContainer } from './container';
-import type { Container, UnlockedSecrets, PersistentPorts } from '@tezosx/wallet-core/ports/container';
+import type { Container, UnlockedSecrets, PersistentPorts } from '../ports/container';
 import type { ContainerCache } from './container-cache';
-import type { Keyring } from '@tezosx/wallet-core/keyring';
-import type { AccountId, Account } from '@tezosx/wallet-core/domain/account';
-import type { ContentPush } from '@tezosx/wallet-core/shared/messages';
+import type { Keyring } from '../background/keyring';
+import type { AccountId, Account } from '../domain/account';
+import type { ContentPush } from '../shared/messages';
 
 export interface EnsureContainerDeps {
   keyring:          Keyring;

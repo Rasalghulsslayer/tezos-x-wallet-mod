@@ -9,7 +9,7 @@ import {
   fetchL1XtzBalance,
   fetchXtzBalance,
   fetchErc20Balance,
-} from '@tezosx/wallet-core/adapters/tezos-balance-fetcher';
+} from '@tezosx/wallet-core/adapters/tezos/tezos-balance-fetcher';
 import { mutezToXtz, weiToXtz, formatTokenAmount } from '@tezosx/wallet-core/shared/format';
 import { formatError } from '@tezosx/wallet-core/domain/error';
 import { trackTx } from '@tezosx/wallet-core/shared/tx-status';

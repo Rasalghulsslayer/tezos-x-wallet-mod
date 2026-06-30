@@ -16,8 +16,8 @@ import { InMemorySigner } from '@taquito/signer';
 import type { MichelsonV1Expression } from '@taquito/rpc';
 import type { WalletPermissions } from '@tezosx/relayer/wallet-client';
 import { TEZOS_L1_RPC, NAC_CONTRACT } from '@tezosx/relayer/constants';
-import type { TezosSignerPort } from '@tezosx/wallet-core/ports/signer-port';
-import type { TezosAccount } from '@tezosx/wallet-core/domain/account';
+import type { TezosSignerPort } from '../../ports/signer-port';
+import type { TezosAccount } from '../../domain/account';
 import { devLog } from '../../shared/log';
 
 /**
