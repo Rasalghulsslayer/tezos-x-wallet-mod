@@ -9,13 +9,13 @@ import {
   fetchL1XtzBalance,
   fetchXtzBalance,
   fetchErc20Balance,
-} from '@/adapters/tezos/tezos-balance-fetcher';
+} from '@tezosx/wallet-core/adapters/tezos-balance-fetcher';
 import { mutezToXtz, weiToXtz, formatTokenAmount } from '@tezosx/wallet-core/shared/format';
 import { formatError } from '@tezosx/wallet-core/domain/error';
 import { trackTx } from '@tezosx/wallet-core/shared/tx-status';
 import { e2eConfig } from '@tezosx/wallet-core/shared/e2e';
 import type { TxStatus } from '@tezosx/wallet-core/domain/tx-status';
-import { signingSourceAddress } from '../view-models/account-card-vm';
+import { signingSourceAddress } from '@tezosx/wallet-core/view-models/account-card-vm';
 import { Button } from '../tx/Button';
 import { Icon } from '../tx/Icon';
 import { TopBar } from '../tx/TopBar';

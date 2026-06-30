@@ -9,11 +9,11 @@
 import { RelayerProvider } from '@tezosx/relayer/provider';
 import { TEZLINK_EVM_RPC } from '@tezosx/relayer/constants';
 import { TezosSigner } from '../adapters/tezos/tezos-signer';
-import { TezosBalanceFetcher } from '../adapters/tezos/tezos-balance-fetcher';
+import { TezosBalanceFetcher } from '@tezosx/wallet-core/adapters/tezos-balance-fetcher';
 import { TezosActivityFetcher } from '../adapters/tezos/tezos-activity-fetcher';
 import { EvmSigner } from '../adapters/evm/evm-signer';
 import { EvmProvider } from '../adapters/evm/evm-provider';
-import { EvmBalanceFetcher } from '../adapters/evm/evm-balance-fetcher';
+import { EvmBalanceFetcher } from '@tezosx/wallet-core/adapters/evm-balance-fetcher';
 import { EvmActivityFetcher } from '../adapters/evm/evm-activity-fetcher';
 import { buildEvmToTezosTx } from '../adapters/evm/nac-precompile-builder';
 import type { TezosAccount, EvmAccount } from '@tezosx/wallet-core/domain/account';

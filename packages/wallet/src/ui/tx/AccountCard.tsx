@@ -4,7 +4,7 @@ import { CopyAddr } from './CopyAddr';
 import { Badge } from './Badge';
 import { truncAddr } from './utils';
 import { toast } from './Toast';
-import type { AccountCardVM } from '../view-models/account-card-vm';
+import type { AccountCardVM } from '@tezosx/wallet-core/view-models/account-card-vm';
 
 export type AccountVariant = 'split' | 'unified' | 'subtle' | 'toggle' | 'vm';
 

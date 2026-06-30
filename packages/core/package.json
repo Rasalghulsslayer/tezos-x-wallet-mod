@@ -1,6 +1,6 @@
 {
   "name": "@tezosx/wallet-core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -13,6 +13,8 @@
     "./shared/evm-signing": "./src/shared/evm-signing/index.ts",
     "./shared/evm-signing/*": "./src/shared/evm-signing/*.ts",
     "./shared/*": "./src/shared/*.ts",
+    "./adapters/*": "./src/adapters/*.ts",
+    "./view-models/*": "./src/view-models/*.ts",
     "./use-cases/*": "./src/use-cases/*.ts",
     "./keyring": "./src/background/keyring.ts",
     "./approval-queue": "./src/background/approval-queue.ts",

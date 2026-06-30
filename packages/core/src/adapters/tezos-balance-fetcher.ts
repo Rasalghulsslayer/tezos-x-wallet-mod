@@ -6,8 +6,8 @@
 
 import { TezlinkClient } from '@tezosx/relayer/tezlink';
 import { TEZOS_L1_RPC } from '@tezosx/relayer/constants';
-import type { BalanceFetcher } from '@tezosx/wallet-core/ports/balance-fetcher';
-import type { Asset } from '@tezosx/wallet-core/domain/asset';
+import type { BalanceFetcher } from '../ports/balance-fetcher';
+import type { Asset } from '../domain/asset';
 
 const tezlink = new TezlinkClient();
 
