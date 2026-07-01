@@ -30,6 +30,14 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
   `eip155:128064` (its only chain) directly when a dApp doesn't request it,
   rather than reconciling to nothing; a mainnet-only dApp with hard requirements
   still declines on its side.
+- A Connections screen (reachable from Home) listing the live WalletConnect
+  sessions — dApp name, url, and the account exposed to each — with per-session
+  disconnect from the wallet side. Revoking tears down the WC session (notifying
+  the dApp) and, via a reconcile that runs whenever the session set changes,
+  clears the stored session that gates `eth_accounts`. The same reconcile drops
+  sessions a dApp revoked while the app was closed. WalletKit restores
+  previously-approved sessions from its own storage on boot, so a dApp connected
+  before the app closed reconnects when the wallet reopens.
 - The mobile composition now builds the full `SwDeps` (container cache, approval
   queue with a mobile `ApprovalPresenter`, provider-event broadcast over WC), so
   the dApp surface reuses the core routing rather than a parallel implementation.

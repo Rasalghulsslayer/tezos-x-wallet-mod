@@ -25,6 +25,14 @@ import { devLog } from '@tezosx/wallet-core/shared/log';
 export type SessionProposal = SignClientTypes.EventArguments['session_proposal'];
 export type SessionRequest = SignClientTypes.EventArguments['session_request'];
 
+/** A connected dApp session, flattened for display + management. */
+export interface WcSession {
+  topic:   string;
+  name:    string;
+  url:     string;
+  account: string;   // the 0x alias exposed to this session
+}
+
 /** CAIP-2 id of the Tezos X EVM runtime (previewnet) — the one chain we expose. */
 export const EIP155_CHAIN = `eip155:${PREVIEWNET_CHAIN_ID}`;
 
@@ -44,6 +52,18 @@ export interface WalletKitHandlers {
 
 let walletKit: IWalletKit | null = null;
 let initPromise: Promise<IWalletKit> | null = null;
+
+// Fired whenever the active-session set changes (approve / disconnect / a dApp
+// deleting its session), so the Connections UI re-reads and the stored-session
+// set can be reconciled.
+const sessionListeners = new Set<() => void>();
+export function subscribeSessions(listener: () => void): () => void {
+  sessionListeners.add(listener);
+  return () => { sessionListeners.delete(listener); };
+}
+function notifySessionsChanged(): void {
+  for (const l of sessionListeners) l();
+}
 
 /**
  * Idempotently boot WalletKit. The first caller wins and registers the single
@@ -70,7 +90,10 @@ export function initWalletKit(handlers: WalletKitHandlers): Promise<IWalletKit> 
         devLog.info('[wc] session_request', request.params.request.method);
         handlers.onRequest(request);
       });
-      kit.on('session_delete', (ev) => devLog.info('[wc] session_delete', ev.topic));
+      kit.on('session_delete', (ev) => {
+        devLog.info('[wc] session_delete', ev.topic);
+        notifySessionsChanged();
+      });
       devLog.info('[wc] WalletKit initialised');
       walletKit = kit;
       return kit;
@@ -98,6 +121,28 @@ export async function approveProposal(
 ): Promise<void> {
   if (walletKit == null) throw new Error('WalletKit is not initialised yet');
   await walletKit.approveSession(params);
+  notifySessionsChanged();
+}
+
+/** Active dApp sessions, flattened for display + management. */
+export function listSessions(): WcSession[] {
+  if (walletKit == null) return [];
+  return Object.values(walletKit.getActiveSessions()).map((s) => {
+    const caip10 = s.namespaces.eip155?.accounts?.[0] ?? '';   // 'eip155:128064:0x…'
+    return {
+      topic:   s.topic,
+      name:    s.peer.metadata.name || s.peer.metadata.url || 'Unknown dApp',
+      url:     s.peer.metadata.url,
+      account: caip10.split(':').slice(2).join(':'),
+    };
+  });
+}
+
+/** Tear down a session from the wallet side (notifies the dApp). */
+export async function disconnectSession(topic: string): Promise<void> {
+  if (walletKit == null) return;
+  await walletKit.disconnectSession({ topic, reason: getSdkError('USER_DISCONNECTED') });
+  notifySessionsChanged();
 }
 
 /** Reject a session proposal (user declined or the wallet could not satisfy it). */

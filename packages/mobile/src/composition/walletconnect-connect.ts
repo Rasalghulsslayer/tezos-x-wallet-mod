@@ -30,11 +30,13 @@ import {
   respondToRequest,
   sessionOrigin,
   proposalPeerUrl,
+  listSessions,
+  subscribeSessions,
   EIP155_CHAIN,
   type SessionProposal,
   type SessionRequest,
 } from '../transport/walletconnect';
-import { deps, cryptoPort } from './wiring';
+import { deps, cryptoPort, sessionStore } from './wiring';
 
 /**
  * What the wallet offers over a connected session:
@@ -53,9 +55,25 @@ const SUPPORTED_METHODS = ['eth_accounts', 'eth_sendTransaction'];
 const SUPPORTED_EVENTS  = ['accountsChanged', 'chainChanged'];
 
 /** Boot WalletConnect and route its events through the core dispatch. Idempotent
- *  (safe to call on every App mount). */
+ *  (safe to call on every App mount). WalletKit restores previously-approved
+ *  sessions from its own storage on init, so this also re-attaches the relay for
+ *  dApps connected before the app was closed. */
 export async function startWalletConnect(): Promise<void> {
   await initWalletKit({ onProposal: handleProposal, onRequest: handleRequest });
+  // Keep the stored-session set (which gates eth_accounts) in step with the WC
+  // sessions — on wallet-side disconnect, dApp-side disconnect, and at startup
+  // (in case a session was revoked while the app was closed).
+  subscribeSessions(() => { void reconcileStoredSessions(); });
+  await reconcileStoredSessions();
+}
+
+/** Drop any StoredSession whose origin no longer has a live WC session. */
+async function reconcileStoredSessions(): Promise<void> {
+  const activeUrls = new Set(listSessions().map((s) => s.url));
+  const stored = await sessionStore.list();
+  await Promise.all(
+    stored.filter((s) => !activeUrls.has(s.origin)).map((s) => sessionStore.remove(s.origin)),
+  );
 }
 
 /** Pair with a dApp from a pasted `wc:` URI. */

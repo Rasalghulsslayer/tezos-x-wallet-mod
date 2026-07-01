@@ -31,6 +31,7 @@ import { formatError } from '@tezosx/wallet-core/domain/error';
 import { deriveEvmAlias } from '@tezosx/relayer/utils/derive';
 import { tokenStore, evmAliasCache } from '../composition/wiring';
 import { connect } from '../composition/walletconnect-connect';
+import { Connections } from './Connections';
 import { colors } from '../theme';
 
 interface TokenRow { symbol: string; amount: string; }
@@ -50,6 +51,7 @@ export function Home({ state, onLock }: { state: VaultStateUnlocked; onLock: () 
   // App), so there's nothing to render inline here beyond the pairing status.
   const [wcUri, setWcUri] = useState('');
   const [wcStatus, setWcStatus] = useState<string | null>(null);
+  const [showConnections, setShowConnections] = useState(false);
 
   const pair = useCallback(async (): Promise<void> => {
     setWcStatus('Pairing…');
@@ -114,11 +116,16 @@ export function Home({ state, onLock }: { state: VaultStateUnlocked; onLock: () 
 
   const vm = accountCardVM(state.kind === 'tezos' ? { ...state, evmAlias: alias ?? '' } : state);
 
+  if (showConnections) return <Connections onClose={() => setShowConnections(false)} />;
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Wallet</Text>
-        <Pressable onPress={onLock}><Text style={styles.lock}>Lock</Text></Pressable>
+        <View style={styles.headerActions}>
+          <Pressable onPress={() => setShowConnections(true)}><Text style={styles.headerLink}>Connections</Text></Pressable>
+          <Pressable onPress={onLock}><Text style={styles.lock}>Lock</Text></Pressable>
+        </View>
       </View>
 
       <View style={styles.card}>
@@ -189,6 +196,8 @@ function Face({ chain, label, address }: { chain: 'l1' | 'l2'; label: string; ad
 const styles = StyleSheet.create({
   container: { padding: 20, paddingTop: 72, gap: 16 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  headerLink: { color: colors.cyan, fontSize: 15, fontWeight: '600' },
   title:     { color: colors.fg, fontSize: 24, fontWeight: '700' },
   lock:      { color: colors.fgMuted, fontSize: 15 },
   card:      { backgroundColor: colors.surface, borderRadius: 12, padding: 16, gap: 12 },
