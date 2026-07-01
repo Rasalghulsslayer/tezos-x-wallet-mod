@@ -1,0 +1,25 @@
+/**
+ * TezosGlyph — the Tezos (ꜩ) mark, ported 1:1 from the extension's
+ * icons/tezos-logo.svg (a single path, viewBox 0 0 193 237). RN can't require an
+ * .svg without a transformer, so the path is rendered through react-native-svg.
+ * Defaults to white, to sit on the XTZ accent disc in AssetMark.
+ */
+
+import Svg, { Path } from 'react-native-svg';
+
+const TEZOS_PATH =
+  'M175.8,171.2c-2.3-40.7-53.5-59.2-58.4-61.1c-0.2-0.1-0.2-0.3-0.1-0.5l52.8-53v-5.7c0-0.9-0.8-1.7-1.7-1.7H71.1' +
+  'V17.3l0,0V7.7l-35.9,7.5v5.4h2c0,0,8.8,0,8.8,8.8v19.7H18.2c-0.5,0-1,0.5-1,1v12.5h28.9c0,0,0,13.3,0,28.8v39.1' +
+  'c0,21.3,13.7,36.1,37.7,34.1c5.1-0.4,9.8-2.4,13.8-5c1.8-1.2,2.9-3.1,2.9-5.3v-6.7c-7.8,5.2-14.4,4.9-14.4,4.9' +
+  'c-15.2,0-14.9-19.3-14.9-19.3V62.6h70l-50.4,50.8c-0.1,6.7-0.2,11.9-0.2,12c0,0.2,0.1,0.3,0.3,0.3c46.2,7.8,58.7,37.7,58.7,46.4' +
+  'c0,0,5,42.3-37.3,45.2c0,0-27.7,1.2-32.6-9.9c-0.2-0.4,0-0.8,0.4-1c4.6-2.1,7.7-6.2,7.7-11.7c0-8.2-5-14.9-15.5-14.9' +
+  'c-8.5,0-15.5,6.7-15.5,14.9c0,0-4,35.6,55.4,34.6C180,228.1,175.8,171.2,175.8,171.2z';
+
+/** `size` is the rendered height; width preserves the 193:237 aspect ratio. */
+export function TezosGlyph({ size = 20, color = '#FFFFFF' }: { size?: number; color?: string }): React.JSX.Element {
+  return (
+    <Svg width={(size * 193) / 237} height={size} viewBox="0 0 193 237">
+      <Path d={TEZOS_PATH} fill={color} />
+    </Svg>
+  );
+}

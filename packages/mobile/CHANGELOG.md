@@ -8,6 +8,20 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
 ## [Unreleased]
 
 ### Added
+- Full in-app design pass — the extension's UI recreated natively. A React Native
+  design system (the stroke icon set via `react-native-svg` + ~30 pure `ui/tx`
+  components) and every screen: Welcome, Create, Import, Unlock, Home, Send,
+  Receive, Activity, Connections, Approve, Settings, AccountSwitcher, AddAccount,
+  AddToken, Tokens — behind a tab + modal-stack shell with sheets and toasts. The
+  theme is realigned to the extension's exact `--tx-*` tokens, and the XTZ / USDC
+  / Tezos X brand logos are the same assets the extension ships (copied into
+  `src/assets/logos`). It is driven by mock data through a single `WalletContext`
+  seam, so reconnecting the live composition (keyring / balances / WalletConnect)
+  is a data-layer change. This replaces the earlier WalletConnect-wired screens,
+  which remain in git history and whose modules (`composition`/`transport`/
+  `adapters`) stay in the tree for that reconnection. `theme.ts` is realigned to
+  the design's exact `--tx-*` palette, spacing, radii and type scale (the mobile
+  palette had drifted).
 - WalletConnect: connect an external dApp. Paste a dApp's `wc:` URI on Home to
   pair (Reown WalletKit over the relay); the incoming session proposal is routed
   through the shared core `dispatch` exactly as the extension routes a content-

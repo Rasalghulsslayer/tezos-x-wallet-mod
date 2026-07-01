@@ -1,218 +1,232 @@
 /**
- * Home screen: renders the unlocked account (via the shared accountCardVM) and
- * its real balances from previewnet. The Gate hands us state network-free, so
- * for a Tezos account the EVM alias may not be resolved yet — we derive it here
- * asynchronously (it's needed only for the L2 face and ERC-20 token balances).
- * L1 XTZ (TzKT) loads immediately from the tz1; the alias and token balances
- * fill in when ready. (No L2-XTZ row for Tezos accounts — the kernel's
- * AliasForwarder keeps it at ~0.)
+ * Home — the wallet's landing screen. A brand top bar (logo + Testnet badge,
+ * refresh + lock actions), the unified AccountHeader, the total XTZ balance with
+ * a hide toggle, Send/Receive quick actions, a faucet shortcut, then the asset
+ * list (native XTZ + registered ERC-20s) and an add-token affordance. All data
+ * comes from useWallet(); the pure tx/ components render it.
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import type { VaultStateUnlocked } from '@tezosx/wallet-core/shared/messages';
-import { accountCardVM } from '@tezosx/wallet-core/view-models/account-card-vm';
-import {
-  fetchL1XtzBalance,
-  fetchXtzBalance,
-  fetchErc20Balance,
-} from '@tezosx/wallet-core/adapters/tezos/tezos-balance-fetcher';
-import { listRegisteredTokens } from '@tezosx/wallet-core/use-cases/list-registered-tokens';
-import { mutezToXtz, weiToXtz, formatTokenAmount, shortAddr } from '@tezosx/wallet-core/shared/format';
-import { formatError } from '@tezosx/wallet-core/domain/error';
-import { deriveEvmAlias } from '@tezosx/relayer/utils/derive';
-import { tokenStore, evmAliasCache } from '../composition/wiring';
-import { connect } from '../composition/walletconnect-connect';
-import { Connections } from './Connections';
-import { colors } from '../theme';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { colors, fontSize, radius, space } from '../theme';
+import { XTZ, fmtXtz } from '../ui/format';
+import { Icon } from '../ui/icon';
+import { AccountHeader } from '../ui/tx/AccountHeader';
+import { AssetRow } from '../ui/tx/AssetRow';
+import { Badge } from '../ui/tx/Badge';
+import { IconBtn } from '../ui/tx/IconBtn';
+import { LogoMark } from '../ui/tx/LogoMark';
+import { useWallet } from '../wallet/context';
 
-interface TokenRow { symbol: string; amount: string; }
-
-export function Home({ state, onLock }: { state: VaultStateUnlocked; onLock: () => void }): React.JSX.Element {
-  // For a Tezos account the alias may arrive empty from the network-free Gate read.
-  const [alias, setAlias] = useState<string | null>(
-    state.kind === 'tezos' ? (state.evmAlias || null) : null,
-  );
-  const [xtz, setXtz] = useState<string | null>(null);
-  const [tokens, setTokens] = useState<TokenRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // WalletConnect: paste a dApp's wc: URI and pair. The incoming proposal is
-  // routed through the core dispatch and surfaced as the Approve modal (wired in
-  // App), so there's nothing to render inline here beyond the pairing status.
-  const [wcUri, setWcUri] = useState('');
-  const [wcStatus, setWcStatus] = useState<string | null>(null);
-  const [showConnections, setShowConnections] = useState(false);
-
-  const pair = useCallback(async (): Promise<void> => {
-    setWcStatus('Pairing…');
-    try {
-      await connect(wcUri);
-      setWcUri('');
-      setWcStatus('Paired — review the connection request.');
-    } catch (e) {
-      const f = formatError(e);
-      setWcStatus(`${f.title} — ${f.detail}`);
-    }
-  }, [wcUri]);
-
-  // Resolve the EVM alias asynchronously (Tezos only) — never blocks the screen.
-  useEffect(() => {
-    if (state.kind !== 'tezos' || alias != null) return;
-    let live = true;
-    deriveEvmAlias(state.tz1)
-      .then((a) => { if (live) { evmAliasCache.value = a; setAlias(a); } })
-      .catch(() => { /* alias stays pending; L1 balance still shows */ });
-    return () => { live = false; };
-  }, [state, alias]);
-
-  // L1 XTZ (Tezos) or L2 XTZ (EVM) — loads immediately, no alias needed.
-  const refreshXtz = useCallback(async (): Promise<void> => {
-    setLoading(true);
-    setError(null);
-    try {
-      setXtz(
-        state.kind === 'tezos'
-          ? mutezToXtz(await fetchL1XtzBalance(state.tz1))
-          : weiToXtz(await fetchXtzBalance(state.address)),
-      );
-    } catch (e) {
-      const f = formatError(e);
-      setError(`${f.title} — ${f.detail}`);
-    } finally {
-      setLoading(false);
-    }
-  }, [state]);
-
-  useEffect(() => { void refreshXtz(); }, [refreshXtz]);
-
-  // ERC-20 token balances need the alias; fetch once it resolves.
-  useEffect(() => {
-    if (state.kind !== 'tezos' || alias == null) return;
-    let live = true;
-    void (async () => {
-      try {
-        const registered = await listRegisteredTokens({ accountId: state.accountId }, { tokenStore });
-        const rows = await Promise.allSettled(
-          registered.map(async (t): Promise<TokenRow> => ({
-            symbol: t.symbol,
-            amount: formatTokenAmount(await fetchErc20Balance(t.address, alias), t.decimals),
-          })),
-        );
-        if (live) setTokens(rows.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : [])));
-      } catch { /* tokens are best-effort */ }
-    })();
-    return () => { live = false; };
-  }, [state, alias]);
-
-  const vm = accountCardVM(state.kind === 'tezos' ? { ...state, evmAlias: alias ?? '' } : state);
-
-  if (showConnections) return <Connections onClose={() => setShowConnections(false)} />;
+export function Home(): React.JSX.Element {
+  const ctx = useWallet();
+  const acc = ctx.activeAccount;
+  const [hidden, setHidden] = useState(false);
+  const bal = ctx.balances(acc.id);
+  const tokens = ctx.tokens(acc.id);
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>Wallet</Text>
-        <View style={styles.headerActions}>
-          <Pressable onPress={() => setShowConnections(true)}><Text style={styles.headerLink}>Connections</Text></Pressable>
-          <Pressable onPress={onLock}><Text style={styles.lock}>Lock</Text></Pressable>
+    <View style={styles.screen}>
+      <View style={styles.topbar}>
+        <View style={styles.brand}>
+          <LogoMark size={22} />
+          <Text style={styles.brandName}>Tezos X</Text>
+          <Badge variant="testnet">Testnet</Badge>
+        </View>
+        <View style={styles.grow} />
+        <View style={styles.actions}>
+          <IconBtn name="refresh" label="Refresh" onPress={() => ctx.toast('Balances refreshed')} />
+          <IconBtn name="lock" label="Lock" onPress={ctx.lock} />
         </View>
       </View>
 
-      <View style={styles.card}>
-        <Face chain={vm.primary.chain} label={vm.primary.label} address={vm.primary.address} />
-        {vm.secondary != null && (
-          <Face chain={vm.secondary.chain} label={vm.secondary.label} address={vm.secondary.address} />
-        )}
-      </View>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+        <AccountHeader account={acc} label={ctx.labelFor(acc)} onOpen={() => ctx.openSwitcher()} copyAddr={ctx.copy} />
 
-      <View style={styles.card}>
-        <Text style={styles.kicker}>Balance</Text>
-        {loading ? (
-          <ActivityIndicator color={colors.purple} />
-        ) : (
-          <>
-            <Text style={styles.balance}>{xtz ?? '—'} ꜩ</Text>
-            {tokens.map((t) => (
-              <Text key={t.symbol} style={styles.token}>{t.amount} {t.symbol}</Text>
-            ))}
-          </>
-        )}
-        {error != null && <Text style={styles.error}>{error}</Text>}
-      </View>
+        <View style={styles.balance}>
+          <Text style={styles.kicker}>Total balance</Text>
+          <View style={styles.num}>
+            <Text style={styles.numValue}>{hidden ? '••••••' : fmtXtz(bal.xtz)}</Text>
+            <Text style={styles.numUnit}>
+              {XTZ} XTZ
+            </Text>
+          </View>
+          <Pressable style={styles.hide} onPress={() => setHidden((h) => !h)}>
+            <Icon name={hidden ? 'eye-off' : 'eye'} size={13} color={colors.fgSubtle} />
+            <Text style={styles.hideText}>{hidden ? 'Show' : 'Hide'}</Text>
+          </Pressable>
+        </View>
 
-      <Pressable style={styles.refresh} disabled={loading} onPress={() => void refreshXtz()}>
-        <Text style={styles.refreshText}>Refresh</Text>
-      </Pressable>
+        <View style={styles.homeActions}>
+          <Pressable
+            style={({ pressed }) => [styles.action, pressed && styles.actionPressed]}
+            onPress={() => ctx.nav.push('send')}
+          >
+            <View style={styles.actionIco}>
+              <Icon name="arrow-up-right" size={16} color={colors.purpleText} />
+            </View>
+            <Text style={styles.actionLabel}>Send</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.action, pressed && styles.actionPressed]}
+            onPress={() => ctx.nav.push('receive')}
+          >
+            <View style={styles.actionIco}>
+              <Icon name="arrow-down-left" size={16} color={colors.purpleText} />
+            </View>
+            <Text style={styles.actionLabel}>Receive</Text>
+          </Pressable>
+        </View>
 
-      <View style={styles.card}>
-        <Text style={styles.kicker}>WalletConnect</Text>
-        <TextInput
-          style={styles.wcInput}
-          value={wcUri}
-          onChangeText={setWcUri}
-          placeholder="Paste a wc: URI"
-          placeholderTextColor={colors.fgMuted}
-          autoCapitalize="none"
-          autoCorrect={false}
-          multiline
-        />
         <Pressable
-          style={[styles.refresh, wcUri.trim() === '' && styles.refreshDisabled]}
-          disabled={wcUri.trim() === ''}
-          onPress={() => void pair()}
+          style={({ pressed }) => [styles.faucet, pressed && styles.faucetPressed]}
+          onPress={() => ctx.toast('Opening faucet…')}
         >
-          <Text style={styles.refreshText}>Connect</Text>
+          <Icon name="info" size={13} color={colors.fgMuted} />
+          <Text style={styles.faucetText}>Need test XTZ? Faucet</Text>
+          <Icon name="external-link" size={12} color={colors.fgMuted} />
         </Pressable>
-        {wcStatus != null && <Text style={styles.wcStatus}>{wcStatus}</Text>}
-      </View>
-    </ScrollView>
-  );
-}
 
-function Face({ chain, label, address }: { chain: 'l1' | 'l2'; label: string; address: string }): React.JSX.Element {
-  return (
-    <View style={styles.face}>
-      <View style={[styles.pill, { backgroundColor: chain === 'l1' ? colors.purple : colors.cyan }]}>
-        <Text style={styles.pillText}>{chain === 'l1' ? 'L1' : 'L2'}</Text>
-      </View>
-      <View>
-        <Text style={styles.faceLabel}>{label}</Text>
-        <Text style={styles.faceAddr}>{address === '' ? 'resolving…' : shortAddr(address)}</Text>
-      </View>
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionTitle}>Assets</Text>
+        </View>
+        <AssetRow
+          asset={{ kind: 'xtz', symbol: 'XTZ' }}
+          balance={fmtXtz(bal.xtz)}
+          hidden={hidden}
+          onPress={() => ctx.nav.push('receive')}
+        />
+        {tokens.map((t) => (
+          <AssetRow
+            key={t.address}
+            asset={{ kind: 'token', symbol: t.symbol }}
+            balance={fmtXtz(bal.tokens[t.address.toLowerCase()] ?? '0', 2, 2)}
+            hidden={hidden}
+            onPress={() => ctx.nav.push('tokens')}
+          />
+        ))}
+        <Pressable
+          style={({ pressed }) => [styles.addToken, pressed && styles.addTokenPressed]}
+          onPress={() => ctx.nav.push('addToken')}
+        >
+          <Icon name="plus" size={15} color={colors.fgMuted} />
+          <Text style={styles.addTokenText}>Add token</Text>
+        </Pressable>
+        <View style={styles.bottomPad} />
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, paddingTop: 72, gap: 16 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  headerLink: { color: colors.cyan, fontSize: 15, fontWeight: '600' },
-  title:     { color: colors.fg, fontSize: 24, fontWeight: '700' },
-  lock:      { color: colors.fgMuted, fontSize: 15 },
-  card:      { backgroundColor: colors.surface, borderRadius: 12, padding: 16, gap: 12 },
-  face:      { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  pill:      { borderRadius: 9999, paddingVertical: 3, paddingHorizontal: 8 },
-  pillText:  { color: colors.bg, fontSize: 12, fontWeight: '700' },
-  faceLabel: { color: colors.fg, fontSize: 15, fontWeight: '600' },
-  faceAddr:  { color: colors.fgMuted, fontSize: 13 },
-  kicker:    { color: colors.fgMuted, fontSize: 11, textTransform: 'uppercase' },
-  balance:   { color: colors.fg, fontSize: 32, fontWeight: '700' },
-  token:     { color: colors.fg, fontSize: 16 },
-  error:     { color: colors.danger, fontSize: 14 },
-  refresh:   { borderColor: colors.border, borderWidth: 1, borderRadius: 8, padding: 14, alignItems: 'center' },
-  refreshDisabled: { opacity: 0.4 },
-  refreshText: { color: colors.fg, fontSize: 15, fontWeight: '600' },
-  wcInput:   { color: colors.fg, fontSize: 13, borderColor: colors.border, borderWidth: 1, borderRadius: 8, padding: 12, minHeight: 56 },
-  wcStatus:  { color: colors.fgMuted, fontSize: 13 },
+  screen: { flex: 1, minHeight: 0, backgroundColor: colors.bg },
+  topbar: {
+    height: 54,
+    paddingLeft: 12,
+    paddingRight: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.bg,
+  },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: 9, marginLeft: 2 },
+  brandName: { fontSize: fontSize.md, fontWeight: '600', color: colors.fg },
+  grow: { flex: 1 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  scroll: { flex: 1, minHeight: 0 },
+
+  balance: { paddingTop: 22, paddingHorizontal: space[5], paddingBottom: 6, alignItems: 'center' },
+  kicker: {
+    fontSize: 11,
+    letterSpacing: 0.99,
+    textTransform: 'uppercase',
+    color: colors.fgSubtle,
+    fontWeight: '600',
+  },
+  num: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 8, marginTop: 8 },
+  numValue: {
+    fontSize: fontSize['4xl'],
+    fontWeight: '600',
+    letterSpacing: -1.2,
+    color: colors.fg,
+    fontVariant: ['tabular-nums'],
+  },
+  numUnit: { fontSize: fontSize.xl, color: colors.fgMuted, fontWeight: '500' },
+  hide: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  hideText: { color: colors.fgSubtle, fontSize: fontSize.xs },
+
+  homeActions: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: space[4],
+    paddingTop: 14,
+    paddingBottom: 6,
+  },
+  action: {
+    flex: 1,
+    height: 60,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  actionPressed: { backgroundColor: colors.surface2 },
+  actionIco: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.purpleBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionLabel: { fontSize: fontSize.md, fontWeight: '600', color: colors.fg },
+
+  faucet: {
+    marginTop: 12,
+    marginHorizontal: 16,
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  faucetPressed: { backgroundColor: colors.surface3 },
+  faucetText: { color: colors.fgMuted, fontSize: fontSize.sm },
+
+  sectionHead: {
+    paddingHorizontal: space[5],
+    paddingTop: space[5],
+    paddingBottom: space[2],
+  },
+  sectionTitle: {
+    fontSize: 11,
+    letterSpacing: 0.99,
+    textTransform: 'uppercase',
+    color: colors.fgSubtle,
+    fontWeight: '600',
+  },
+
+  addToken: {
+    marginTop: 10,
+    marginHorizontal: space[5],
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    paddingVertical: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  addTokenPressed: { backgroundColor: colors.surface2 },
+  addTokenText: { color: colors.fgMuted, fontSize: fontSize.sm, fontWeight: '500' },
+  bottomPad: { height: 20 },
 });

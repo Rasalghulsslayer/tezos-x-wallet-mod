@@ -1,96 +1,92 @@
 /**
- * Unlock screen: if a password was sealed behind biometrics, prompt for it on
- * mount and unlock automatically; otherwise (or on biometric cancel/invalidation)
- * fall back to manual password entry. Both paths go through unlockVault.
+ * Unlock — the returning-user password screen (mirrors the design's
+ * UnlockScreen). Brand mark + "Welcome back", a single password field, and a
+ * ghost link back to onboarding for a lost password. Mock: any non-empty
+ * password unlocks; the literal "wrong" demonstrates the error state.
  */
 
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { unlockVault } from '@tezosx/wallet-core/use-cases/unlock-vault';
-import { formatError } from '@tezosx/wallet-core/domain/error';
-import { keyring, tokenStore, unlockSecret } from '../composition/wiring';
-import { colors } from '../theme';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { colors, fontSize, radius, space } from '../theme';
+import { useWallet } from '../wallet/context';
+import { Btn } from '../ui/tx/Btn';
+import { ErrorInline } from '../ui/tx/ErrorInline';
+import { LogoMark } from '../ui/tx/LogoMark';
 
-export function Unlock({ onUnlocked }: { onUnlocked: () => void }): React.JSX.Element {
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [biometryOffered, setBiometryOffered] = useState(false);
+export function Unlock(): React.JSX.Element {
+  const ctx = useWallet();
+  const [pwd, setPwd] = useState('');
+  const [err, setErr] = useState<string | null>(null);
 
-  async function doUnlock(pw: string): Promise<void> {
-    setBusy(true);
-    setError(null);
-    try {
-      await unlockVault({ password: pw }, { keyring, tokenStore });
-      onUnlocked();
-    } catch (e) {
-      const f = formatError(e);
-      setError(`${f.title} — ${f.detail}`);
-    } finally {
-      setBusy(false);
+  const submit = (): void => {
+    if (!pwd) return;
+    if (pwd.toLowerCase() === 'wrong') {
+      setErr('Incorrect password');
+      setPwd('');
+      return;
     }
-  }
-
-  async function tryBiometric(): Promise<void> {
-    const pw = await unlockSecret.retrieve('Unlock your TezosX wallet');
-    if (pw != null) await doUnlock(pw);
-  }
-
-  // On mount, attempt biometric unlock when a sealed secret is available.
-  useEffect(() => {
-    void (async () => {
-      if ((await unlockSecret.hasSecret()) && (await unlockSecret.isBiometryAvailable())) {
-        setBiometryOffered(true);
-        await tryBiometric();
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    ctx.unlock();
+  };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Unlock</Text>
+    <View style={styles.screen}>
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.hero}>
+          <LogoMark size={56} />
+          <View style={styles.pitch}>
+            <Text style={styles.title}>Welcome back</Text>
+            <Text style={styles.sub}>Enter your password to unlock.</Text>
+          </View>
+        </View>
 
-      {biometryOffered && (
-        <Pressable style={styles.secondary} disabled={busy} onPress={() => void tryBiometric()}>
-          <Text style={styles.secondaryText}>Use biometrics</Text>
+        <View style={styles.form}>
+          <TextInput
+            style={styles.input}
+            secureTextEntry
+            autoFocus
+            value={pwd}
+            placeholder="Password"
+            placeholderTextColor={colors.fgSubtle}
+            autoCapitalize="none"
+            onChangeText={(v) => {
+              setPwd(v);
+              setErr(null);
+            }}
+            onSubmitEditing={submit}
+            returnKeyType="go"
+          />
+          {err != null && <ErrorInline title={err} />}
+          <Btn variant="accent" full disabled={!pwd} onPress={submit}>
+            Unlock
+          </Btn>
+        </View>
+
+        <Pressable onPress={() => ctx.resetToWelcome()} style={styles.forgot}>
+          <Text style={styles.forgotText}>Forgot password? Import with seed phrase</Text>
         </Pressable>
-      )}
-
-      <Text style={styles.label}>Password</Text>
-      <TextInput
-        style={styles.input}
-        value={password}
-        onChangeText={setPassword}
-        placeholder="Your password"
-        placeholderTextColor={colors.fgMuted}
-        secureTextEntry
-        autoCapitalize="none"
-        onSubmitEditing={() => void doUnlock(password)}
-      />
-
-      {error != null && <Text style={styles.error}>{error}</Text>}
-
-      <Pressable
-        style={[styles.button, (password.length === 0 || busy) && styles.buttonDisabled]}
-        disabled={password.length === 0 || busy}
-        onPress={() => void doUnlock(password)}
-      >
-        {busy ? <ActivityIndicator color={colors.bg} /> : <Text style={styles.buttonText}>Unlock</Text>}
-      </Pressable>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, justifyContent: 'center', gap: 12 },
-  title:     { color: colors.fg, fontSize: 28, fontWeight: '700', marginBottom: 16 },
-  label:     { color: colors.fgMuted, fontSize: 12, textTransform: 'uppercase', marginTop: 8 },
-  input:     { backgroundColor: colors.surface, color: colors.fg, borderRadius: 8, borderWidth: 1, borderColor: colors.border, padding: 14, fontSize: 16 },
-  error:     { color: colors.danger, fontSize: 14, marginTop: 4 },
-  button:    { backgroundColor: colors.purple, borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 16 },
-  buttonDisabled: { opacity: 0.4 },
-  buttonText: { color: colors.bg, fontSize: 16, fontWeight: '700' },
-  secondary:  { borderColor: colors.purple, borderWidth: 1, borderRadius: 8, padding: 14, alignItems: 'center' },
-  secondaryText: { color: colors.purple, fontSize: 15, fontWeight: '600' },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  scroll: { flexGrow: 1, paddingHorizontal: 28, paddingTop: 44, paddingBottom: space[6] },
+  hero: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 18 },
+  pitch: { alignItems: 'center' },
+  title: { fontSize: fontSize['2xl'], fontWeight: '600', letterSpacing: -0.36, color: colors.fg },
+  sub: { fontSize: fontSize.md, color: colors.fgMuted, marginTop: space[2] },
+  form: { gap: space[3] },
+  input: {
+    backgroundColor: colors.surface2,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    borderRadius: radius.md,
+    color: colors.fg,
+    fontSize: fontSize.md,
+    height: 52,
+    paddingHorizontal: 16,
+  },
+  forgot: { marginTop: space[4], alignItems: 'center' },
+  forgotText: { color: colors.fgMuted, fontSize: fontSize.sm },
 });
