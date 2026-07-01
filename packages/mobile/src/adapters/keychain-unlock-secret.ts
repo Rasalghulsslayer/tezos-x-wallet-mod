@@ -24,6 +24,14 @@ export interface UnlockSecretStore {
   seal(password: string): Promise<void>;
   /** Prompt biometrics and return the password, or null if unavailable/cancelled/invalidated. */
   retrieve(promptTitle: string): Promise<string | null>;
+  /**
+   * Prompt biometrics purely to confirm the user is present (e.g. before signing).
+   * Returns true only if the OS released the sealed item — i.e. the biometric
+   * check passed. Never exposes the password to the caller. Fails closed
+   * (returns false) if biometrics are unavailable, cancelled, or no secret is
+   * sealed, so a caller can require a positive confirmation before signing.
+   */
+  confirmBiometric(promptTitle: string): Promise<boolean>;
   /** Remove the sealed secret. */
   clear(): Promise<void>;
 }
@@ -56,6 +64,20 @@ export class KeychainUnlockSecret implements UnlockSecretStore {
     } catch {
       // Cancelled, no hardware, or secret invalidated by a biometric change.
       return null;
+    }
+  }
+
+  async confirmBiometric(promptTitle: string): Promise<boolean> {
+    try {
+      // Accessing the biometry-gated item forces a Face ID / Touch ID prompt;
+      // we only care that it succeeded, and discard the released password.
+      const creds = await Keychain.getGenericPassword({
+        service:              SERVICE,
+        authenticationPrompt: { title: promptTitle },
+      });
+      return creds !== false;
+    } catch {
+      return false;
     }
   }
 

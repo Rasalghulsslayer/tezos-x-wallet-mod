@@ -16,9 +16,20 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
   approval the core resolves the account's EVM alias and writes the per-origin
   session, and the WC session is approved declaring `eip155:128064` (Tezos X EVM,
   previewnet) with that alias; `eth_accounts` is answered from the session over
-  the same dispatch. Connect-first: signing methods are intentionally not offered
-  yet (a later effort, with biometrics per signature). Pairing is by pasted URI
-  (no camera); the dApp must be open while pairing (no background reconnect yet).
+  the same dispatch. Pairing is by pasted URI (no camera); the dApp must be open
+  while pairing (no background reconnect yet).
+- WalletConnect signing: a connected dApp can request `eth_sendTransaction`. For
+  a tz1 account this routes through the NAC gateway (cross-runtime L1 → L2) over
+  the same core dispatch; the Approve modal shows the dApp's EVM intent (to /
+  amount) alongside what actually gets signed (the Michelson gateway call and the
+  mutez debited), and the approval is gated behind a per-signature biometric
+  confirmation (Face ID / Touch ID via the keystore). `personal_sign` is not
+  offered on a tz1 account — the runtime can't produce one — so it is omitted
+  from the session methods rather than surfaced and rejected.
+- A single-chain approval strategy for WalletConnect: the wallet offers
+  `eip155:128064` (its only chain) directly when a dApp doesn't request it,
+  rather than reconciling to nothing; a mainnet-only dApp with hard requirements
+  still declines on its side.
 - The mobile composition now builds the full `SwDeps` (container cache, approval
   queue with a mobile `ApprovalPresenter`, provider-event broadcast over WC), so
   the dApp surface reuses the core routing rather than a parallel implementation.

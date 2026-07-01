@@ -37,14 +37,19 @@ import {
 import { deps, cryptoPort } from './wiring';
 
 /**
- * What the wallet offers over a connected session, connect-first:
- * - `eth_accounts` only — the one read method the core answers from the session
- *   store without a warm Container (signing is a later effort, with biometrics
- *   per signature, so eth_sendTransaction / personal_sign are deliberately
- *   omitted; the chain itself is conveyed by `chains`, so eth_chainId-over-WC
- *   isn't needed and would require a Container mobile doesn't keep warm).
+ * What the wallet offers over a connected session:
+ * - `eth_accounts` — the read method the core answers from the session store.
+ * - `eth_sendTransaction` — a Tezos (tz1) account routes this through the NAC
+ *   gateway (cross-runtime L1 → L2); dispatch builds the Michelson call ahead of
+ *   approval and the Approve modal shows both the dApp intent and what actually
+ *   gets signed, gated by a biometric confirmation.
+ *
+ * `personal_sign` is intentionally omitted: a tz1 account can't produce an EVM
+ * personal_sign (the RelayerProvider rejects it 4200), so offering it would be
+ * dishonest. The chain is conveyed by `chains`, so eth_chainId-over-WC isn't
+ * offered (it would need a Container the mobile side doesn't keep warm).
  */
-const SUPPORTED_METHODS = ['eth_accounts'];
+const SUPPORTED_METHODS = ['eth_accounts', 'eth_sendTransaction'];
 const SUPPORTED_EVENTS  = ['accountsChanged', 'chainChanged'];
 
 /** Boot WalletConnect and route its events through the core dispatch. Idempotent
