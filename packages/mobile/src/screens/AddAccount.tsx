@@ -9,6 +9,8 @@
 
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { newMnemonic } from '@tezosx/wallet-core/shared/seed';
+import { randomEvmPrivateKey } from '@tezosx/wallet-core/shared/evm-signing';
 import { colors, fontSize, font, radius } from '../theme';
 import { Icon } from '../ui/icon';
 import { Badge } from '../ui/tx/Badge';
@@ -38,13 +40,13 @@ const CARDS: Pick[] = [
   { kind: 'evm', source: 'import', title: 'EVM account', sub: 'Paste a 0x-prefixed or raw hex private key.', specs: [['Accepts', '0x… hex'], ['Yields', '0x address']] },
 ];
 
-const FRESH_MNEMONIC = 'ranch puzzle cabin oxygen mimic drama fossil quantum ladder harbor slope violet';
-const FRESH_KEY = '0x3c8a1f…9e0b4d3927a5f6180ce2d4b91a7c3e5f0';
-
 export function AddAccount(): React.JSX.Element {
   const ctx = useWallet();
   const [stage, setStage] = useState<Stage>('pick');
   const [pick, setPick] = useState<Pick | null>(null);
+  // Freshly generated for the reveal preview (24-word mnemonic, like the extension).
+  const [freshMnemonic] = useState(() => newMnemonic());
+  const [freshKey] = useState(() => randomEvmPrivateKey());
   const [revealed, setRevealed] = useState(false);
   const [ack, setAck] = useState(false);
   const [importVal, setImportVal] = useState('');
@@ -132,7 +134,7 @@ export function AddAccount(): React.JSX.Element {
                 </Text>
                 <View style={styles.secretWrap}>
                   <View style={styles.secretCard}>
-                    <Text style={styles.secretText}>{isTezos ? FRESH_MNEMONIC : FRESH_KEY}</Text>
+                    <Text style={styles.secretText}>{isTezos ? freshMnemonic : freshKey}</Text>
                   </View>
                   {!revealed && (
                     <Pressable style={styles.seedOverlay} onPress={() => setRevealed(true)}>
