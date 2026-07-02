@@ -16,10 +16,11 @@ import { AccountHeader } from '../ui/tx/AccountHeader';
 import { ErrorInline } from '../ui/tx/ErrorInline';
 import { LinkRow } from '../ui/tx/LinkRow';
 import { Sheet } from '../ui/tx/Sheet';
+import { exportSecret } from '@tezosx/wallet-core/use-cases/export-secret';
+import { formatError, type FormattedError } from '@tezosx/wallet-core/domain/error';
 import { useWallet } from '../wallet/context';
-import type { MockAccount } from '../mocks';
-
-const EVM_SECRET = '0x8f2ac41b3e9d7205a6f1c8e0b4d3927a5f6180ce2d4b91a7c3e5f0d2a8b64719';
+import { keyring } from '../composition/wiring';
+import type { ViewAccount } from '../wallet/view-account';
 
 export function Settings(): React.JSX.Element {
   const ctx = useWallet();
@@ -86,26 +87,33 @@ function SectionHead({ label }: { label: string }): React.JSX.Element {
   );
 }
 
-function RevealSheet({ account, onClose }: { account: MockAccount; onClose: () => void }): React.JSX.Element {
+function RevealSheet({ account, onClose }: { account: ViewAccount; onClose: () => void }): React.JSX.Element {
   const [pwd, setPwd] = useState('');
-  const [shown, setShown] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [secret, setSecret] = useState<string | null>(null);
+  const [err, setErr] = useState<FormattedError | null>(null);
+  const [busy, setBusy] = useState(false);
   const isEvm = account.kind === 'evm';
-  const secret = isEvm ? EVM_SECRET : (account.seed ?? '');
 
   const submit = (): void => {
-    if (pwd.toLowerCase() === 'wrong') {
-      setErr('Incorrect password');
-      return;
-    }
-    if (pwd.length < 1) return;
-    setShown(true);
+    if (pwd.length === 0 || busy) return;
+    setErr(null);
+    setBusy(true);
+    void (async () => {
+      try {
+        const result = await exportSecret({ password: pwd, accountId: account.id }, { keyring });
+        setSecret(result.value);
+      } catch (e) {
+        setErr(formatError(e));
+      } finally {
+        setBusy(false);
+      }
+    })();
   };
 
   return (
     <Sheet title="Reveal secret" onClose={onClose}>
       <View style={styles.revealBody}>
-        {!shown ? (
+        {secret == null ? (
           <>
             <Text style={styles.revealIntro}>
               Enter your password to reveal the {isEvm ? 'private key' : 'recovery phrase'} for{' '}
@@ -124,8 +132,8 @@ function RevealSheet({ account, onClose }: { account: MockAccount; onClose: () =
                 setErr(null);
               }}
             />
-            {err != null && <ErrorInline title={err} />}
-            <Btn variant="accent" full disabled={pwd.length === 0} onPress={submit} style={styles.revealBtn}>
+            {err != null && <ErrorInline title={err.title} detail={err.detail} />}
+            <Btn variant="accent" full disabled={pwd.length === 0 || busy} onPress={submit} style={styles.revealBtn}>
               Reveal
             </Btn>
           </>

@@ -20,7 +20,7 @@ export function Receive(_props: { params?: Record<string, unknown> } = {}): Reac
   const acc = ctx.activeAccount;
   const isEvm = acc.kind === 'evm';
   const [runtime, setRuntime] = useState<'l1' | 'l2'>('l1');
-  const addr = isEvm ? acc.address : runtime === 'l1' ? acc.tz1 : acc.evmAlias;
+  const addr = (isEvm ? acc.address : runtime === 'l1' ? acc.tz1 : acc.evmAlias) ?? '';
 
   return (
     <View style={styles.screen}>

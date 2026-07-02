@@ -15,6 +15,7 @@ import { Modal, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-na
 import { colors, fontSize, radius, safe, space } from './src/theme';
 import { Icon } from './src/ui/icon';
 import { ExperimentalBanner } from './src/ui/tx/ExperimentalBanner';
+import { LogoMark } from './src/ui/tx/LogoMark';
 import { TabBar, type TabId } from './src/ui/tx/TabBar';
 import { WalletProvider, useWallet, type StackName, type WalletContextValue } from './src/wallet/context';
 import { Home } from './src/screens/Home';
@@ -100,8 +101,17 @@ function Shell(): React.JSX.Element {
   const screenKey =
     ctx.vault + ctx.nav.tab + ctx.stack.map((s) => s.name).join('/') + ctx.navDir;
 
+  // Boot splash until the network-free readState resolves the initial vault view.
+  if (!ctx.booted) {
+    return (
+      <View style={[styles.root, styles.splash]}>
+        <LogoMark size={56} />
+      </View>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={styles.root} onTouchStart={() => ctx.touch()}>
       <ExperimentalBanner />
       <View style={styles.screenHost} key={screenKey}>
         <ScreenHost />
@@ -141,7 +151,7 @@ function Shell(): React.JSX.Element {
 
 export default function App(): React.JSX.Element {
   return (
-    <WalletProvider initialVault="unlocked">
+    <WalletProvider>
       <Shell />
     </WalletProvider>
   );
@@ -151,6 +161,10 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.bg,
+  },
+  splash: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   screenHost: {
     flex: 1,

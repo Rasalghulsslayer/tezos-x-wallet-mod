@@ -1,31 +1,46 @@
 /**
  * Unlock — the returning-user password screen (mirrors the design's
  * UnlockScreen). Brand mark + "Welcome back", a single password field, and a
- * ghost link back to onboarding for a lost password. Mock: any non-empty
- * password unlocks; the literal "wrong" demonstrates the error state.
+ * ghost link back to onboarding for a lost password. Biometric-first (the sealed
+ * password is released by Face ID / Touch ID), with a password fallback; errors
+ * surface through formatError.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { formatError, type FormattedError } from '@tezosx/wallet-core/domain/error';
 import { colors, fontSize, radius, space } from '../theme';
 import { useWallet } from '../wallet/context';
 import { Btn } from '../ui/tx/Btn';
 import { ErrorInline } from '../ui/tx/ErrorInline';
+import { Icon } from '../ui/icon';
 import { LogoMark } from '../ui/tx/LogoMark';
 
 export function Unlock(): React.JSX.Element {
   const ctx = useWallet();
   const [pwd, setPwd] = useState('');
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<FormattedError | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // Prompt biometrics on mount when a sealed secret is available.
+  useEffect(() => {
+    if (ctx.biometricsAvailable) void ctx.unlockBiometric().catch(() => { /* fall back to password */ });
+  }, [ctx.biometricsAvailable]);
 
   const submit = (): void => {
-    if (!pwd) return;
-    if (pwd.toLowerCase() === 'wrong') {
-      setErr('Incorrect password');
-      setPwd('');
-      return;
-    }
-    ctx.unlock();
+    if (!pwd || busy) return;
+    setErr(null);
+    setBusy(true);
+    void (async () => {
+      try {
+        await ctx.unlock(pwd);
+      } catch (e) {
+        setErr(formatError(e));
+        setPwd('');
+      } finally {
+        setBusy(false);
+      }
+    })();
   };
 
   return (
@@ -55,10 +70,16 @@ export function Unlock(): React.JSX.Element {
             onSubmitEditing={submit}
             returnKeyType="go"
           />
-          {err != null && <ErrorInline title={err} />}
-          <Btn variant="accent" full disabled={!pwd} onPress={submit}>
+          {err != null && <ErrorInline title={err.title} detail={err.detail} />}
+          <Btn variant="accent" full disabled={!pwd || busy} onPress={submit}>
             Unlock
           </Btn>
+          {ctx.biometricsAvailable && (
+            <Btn variant="ghost" full disabled={busy} onPress={() => void ctx.unlockBiometric().catch(() => {})}>
+              <Icon name="lock" size={15} color={colors.fgMuted} />
+              <Text style={styles.bioText}>Use biometrics</Text>
+            </Btn>
+          )}
         </View>
 
         <Pressable onPress={() => ctx.resetToWelcome()} style={styles.forgot}>
@@ -87,6 +108,7 @@ const styles = StyleSheet.create({
     height: 52,
     paddingHorizontal: 16,
   },
+  bioText: { color: colors.fgMuted, fontSize: fontSize.md, fontWeight: '600' },
   forgot: { marginTop: space[4], alignItems: 'center' },
   forgotText: { color: colors.fgMuted, fontSize: fontSize.sm },
 });

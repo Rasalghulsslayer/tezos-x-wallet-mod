@@ -10,6 +10,9 @@
 
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { newMnemonic } from '@tezosx/wallet-core/shared/seed';
+import { randomEvmPrivateKey } from '@tezosx/wallet-core/shared/evm-signing';
+import { formatError } from '@tezosx/wallet-core/domain/error';
 import { colors, fontSize, font, radius, space } from '../theme';
 import { useWallet } from '../wallet/context';
 import { Btn } from '../ui/tx/Btn';
@@ -21,9 +24,6 @@ import { TopBar } from '../ui/tx/TopBar';
 
 type Stage = 'intro' | 'reveal' | 'confirm' | 'password';
 
-const SEED_PHRASE =
-  'harbor slope violet ranch puzzle cabin oxygen mimic drama fossil quantum ladder';
-const PRIVKEY = '0x8f2a…c41b3e9d7205a6f1c8e0b4d3927a5f6180ce2d4';
 const POSITIONS = [3, 7, 11] as const;
 
 export function Create({ params }: { params: Record<string, unknown> }): React.JSX.Element {
@@ -38,8 +38,12 @@ export function Create({ params }: { params: Record<string, unknown> }): React.J
   const [pwd, setPwd] = useState('');
   const [confirm, setConfirm] = useState('');
   const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const words = useMemo(() => SEED_PHRASE.split(' '), []);
+  // Freshly generated on first render; only persisted (encrypted) on submit.
+  const [mnemonic] = useState(() => newMnemonic());
+  const [privkey] = useState(() => randomEvmPrivateKey());
+  const words = useMemo(() => mnemonic.split(' '), [mnemonic]);
   const allCorrect = POSITIONS.every(
     (p, i) => cv[i].trim().toLowerCase() === words[p - 1],
   );
@@ -53,10 +57,21 @@ export function Create({ params }: { params: Record<string, unknown> }): React.J
   };
 
   const submit = (): void => {
+    if (busy) return;
     setErr(null);
-    if (pwd.length < 8) return setErr('Password must be at least 8 characters');
-    if (pwd !== confirm) return setErr('Passwords do not match');
-    ctx.finishOnboarding(isEvm ? 'acc-3' : 'acc-1');
+    if (pwd.length < 8) { setErr('Password must be at least 8 characters'); return; }
+    if (pwd !== confirm) { setErr('Passwords do not match'); return; }
+    setBusy(true);
+    void (async () => {
+      try {
+        if (isEvm) await ctx.importWallet({ source: 'evm-privkey', privateKey: privkey, password: pwd });
+        else await ctx.createTezosWallet(mnemonic, pwd);
+      } catch (e) {
+        setErr(formatError(e).detail);
+      } finally {
+        setBusy(false);
+      }
+    })();
   };
 
   const title: Record<Stage, string> = {
@@ -157,7 +172,7 @@ export function Create({ params }: { params: Record<string, unknown> }): React.J
               <>
                 <Text style={styles.lead}>Your fresh EVM private key. Store it somewhere safe.</Text>
                 <View style={styles.keyCard}>
-                  <Text style={styles.keyText}>{PRIVKEY}</Text>
+                  <Text style={styles.keyText}>{privkey}</Text>
                 </View>
                 <Text style={styles.hint}>
                   The address is derived from this key. It never leaves this device.
@@ -205,6 +220,7 @@ export function Create({ params }: { params: Record<string, unknown> }): React.J
           confirm={confirm}
           setConfirm={setConfirm}
           err={err}
+          busy={busy}
           submitLabel="Open wallet"
           onSubmit={submit}
         />
@@ -220,6 +236,7 @@ function PasswordStage({
   confirm,
   setConfirm,
   err,
+  busy,
   submitLabel,
   onSubmit,
 }: {
@@ -228,6 +245,7 @@ function PasswordStage({
   confirm: string;
   setConfirm: (v: string) => void;
   err: string | null;
+  busy: boolean;
   submitLabel: string;
   onSubmit: () => void;
 }): React.JSX.Element {
@@ -266,7 +284,7 @@ function PasswordStage({
         </View>
       </ScrollView>
       <View style={styles.actionBar}>
-        <Btn variant="accent" full disabled={!pwd || !confirm} onPress={onSubmit}>
+        <Btn variant="accent" full disabled={!pwd || !confirm || busy} onPress={onSubmit}>
           {submitLabel}
         </Btn>
       </View>

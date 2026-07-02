@@ -9,7 +9,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { colors, fontSize, radius } from '../../theme';
-import type { MockAccount } from '../../mocks';
+import type { ViewAccount } from '../../wallet/view-account';
 import { Icon } from '../icon';
 import { Identicon } from './Identicon';
 import { AddrRow } from './AddrRow';
@@ -20,7 +20,7 @@ export function AccountHeader({
   onOpen,
   copyAddr,
 }: {
-  account: MockAccount;
+  account: ViewAccount;
   label: string;
   onOpen: () => void;
   copyAddr?: (addr: string) => void;
@@ -31,7 +31,7 @@ export function AccountHeader({
     <Pressable style={styles.card} onPress={onOpen}>
       <AccentBar runtime={isEvm ? 'l2' : null} />
       <View style={styles.top}>
-        <Identicon seed={account.id} size={40} />
+        <Identicon seed={account.identitySeed} size={40} />
         <View style={styles.name}>
           <Text style={styles.nameText} numberOfLines={1}>
             {label}
@@ -51,11 +51,11 @@ export function AccountHeader({
       </View>
       <View style={styles.addrs}>
         {isEvm ? (
-          <AddrRow chain="l2" addr={account.address} copyAddr={copyAddr} />
+          <AddrRow chain="l2" addr={account.address ?? ''} copyAddr={copyAddr} />
         ) : (
           <>
-            <AddrRow chain="l1" addr={account.tz1} copyAddr={copyAddr} />
-            <AddrRow chain="l2" addr={account.evmAlias} copyAddr={copyAddr} />
+            <AddrRow chain="l1" addr={account.tz1 ?? ''} copyAddr={copyAddr} />
+            <AddrRow chain="l2" addr={account.evmAlias ?? ''} copyAddr={copyAddr} />
           </>
         )}
       </View>

@@ -8,6 +8,7 @@
 
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { formatError } from '@tezosx/wallet-core/domain/error';
 import { colors, fontSize, font, radius, space } from '../theme';
 import { useWallet } from '../wallet/context';
 import { Btn } from '../ui/tx/Btn';
@@ -24,15 +25,27 @@ export function Import({ params }: { params: Record<string, unknown> }): React.J
   const [pwd, setPwd] = useState('');
   const [confirm, setConfirm] = useState('');
   const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const submit = (): void => {
+    if (busy) return;
     setErr(null);
-    if (secret.trim().length < 8) {
-      return setErr(isEvm ? 'Enter a valid private key' : 'Enter your recovery phrase');
-    }
-    if (pwd.length < 8) return setErr('Password must be at least 8 characters');
-    if (pwd !== confirm) return setErr('Passwords do not match');
-    ctx.finishOnboarding(isEvm ? 'acc-3' : 'acc-1');
+    const value = secret.trim();
+    if (value.length < 8) { setErr(isEvm ? 'Enter a valid private key' : 'Enter your recovery phrase'); return; }
+    if (pwd.length < 8) { setErr('Password must be at least 8 characters'); return; }
+    if (pwd !== confirm) { setErr('Passwords do not match'); return; }
+    setBusy(true);
+    void (async () => {
+      try {
+        if (isEvm) await ctx.importWallet({ source: 'evm-privkey', privateKey: value, password: pwd });
+        else if (mode === 'mnemonic') await ctx.importWallet({ source: 'mnemonic', mnemonic: value, password: pwd });
+        else await ctx.importWallet({ source: 'edsk', edsk: value, password: pwd });
+      } catch (e) {
+        setErr(formatError(e).detail);
+      } finally {
+        setBusy(false);
+      }
+    })();
   };
 
   const lead = isEvm
@@ -108,7 +121,7 @@ export function Import({ params }: { params: Record<string, unknown> }): React.J
       </ScrollView>
 
       <View style={styles.actionBar}>
-        <Btn variant="accent" full onPress={submit}>
+        <Btn variant="accent" full disabled={busy} onPress={submit}>
           Import wallet
         </Btn>
       </View>

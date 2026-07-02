@@ -14,7 +14,7 @@ import { Badge } from '../ui/tx/Badge';
 import { Identicon } from '../ui/tx/Identicon';
 import { Sheet } from '../ui/tx/Sheet';
 import { useWallet } from '../wallet/context';
-import type { MockAccount } from '../mocks';
+import type { ViewAccount } from '../wallet/view-account';
 
 export function AccountSwitcher(): React.JSX.Element {
   const ctx = useWallet();
@@ -43,7 +43,7 @@ export function AccountSwitcher(): React.JSX.Element {
   );
 }
 
-function SwitcherRow({ account, active }: { account: MockAccount; active: boolean }): React.JSX.Element {
+function SwitcherRow({ account, active }: { account: ViewAccount; active: boolean }): React.JSX.Element {
   const ctx = useWallet();
   const isEvm = account.kind === 'evm';
 
@@ -55,7 +55,7 @@ function SwitcherRow({ account, active }: { account: MockAccount; active: boolea
         ctx.closeSwitcher();
       }}
     >
-      <Identicon seed={account.id} size={40} ring={isEvm ? 'l2' : 'l1'} />
+      <Identicon seed={account.identitySeed} size={40} ring={isEvm ? 'l2' : 'l1'} />
       <View style={styles.body}>
         <View style={styles.nameRow}>
           <Text style={styles.name} numberOfLines={1}>

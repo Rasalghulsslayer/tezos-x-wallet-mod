@@ -1,22 +1,28 @@
 /**
- * WalletContext — the app's state machine + navigation + data seam (mirrors the
- * design's WalletCtx in mobile/app.jsx). Screens read everything through
- * useWallet(); the data providers (balances/tokens/activity/sessions) are backed
- * by mocks today and are the single seam to swap for the live composition.
+ * WalletContext — the app's composition root behind the single seam every screen
+ * consumes via useWallet(). It owns the real VaultState (boot via readState,
+ * transitions via the keyring use-cases in vault-actions), derives the active
+ * account + summaries as ViewAccounts, wires auto-lock, and exposes navigation +
+ * overlay state. Screens/components stay pure presentation: they read this
+ * context and call its actions; all keyring/container I/O lives below the seam.
  *
- * Navigation is a tab index (Home/Activity/dApps/Settings) plus a modal stack
- * (Send/Receive/Add…/onboarding). No third-party navigator — the shell in
- * App.tsx renders whatever this context points at.
+ * Balances / tokens / activity / dApp sessions are still shims here — wired to
+ * the live fetchers / WalletConnect in the following increments.
  */
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
-import {
-  MOCK_ACCOUNTS, MOCK_BALANCES, MOCK_TOKENS, MOCK_ACTIVITY, MOCK_SESSIONS,
-  type MockAccount, type MockBalance, type MockToken, type MockActivityItem,
-  type MockSession, type PendingKind,
-} from '../mocks';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import type { VaultState, VaultStateUnlocked } from '@tezosx/wallet-core/shared/messages';
+import { accountCardVM, type AccountCardVM } from '@tezosx/wallet-core/view-models/account-card-vm';
+import { getState } from '@tezosx/wallet-core/use-cases/get-state';
+import { setActiveAccount as setActiveUseCase } from '@tezosx/wallet-core/use-cases/set-active-account';
+import type { ImportAccountReq } from '@tezosx/wallet-core/use-cases/import-account';
+import { keyring, evmAliasCache } from '../composition/wiring';
+import { startAutoLock, type AutoLockHandle } from '../lock/auto-lock';
+import * as vaultActions from './vault-actions';
+import { activeToView, summaryToView, type ViewAccount } from './view-account';
+import type { MockBalance, MockToken, MockActivityItem, MockSession, PendingKind } from '../mocks';
 
-export type VaultState = 'onboarding' | 'locked' | 'unlocked';
+export type VaultView = 'onboarding' | 'locked' | 'unlocked';
 export type TabId = 'home' | 'activity' | 'connections' | 'settings';
 export type StackName =
   | 'send' | 'receive' | 'addAccount' | 'addToken' | 'tokens'
@@ -33,9 +39,12 @@ export interface WalletNav {
 }
 
 export interface WalletContextValue {
-  vault: VaultState;
-  accounts: MockAccount[];
-  activeAccount: MockAccount;
+  booted: boolean;
+  vault: VaultView;
+  biometricsAvailable: boolean;
+  accounts: ViewAccount[];
+  activeAccount: ViewAccount;
+  accountCard: AccountCardVM | null;
   activeId: string;
   sessions: MockSession[];
   approve: { kind: PendingKind } | null;
@@ -48,14 +57,17 @@ export interface WalletContextValue {
   balances: (id: string) => MockBalance;
   tokens: (id: string) => MockToken[];
   activity: (id: string) => MockActivityItem[];
-  labelFor: (a: MockAccount | undefined) => string;
+  labelFor: (a: ViewAccount | undefined) => string;
 
   toast: (msg: string) => void;
   copy: (addr: string) => void;
+  touch: () => void;
   setActive: (id: string) => void;
   lock: () => void;
-  unlock: () => void;
-  finishOnboarding: (id: string) => void;
+  unlock: (password: string) => Promise<void>;
+  unlockBiometric: () => Promise<boolean>;
+  createTezosWallet: (mnemonic: string, password: string) => Promise<void>;
+  importWallet: (req: ImportAccountReq) => Promise<void>;
   resetToWelcome: () => void;
   openSwitcher: () => void;
   closeSwitcher: () => void;
@@ -68,6 +80,8 @@ export interface WalletContextValue {
   addAccount: (kind: 'tezos' | 'evm', label: string) => void;
 }
 
+const EMPTY_ACCOUNT: ViewAccount = { id: '', kind: 'tezos', label: '', createdAt: 0, tz1: '', evmAlias: '', identitySeed: '' };
+
 const WalletContext = createContext<WalletContextValue | null>(null);
 
 export function useWallet(): WalletContextValue {
@@ -76,22 +90,11 @@ export function useWallet(): WalletContextValue {
   return ctx;
 }
 
-export function WalletProvider({
-  initialVault = 'unlocked',
-  children,
-}: {
-  initialVault?: VaultState;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  const [vault, setVault] = useState<VaultState>(initialVault);
-  const [accounts, setAccounts] = useState<MockAccount[]>(() => MOCK_ACCOUNTS.map((a) => ({ ...a })));
-  const [activeId, setActiveId] = useState('acc-1');
-  const [sessions, setSessions] = useState<MockSession[]>(() => MOCK_SESSIONS.map((s) => ({ ...s })));
-  const [tokensMap, setTokensMap] = useState<Record<string, MockToken[]>>(
-    () => JSON.parse(JSON.stringify(MOCK_TOKENS)) as Record<string, MockToken[]>,
-  );
-  const [balancesMap] = useState<Record<string, MockBalance>>(() => ({ ...MOCK_BALANCES }));
-  const [activityMap] = useState<Record<string, MockActivityItem[]>>(() => ({ ...MOCK_ACTIVITY }));
+export function WalletProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
+  const [booted, setBooted] = useState(false);
+  const [vaultState, setVaultState] = useState<VaultState>({ status: 'empty' });
+  const [onboardingOverride, setOnboardingOverride] = useState(false);
+  const [bioAvailable, setBioAvailable] = useState(false);
 
   const [tab, setTab] = useState<TabId>('home');
   const [stack, setStack] = useState<StackEntry[]>([]);
@@ -100,8 +103,34 @@ export function WalletProvider({
   const [approve, setApprove] = useState<{ kind: PendingKind } | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoLock = useRef<AutoLockHandle | null>(null);
 
-  const activeAccount = accounts.find((a) => a.id === activeId) ?? accounts[0];
+  const activeState: VaultStateUnlocked | null = vaultState.status === 'unlocked' ? vaultState : null;
+  const vault: VaultView = onboardingOverride || vaultState.status === 'empty'
+    ? 'onboarding'
+    : vaultState.status === 'locked' ? 'locked' : 'unlocked';
+
+  const accounts = useMemo(() => (activeState != null ? activeState.accounts.map(summaryToView) : []), [activeState]);
+  const activeAccount = activeState != null ? activeToView(activeState) : EMPTY_ACCOUNT;
+  const accountCard = activeState != null ? accountCardVM(activeState) : null;
+
+  const refresh = useCallback(async (): Promise<void> => {
+    setVaultState(await getState({ keyring, evmAliasCache }));
+  }, []);
+
+  // Boot: instant network-free read, then (if unlocked) fill summaries + alias.
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      const s = await vaultActions.bootState();
+      if (!live) return;
+      setVaultState(s);
+      setBioAvailable(await vaultActions.biometricsAvailable());
+      if (s.status === 'unlocked') await refresh();
+      if (live) setBooted(true);
+    })();
+    return () => { live = false; };
+  }, [refresh]);
 
   const toast = useCallback((msg: string): void => {
     setToastMsg(msg);
@@ -110,11 +139,26 @@ export function WalletProvider({
   }, []);
   const copy = useCallback((_addr: string): void => toast('Address copied'), [toast]);
 
-  const labelFor = useCallback((a: MockAccount | undefined): string => {
+  const lock = useCallback((): void => {
+    vaultActions.lockWallet();
+    autoLock.current?.stop();
+    autoLock.current = null;
+    setStack([]); setSwitcherOpen(false); setApprove(null);
+    setVaultState({ status: 'locked' });
+  }, []);
+
+  // Arm auto-lock while unlocked; disarm otherwise.
+  useEffect(() => {
+    if (vault !== 'unlocked') return;
+    autoLock.current = startAutoLock(() => lock());
+    return () => { autoLock.current?.stop(); autoLock.current = null; };
+  }, [vault, lock]);
+
+  const labelFor = useCallback((a: ViewAccount | undefined): string => {
     if (a == null) return 'Account';
     if (a.label.trim() !== '') return a.label;
     const idx = accounts.findIndex((x) => x.id === a.id);
-    return `Account ${idx + 1}`;
+    return `Account ${idx >= 0 ? idx + 1 : 1}`;
   }, [accounts]);
 
   const nav = useMemo<WalletNav>(() => ({
@@ -125,39 +169,44 @@ export function WalletProvider({
     reset: () => { setStack([]); setTab('home'); },
   }), [tab]);
 
+  const enterUnlocked = useCallback((s: VaultState): void => {
+    setVaultState(s); setOnboardingOverride(false); setStack([]); setTab('home');
+  }, []);
+
   const value = useMemo<WalletContextValue>(() => ({
-    vault, accounts, activeAccount, activeId, sessions, approve, switcherOpen, toastMsg, stack, navDir, nav,
-    balances: (id) => balancesMap[id] ?? { xtz: '0', tokens: {} },
-    tokens: (id) => tokensMap[id] ?? [],
-    activity: (id) => activityMap[id] ?? [],
+    booted, vault, biometricsAvailable: bioAvailable,
+    accounts, activeAccount, accountCard, activeId: activeState?.accountId ?? '',
+    sessions: [], approve, switcherOpen, toastMsg, stack, navDir, nav,
+    // Data shims — wired to live fetchers in the next increments.
+    balances: () => ({ xtz: '0', tokens: {} }),
+    tokens: () => [],
+    activity: () => [],
     labelFor, toast, copy,
-    setActive: (id) => setActiveId(id),
-    lock: () => { setStack([]); setSwitcherOpen(false); setApprove(null); setVault('locked'); },
-    unlock: () => { setVault('unlocked'); setTab('home'); },
-    finishOnboarding: (id) => { setActiveId(id); setStack([]); setVault('unlocked'); setTab('home'); },
-    resetToWelcome: () => { setStack([]); setVault('onboarding'); },
+    touch: () => autoLock.current?.touch(),
+    setActive: (id) => { void (async () => { await setActiveUseCase({ accountId: id }, { keyring }); await refresh(); })(); },
+    lock,
+    unlock: async (password) => { enterUnlocked(await vaultActions.unlockWithPassword(password)); await refresh(); },
+    unlockBiometric: async () => {
+      const s = await vaultActions.unlockWithBiometrics();
+      if (s == null) return false;
+      enterUnlocked(s); await refresh(); return true;
+    },
+    createTezosWallet: async (mnemonic, password) => { enterUnlocked(await vaultActions.createTezosWallet(mnemonic, password)); await refresh(); },
+    importWallet: async (req) => { enterUnlocked(await vaultActions.importWallet(req)); await refresh(); },
+    resetToWelcome: () => { setOnboardingOverride(true); setStack([]); },
     openSwitcher: () => setSwitcherOpen(true),
     closeSwitcher: () => setSwitcherOpen(false),
     openApprove: (kind) => setApprove({ kind }),
     closeApprove: (goTab) => { setApprove(null); if (goTab != null) { setStack([]); setTab(goTab); } },
-    addSession: (origin, accountId) =>
-      setSessions((s) => (s.some((x) => x.origin === origin) ? s : [{ origin, accountId, connectedAt: Date.now() }, ...s])),
-    disconnect: (origin) => { setSessions((s) => s.filter((x) => x.origin !== origin)); toast('Disconnected'); },
-    addToken: (tok) => setTokensMap((m) => ({ ...m, [activeId]: [...(m[activeId] ?? []), { ...tok, runtime: 'evm' }] })),
-    removeToken: (address) => setTokensMap((m) => ({ ...m, [activeId]: (m[activeId] ?? []).filter((x) => x.address !== address) })),
-    addAccount: (kind, label) => {
-      const id = `acc-${accounts.length + 1}`;
-      const base: MockAccount = kind === 'evm'
-        ? { id, kind: 'evm', label, createdAt: Date.now(), address: '0x51F3aa9e12bC7d4E90aF3b28c6D1e5A70bF94c22' }
-        : { id, kind: 'tezos', label, createdAt: Date.now(), tz1: 'tz1newAcct9Qm4kP2wXbEjHsA6cZ4uPnGqLd', evmAlias: '0xC1a9F2013b7d4E90aF3b28c6D1e5A70bF9C4d221', seed: MOCK_ACCOUNTS[0].kind === 'tezos' ? MOCK_ACCOUNTS[0].seed : undefined };
-      setAccounts((a) => [...a, base]);
-      balancesMap[id] = { xtz: '0.00', tokens: {} };
-      activityMap[id] = [];
-      setTokensMap((m) => ({ ...m, [id]: [] }));
-      setActiveId(id);
-    },
-  }), [vault, accounts, activeAccount, activeId, sessions, approve, switcherOpen, toastMsg, stack, navDir, nav,
-      balancesMap, tokensMap, activityMap, labelFor, toast, copy]);
+    // dApp sessions + custom tokens — wired to WalletConnect / tokenStore later.
+    addSession: () => {},
+    disconnect: () => { toast('Disconnected'); },
+    addToken: () => {},
+    removeToken: () => {},
+    // Account creation (with the real generated secret) is wired in a later step.
+    addAccount: () => { toast('Adding accounts is coming soon'); },
+  }), [booted, vault, bioAvailable, accounts, activeAccount, accountCard, activeState, approve, switcherOpen, toastMsg,
+      stack, navDir, nav, labelFor, toast, copy, lock, enterUnlocked, refresh]);
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }

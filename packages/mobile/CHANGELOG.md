@@ -8,6 +8,16 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
 ## [Unreleased]
 
 ### Added
+- Real vault lifecycle behind the design UI (first reconciliation step). The
+  WalletContext is now the app's composition root over the live keyring: a
+  network-free boot Gate resolves onboarding / locked / unlocked; Create
+  generates a real BIP-39 mnemonic (or EVM key) and persists it; Import brings in
+  a mnemonic / edsk / 0x key; Unlock is biometric-first (Face ID / Touch ID
+  releases the sealed password) with a password fallback; lock + auto-lock evict
+  the secret; Settings reveals the real secret via exportSecret. Errors surface
+  through formatError. Accounts render through a ViewAccount adapter over the core
+  AccountSummary / accountCardVM (identicons seed on the address). Balances,
+  tokens, activity and dApp sessions are still shims — wired in the next steps.
 - Full in-app design pass — the extension's UI recreated natively. A React Native
   design system (the stroke icon set via `react-native-svg` + ~30 pure `ui/tx`
   components) and every screen: Welcome, Create, Import, Unlock, Home, Send,

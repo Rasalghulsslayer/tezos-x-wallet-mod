@@ -25,7 +25,8 @@ import { PinnedChip } from '../ui/tx/PinnedChip';
 import { RiskBand } from '../ui/tx/RiskBand';
 import { Spinner } from '../ui/tx/Spinner';
 import { useWallet } from '../wallet/context';
-import { MOCK_PENDING, type MockAccount, type PendingKind } from '../mocks';
+import { MOCK_PENDING, type PendingKind } from '../mocks';
+import type { ViewAccount } from '../wallet/view-account';
 
 function hostOf(origin: string): string {
   const m = /^[a-z]+:\/\/([^/]+)/i.exec(origin);
@@ -109,7 +110,7 @@ export function Approve(): React.JSX.Element | null {
               <PinnedChip
                 label={ctx.labelFor(pinned)}
                 addr={truncAddr(pinned.kind === 'evm' ? pinned.address : pinned.evmAlias, 8)}
-                leading={<Identicon seed={pinned.id} size={34} />}
+                leading={<Identicon seed={pinned.identitySeed} size={34} />}
               />
               <Body pending={pending.kind} pinned={pinned} host={host} />
             </ScrollView>
@@ -145,7 +146,7 @@ function Body({
   host,
 }: {
   pending: PendingKind;
-  pinned: MockAccount;
+  pinned: ViewAccount;
   host: string;
 }): React.JSX.Element {
   const req = MOCK_PENDING[pending];
