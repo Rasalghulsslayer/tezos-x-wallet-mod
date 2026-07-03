@@ -64,12 +64,14 @@ export function ActivityRow({
           )}
         </View>
       </View>
-      <View style={styles.amt}>
-        <Text style={[styles.amtV, { color: amountColor }, st === 'failed' && styles.strike]}>
-          {st === 'failed' ? '' : sign}
-          {item.amount} {item.symbol}
-        </Text>
-      </View>
+      {item.amount !== '' && (
+        <View style={styles.amt}>
+          <Text style={[styles.amtV, { color: amountColor }, st === 'failed' && styles.strike]}>
+            {st === 'failed' ? '' : sign}
+            {item.amount} {item.symbol}
+          </Text>
+        </View>
+      )}
     </Pressable>
   );
 }

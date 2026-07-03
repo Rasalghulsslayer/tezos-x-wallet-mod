@@ -6,6 +6,7 @@
  */
 
 import type { ActivityItem } from '@tezosx/wallet-core/domain/activity';
+import { formatTokenAmount } from '@tezosx/wallet-core/shared/format';
 
 export interface ActivityRowVM {
   id: string;
@@ -30,7 +31,9 @@ export function toActivityRowVM(item: ActivityItem): ActivityRowVM {
       verb: isIn ? 'Received' : 'Sent',
       peer: item.counterparty,
       runtime,
-      amount: item.amount,
+      // amount is raw base units (mutez / wei / token units) — scale by the
+      // asset's decimals to a display string, as the extension's VM does.
+      amount: formatTokenAmount(item.amount, item.asset.decimals),
       symbol: item.asset.symbol,
       status: item.status,
       ts: item.timestamp,
