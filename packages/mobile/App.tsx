@@ -11,7 +11,7 @@
  * transition remounts.
  */
 
-import { Modal, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { colors, fontSize, radius, safe, space } from './src/theme';
 import { Icon } from './src/ui/icon';
 import { ExperimentalBanner } from './src/ui/tx/ExperimentalBanner';
@@ -118,31 +118,11 @@ function Shell(): React.JSX.Element {
       </View>
       {showTabs && <TabBar active={ctx.nav.tab} onSelect={(id) => ctx.nav.goTab(id)} />}
 
-      <Modal
-        visible={ctx.switcherOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={ctx.closeSwitcher}
-      >
-        <Pressable style={styles.scrim} onPress={ctx.closeSwitcher}>
-          <Pressable style={styles.sheetStop}>
-            <AccountSwitcher />
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      <Modal
-        visible={ctx.approve != null}
-        transparent
-        animationType="slide"
-        onRequestClose={() => ctx.closeApprove()}
-      >
-        <Pressable style={styles.scrim} onPress={() => ctx.closeApprove()}>
-          <Pressable style={styles.sheetStop}>
-            {ctx.approve != null && <Approve />}
-          </Pressable>
-        </Pressable>
-      </Modal>
+      {/* AccountSwitcher (via Sheet) and Approve each render their own Modal +
+          scrim, so they are mounted directly — wrapping them in another Modal
+          nests native modals, which hard-hangs the iOS main thread on dismiss. */}
+      {ctx.switcherOpen && <AccountSwitcher />}
+      {ctx.approve != null && <Approve />}
 
       {ctx.toastMsg != null && <Toast msg={ctx.toastMsg} />}
     </SafeAreaView>
@@ -169,16 +149,6 @@ const styles = StyleSheet.create({
   screenHost: {
     flex: 1,
     minHeight: 0,
-  },
-  // Bottom-anchored modal backdrop: tap outside the sheet to dismiss.
-  scrim: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: colors.scrim,
-  },
-  // Swallows presses so a tap on the sheet body doesn't fall through to the scrim.
-  sheetStop: {
-    width: '100%',
   },
   toastWrap: {
     position: 'absolute',

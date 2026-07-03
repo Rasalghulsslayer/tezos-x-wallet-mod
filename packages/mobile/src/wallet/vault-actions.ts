@@ -90,8 +90,10 @@ export async function addAccount(req: AddAccountReq): Promise<AddAccountOutcome>
   const result = await addAccountUseCase(req, { keyring, tokenStore });
   await setActiveAccount({ accountId: result.accountId }, { keyring });
   evmAliasCache.value = null;
-  await deps.rebuildContainer();
   const state = await getState({ keyring, evmAliasCache });
+  // Warm the new account's container in the background — creation must not block
+  // (or fail) on it; read/send paths rebuild it lazily when needed.
+  void deps.rebuildContainer().catch(() => { /* rebuilt lazily on next read/send */ });
   return { state, result };
 }
 
