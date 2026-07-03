@@ -51,9 +51,10 @@ export function AddAccount(): React.JSX.Element {
   const ctx = useWallet();
   const [stage, setStage] = useState<Stage>('pick');
   const [pick, setPick] = useState<Pick | null>(null);
-  // Freshly generated for the reveal preview (24-word mnemonic, like the extension).
-  const [freshMnemonic] = useState(() => newMnemonic());
-  const [freshKey] = useState(() => randomEvmPrivateKey());
+  // The fresh secret (24-word mnemonic or 64-hex key) for the chosen kind. Kept
+  // empty until a "Create" card is picked so the picker screen does no crypto —
+  // generating both at mount blocked the JS thread and froze this screen.
+  const [fresh, setFresh] = useState('');
   const [revealed, setRevealed] = useState(false);
   const [ack, setAck] = useState(false);
   const [importVal, setImportVal] = useState('');
@@ -66,6 +67,17 @@ export function AddAccount(): React.JSX.Element {
   const isCreate = pick != null && pick.source === 'fresh';
   const isTezos = pick != null && pick.kind === 'tezos';
   const title = { pick: 'Add account', input: isCreate ? 'Secure your keys' : 'Import account', confirm: 'Confirm' }[stage];
+
+  // Generate the fresh secret only for the picked kind, once, on selection.
+  const choose = (c: Pick): void => {
+    setPick(c);
+    setRevealed(false);
+    setAck(false);
+    setImportVal('');
+    setErr(null);
+    setFresh(c.source === 'fresh' ? (c.kind === 'tezos' ? newMnemonic() : randomEvmPrivateKey()) : '');
+    setStage('input');
+  };
 
   const back = (): void => {
     if (stage === 'pick') ctx.nav.back();
@@ -89,7 +101,7 @@ export function AddAccount(): React.JSX.Element {
   // the stored account (never source:'fresh', which would mint a different key).
   const buildSource = (): AddAccountSource => {
     if (isCreate) {
-      return isTezos ? { source: 'mnemonic', mnemonic: freshMnemonic } : { source: 'privkey', privateKey: freshKey };
+      return isTezos ? { source: 'mnemonic', mnemonic: fresh } : { source: 'privkey', privateKey: fresh };
     }
     if (isTezos) {
       return isValidEdsk(importVal_) ? { source: 'edsk', edsk: importVal_ } : { source: 'mnemonic', mnemonic: importVal_ };
@@ -132,10 +144,7 @@ export function AddAccount(): React.JSX.Element {
               <Pressable
                 key={i}
                 style={({ pressed }) => [styles.pickCard, pressed && styles.pickCardPressed]}
-                onPress={() => {
-                  setPick(c);
-                  setStage('input');
-                }}
+                onPress={() => choose(c)}
               >
                 <View style={styles.pickHead}>
                   <Badge variant={c.kind === 'evm' ? 'cyan' : 'purple'}>{c.kind === 'evm' ? 'L2' : 'L1'}</Badge>
@@ -171,7 +180,7 @@ export function AddAccount(): React.JSX.Element {
                 </Text>
                 <View style={styles.secretWrap}>
                   <View style={styles.secretCard}>
-                    <Text style={styles.secretText}>{isTezos ? freshMnemonic : freshKey}</Text>
+                    <Text style={styles.secretText}>{fresh}</Text>
                   </View>
                   {!revealed && (
                     <Pressable style={styles.seedOverlay} onPress={() => setRevealed(true)}>
