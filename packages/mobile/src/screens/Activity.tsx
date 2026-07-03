@@ -12,10 +12,12 @@ import { colors, fontSize, radius, space } from '../theme';
 import { Icon } from '../ui/icon';
 import { ActivityRow } from '../ui/tx/ActivityRow';
 import { EmptyState } from '../ui/tx/EmptyState';
+import { ErrorCard } from '../ui/tx/ErrorCard';
 import { IconBtn } from '../ui/tx/IconBtn';
 import { Sheet } from '../ui/tx/Sheet';
+import { Spinner } from '../ui/tx/Spinner';
 import { TopBar } from '../ui/tx/TopBar';
-import type { MockActivityItem } from '../mocks';
+import type { ActivityRowVM } from '../wallet/activity-vm';
 import { useWallet } from '../wallet/context';
 
 type Dir = 'all' | 'sent' | 'received';
@@ -23,13 +25,13 @@ type RuntimeFilter = 'all' | 'l1' | 'l2' | 'cross';
 
 interface DayGroup {
   label: string;
-  items: MockActivityItem[];
+  items: ActivityRowVM[];
 }
 
 const DAY = 86400000;
 
-function groupByDay(items: MockActivityItem[], now: number): DayGroup[] {
-  const buckets: Record<string, MockActivityItem[]> = { Today: [], Yesterday: [], Earlier: [] };
+function groupByDay(items: ActivityRowVM[], now: number): DayGroup[] {
+  const buckets: Record<string, ActivityRowVM[]> = { Today: [], Yesterday: [], Earlier: [] };
   items.forEach((i) => {
     const age = now - i.ts;
     if (age < DAY) buckets.Today.push(i);
@@ -50,8 +52,8 @@ const RUNTIME_OPTIONS: { v: RuntimeFilter; l: string; accent: 'purple' | 'cyan' 
 
 export function Activity(): React.JSX.Element {
   const ctx = useWallet();
-  const acc = ctx.activeAccount;
-  const all = ctx.activity(acc.id);
+  const activityData = ctx.activity;
+  const all = activityData.data?.items ?? [];
   const [dir, setDir] = useState<Dir>('all');
   const [runtimeF, setRuntimeF] = useState<RuntimeFilter>('all');
   const [popOpen, setPopOpen] = useState(false);
@@ -70,15 +72,17 @@ export function Activity(): React.JSX.Element {
   const now = Date.now();
   const groups = useMemo(() => groupByDay(items, now), [items, now]);
   const filtered = dir !== 'all' || runtimeF !== 'all';
+  const stale = activityData.data != null && activityData.data.staleness !== 'fresh';
+  const loading = activityData.loading && all.length === 0;
 
   return (
     <View style={styles.screen}>
       <TopBar
         title="Activity"
-        right={<IconBtn name="refresh" label="Refresh" onPress={() => ctx.toast('Activity refreshed')} />}
+        right={<IconBtn name="refresh" label="Refresh" onPress={() => ctx.refreshData()} />}
       />
 
-      {!staleDismissed && (
+      {stale && !staleDismissed && (
         <View style={styles.staleBand}>
           <Icon name="info" size={15} color={colors.warning} />
           <Text style={styles.staleText}>
@@ -113,7 +117,15 @@ export function Activity(): React.JSX.Element {
         </Pressable>
       </View>
 
-      {items.length === 0 ? (
+      {activityData.error != null ? (
+        <View style={styles.stateWrap}>
+          <ErrorCard title={activityData.error.title} detail={activityData.error.detail} />
+        </View>
+      ) : loading ? (
+        <View style={styles.stateWrap}>
+          <Spinner />
+        </View>
+      ) : items.length === 0 ? (
         <EmptyState
           icon={<Icon name="list" size={22} color={colors.fgMuted} />}
           title="No activity yet"
@@ -169,6 +181,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, minHeight: 0, backgroundColor: colors.bg },
   scroll: { flex: 1, minHeight: 0 },
   scrollContent: { paddingBottom: 12 },
+  stateWrap: { paddingHorizontal: space[4], paddingTop: 40, alignItems: 'center' },
 
   staleBand: {
     flexDirection: 'row',

@@ -6,21 +6,23 @@
  * overlay state. Screens/components stay pure presentation: they read this
  * context and call its actions; all keyring/container I/O lives below the seam.
  *
- * Balances / tokens / activity / dApp sessions are still shims here — wired to
- * the live fetchers / WalletConnect in the following increments.
+ * dApp sessions are still shims here — wired to WalletConnect in a later
+ * increment; balances / tokens / activity run on the live fetchers.
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { VaultState, VaultStateUnlocked } from '@tezosx/wallet-core/shared/messages';
+import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
 import { accountCardVM, type AccountCardVM } from '@tezosx/wallet-core/view-models/account-card-vm';
 import { getState } from '@tezosx/wallet-core/use-cases/get-state';
 import { setActiveAccount as setActiveUseCase } from '@tezosx/wallet-core/use-cases/set-active-account';
 import type { ImportAccountReq } from '@tezosx/wallet-core/use-cases/import-account';
-import { keyring, evmAliasCache } from '../composition/wiring';
+import { keyring, evmAliasCache, deps } from '../composition/wiring';
 import { startAutoLock, type AutoLockHandle } from '../lock/auto-lock';
 import * as vaultActions from './vault-actions';
+import { useAccountData, type AsyncData, type BalancesView, type ActivityView } from './use-account-data';
 import { activeToView, summaryToView, type ViewAccount } from './view-account';
-import type { MockBalance, MockToken, MockActivityItem, MockSession, PendingKind } from '../mocks';
+import type { MockToken, MockSession, PendingKind } from '../mocks';
 
 export type VaultView = 'onboarding' | 'locked' | 'unlocked';
 export type TabId = 'home' | 'activity' | 'connections' | 'settings';
@@ -54,9 +56,10 @@ export interface WalletContextValue {
   navDir: 'fwd' | 'back';
   nav: WalletNav;
 
-  balances: (id: string) => MockBalance;
-  tokens: (id: string) => MockToken[];
-  activity: (id: string) => MockActivityItem[];
+  balances: AsyncData<BalancesView>;
+  tokens: AsyncData<RegisteredToken[]>;
+  activity: AsyncData<ActivityView>;
+  refreshData: () => void;
   labelFor: (a: ViewAccount | undefined) => string;
 
   toast: (msg: string) => void;
@@ -110,15 +113,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
     ? 'onboarding'
     : vaultState.status === 'locked' ? 'locked' : 'unlocked';
 
+  const [dataNonce, setDataNonce] = useState(0);
+
   const accounts = useMemo(() => (activeState != null ? activeState.accounts.map(summaryToView) : []), [activeState]);
   const activeAccount = activeState != null ? activeToView(activeState) : EMPTY_ACCOUNT;
   const accountCard = activeState != null ? accountCardVM(activeState) : null;
+  const accountData = useAccountData(activeState, dataNonce);
 
   const refresh = useCallback(async (): Promise<void> => {
     setVaultState(await getState({ keyring, evmAliasCache }));
   }, []);
 
-  // Boot: instant network-free read, then (if unlocked) fill summaries + alias.
+  // Boot: instant network-free read, then (if unlocked) warm the container +
+  // fill summaries/alias so the account-data effect has a live container.
   useEffect(() => {
     let live = true;
     void (async () => {
@@ -126,7 +133,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
       if (!live) return;
       setVaultState(s);
       setBioAvailable(await vaultActions.biometricsAvailable());
-      if (s.status === 'unlocked') await refresh();
+      if (s.status === 'unlocked') { await deps.rebuildContainer(); await refresh(); }
       if (live) setBooted(true);
     })();
     return () => { live = false; };
@@ -177,13 +184,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
     booted, vault, biometricsAvailable: bioAvailable,
     accounts, activeAccount, accountCard, activeId: activeState?.accountId ?? '',
     sessions: [], approve, switcherOpen, toastMsg, stack, navDir, nav,
-    // Data shims — wired to live fetchers in the next increments.
-    balances: () => ({ xtz: '0', tokens: {} }),
-    tokens: () => [],
-    activity: () => [],
+    balances: accountData.balances,
+    tokens: accountData.tokens,
+    activity: accountData.activity,
+    refreshData: () => setDataNonce((n) => n + 1),
     labelFor, toast, copy,
     touch: () => autoLock.current?.touch(),
-    setActive: (id) => { void (async () => { await setActiveUseCase({ accountId: id }, { keyring }); await refresh(); })(); },
+    setActive: (id) => {
+      void (async () => {
+        await setActiveUseCase({ accountId: id }, { keyring });
+        await deps.rebuildContainer();
+        await refresh();
+      })();
+    },
     lock,
     unlock: async (password) => { enterUnlocked(await vaultActions.unlockWithPassword(password)); await refresh(); },
     unlockBiometric: async () => {
@@ -205,8 +218,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
     removeToken: () => {},
     // Account creation (with the real generated secret) is wired in a later step.
     addAccount: () => { toast('Adding accounts is coming soon'); },
-  }), [booted, vault, bioAvailable, accounts, activeAccount, accountCard, activeState, approve, switcherOpen, toastMsg,
-      stack, navDir, nav, labelFor, toast, copy, lock, enterUnlocked, refresh]);
+  }), [booted, vault, bioAvailable, accounts, activeAccount, accountCard, accountData, activeState, approve, switcherOpen,
+      toastMsg, stack, navDir, nav, labelFor, toast, copy, lock, enterUnlocked, refresh]);
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }

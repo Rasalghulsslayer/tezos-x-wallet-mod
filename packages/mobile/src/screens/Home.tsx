@@ -14,16 +14,19 @@ import { Icon } from '../ui/icon';
 import { AccountHeader } from '../ui/tx/AccountHeader';
 import { AssetRow } from '../ui/tx/AssetRow';
 import { Badge } from '../ui/tx/Badge';
+import { ErrorCard } from '../ui/tx/ErrorCard';
 import { IconBtn } from '../ui/tx/IconBtn';
 import { LogoMark } from '../ui/tx/LogoMark';
+import { Spinner } from '../ui/tx/Spinner';
 import { useWallet } from '../wallet/context';
 
 export function Home(): React.JSX.Element {
   const ctx = useWallet();
   const acc = ctx.activeAccount;
   const [hidden, setHidden] = useState(false);
-  const bal = ctx.balances(acc.id);
-  const tokens = ctx.tokens(acc.id);
+  const balances = ctx.balances;
+  const bal = balances.data;
+  const tokens = ctx.tokens.data ?? [];
 
   return (
     <View style={styles.screen}>
@@ -35,7 +38,7 @@ export function Home(): React.JSX.Element {
         </View>
         <View style={styles.grow} />
         <View style={styles.actions}>
-          <IconBtn name="refresh" label="Refresh" onPress={() => ctx.toast('Balances refreshed')} />
+          <IconBtn name="refresh" label="Refresh" onPress={() => ctx.refreshData()} />
           <IconBtn name="lock" label="Lock" onPress={ctx.lock} />
         </View>
       </View>
@@ -45,17 +48,31 @@ export function Home(): React.JSX.Element {
 
         <View style={styles.balance}>
           <Text style={styles.kicker}>Total balance</Text>
-          <View style={styles.num}>
-            <Text style={styles.numValue}>{hidden ? '••••••' : fmtXtz(bal.xtz)}</Text>
-            <Text style={styles.numUnit}>
-              {XTZ} XTZ
-            </Text>
-          </View>
-          <Pressable style={styles.hide} onPress={() => setHidden((h) => !h)}>
-            <Icon name={hidden ? 'eye-off' : 'eye'} size={13} color={colors.fgSubtle} />
-            <Text style={styles.hideText}>{hidden ? 'Show' : 'Hide'}</Text>
-          </Pressable>
+          {balances.loading && bal == null ? (
+            <View style={styles.balLoading}>
+              <Spinner />
+            </View>
+          ) : (
+            <>
+              <View style={styles.num}>
+                <Text style={styles.numValue}>{hidden ? '••••••' : fmtXtz(bal?.xtz ?? '0')}</Text>
+                <Text style={styles.numUnit}>
+                  {XTZ} XTZ
+                </Text>
+              </View>
+              <Pressable style={styles.hide} onPress={() => setHidden((h) => !h)}>
+                <Icon name={hidden ? 'eye-off' : 'eye'} size={13} color={colors.fgSubtle} />
+                <Text style={styles.hideText}>{hidden ? 'Show' : 'Hide'}</Text>
+              </Pressable>
+            </>
+          )}
         </View>
+
+        {balances.error != null && (
+          <View style={styles.errWrap}>
+            <ErrorCard title={balances.error.title} detail={balances.error.detail} />
+          </View>
+        )}
 
         <View style={styles.homeActions}>
           <Pressable
@@ -92,7 +109,7 @@ export function Home(): React.JSX.Element {
         </View>
         <AssetRow
           asset={{ kind: 'xtz', symbol: 'XTZ' }}
-          balance={fmtXtz(bal.xtz)}
+          balance={fmtXtz(bal?.xtz ?? '0')}
           hidden={hidden}
           onPress={() => ctx.nav.push('receive')}
         />
@@ -100,7 +117,7 @@ export function Home(): React.JSX.Element {
           <AssetRow
             key={t.address}
             asset={{ kind: 'token', symbol: t.symbol }}
-            balance={fmtXtz(bal.tokens[t.address.toLowerCase()] ?? '0', 2, 2)}
+            balance={fmtXtz(bal?.tokens[t.address.toLowerCase()] ?? '0', 2, 2)}
             hidden={hidden}
             onPress={() => ctx.nav.push('tokens')}
           />
@@ -138,6 +155,8 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, minHeight: 0 },
 
   balance: { paddingTop: 22, paddingHorizontal: space[5], paddingBottom: 6, alignItems: 'center' },
+  balLoading: { height: 66, alignItems: 'center', justifyContent: 'center' },
+  errWrap: { paddingHorizontal: space[4], paddingTop: 6 },
   kicker: {
     fontSize: 11,
     letterSpacing: 0.99,

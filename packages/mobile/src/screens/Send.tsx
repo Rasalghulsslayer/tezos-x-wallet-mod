@@ -45,8 +45,8 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
   const ctx = useWallet();
   const acc = ctx.activeAccount;
   const isEvm = acc.kind === 'evm';
-  const bal = ctx.balances(acc.id);
-  const tokens = ctx.tokens(acc.id);
+  const bal = ctx.balances.data;
+  const tokens = ctx.tokens.data ?? [];
 
   const assets = useMemo<SendAsset[]>(
     () => [
@@ -66,7 +66,7 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
 
   const dest = detectRuntime(to);
   const available =
-    asset.kind === 'xtz' ? bal.xtz : bal.tokens[(asset.address ?? '').toLowerCase()] ?? '0';
+    asset.kind === 'xtz' ? bal?.xtz ?? '0' : bal?.tokens[(asset.address ?? '').toLowerCase()] ?? '0';
   const insufficient = parseFloat(amount || '0') > parseFloat(available);
   const valid =
     dest != null &&

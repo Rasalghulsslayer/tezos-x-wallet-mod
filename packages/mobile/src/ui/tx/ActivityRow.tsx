@@ -11,7 +11,7 @@ import { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Stop, Circle } from 'react-native-svg';
 import { colors, font, fontSize, space } from '../../theme';
-import type { MockActivityItem } from '../../mocks';
+import type { ActivityRowVM } from '../../wallet/activity-vm';
 import { timeAgo } from '../format';
 import { Icon } from '../icon';
 
@@ -22,7 +22,7 @@ export function ActivityRow({
   now,
   onPress,
 }: {
-  item: MockActivityItem;
+  item: ActivityRowVM;
   now?: number;
   onPress?: () => void;
 }): React.JSX.Element {
@@ -143,7 +143,7 @@ function ActIdent({
   );
 }
 
-const TAG_COLOR: Record<MockActivityItem['runtime'], { color: string }> = {
+const TAG_COLOR: Record<ActivityRowVM['runtime'], { color: string }> = {
   l1: { color: '#C9BCFF' },
   l2: { color: '#A4E6FF' },
   cross: { color: '#B7D1FF' }, // approximates the purple→cyan gradient text

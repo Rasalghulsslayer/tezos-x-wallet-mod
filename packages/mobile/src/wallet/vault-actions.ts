@@ -64,4 +64,5 @@ export async function importWallet(req: ImportAccountReq): Promise<VaultState> {
 export function lockWallet(): void {
   lockVault({ keyring, approvalQueue: deps.approvalQueue });
   evmAliasCache.value = null;
+  void deps.rebuildContainer(); // keyring is now locked → drops the warm container
 }

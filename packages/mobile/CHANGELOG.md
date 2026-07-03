@@ -8,6 +8,18 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
 ## [Unreleased]
 
 ### Added
+- Live balances, tokens and activity behind the design (second reconciliation
+  step). Home, Tokens, Send and Activity now read the active account off a
+  per-account data effect (`use-account-data`) instead of fixtures: the L1 XTZ
+  balance from TzKT (or, for an EVM account, its balance from the Tezlink RPC),
+  each registered ERC-20's balance on the account's EVM alias, the token
+  registry, and the merged TzKT + Blockscout activity feed. Each is surfaced as
+  loading / value / error — a spinner while a read is in flight, an `ErrorCard`
+  (through `formatError`) when one fails. Activity items map through a pure
+  `activity-vm` into the row shape the list renders; the stale band now reflects
+  the feed's real staleness rather than always showing; and the header Refresh
+  re-runs the reads. Switching accounts warms that account's container and
+  re-scopes every read, and locking drops the container and clears the slices.
 - Real vault lifecycle behind the design UI (first reconciliation step). The
   WalletContext is now the app's composition root over the live keyring: a
   network-free boot Gate resolves onboarding / locked / unlocked; Create
@@ -16,8 +28,8 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
   releases the sealed password) with a password fallback; lock + auto-lock evict
   the secret; Settings reveals the real secret via exportSecret. Errors surface
   through formatError. Accounts render through a ViewAccount adapter over the core
-  AccountSummary / accountCardVM (identicons seed on the address). Balances,
-  tokens, activity and dApp sessions are still shims — wired in the next steps.
+  AccountSummary / accountCardVM (identicons seed on the address). dApp sessions
+  are still a shim — wired in a later step.
 - Full in-app design pass — the extension's UI recreated natively. A React Native
   design system (the stroke icon set via `react-native-svg` + ~30 pure `ui/tx`
   components) and every screen: Welcome, Create, Import, Unlock, Home, Send,
