@@ -7,7 +7,7 @@
  */
 
 import { Children, isValidElement } from 'react';
-import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { colors, fontSize, radius, space } from '../../theme';
 
 export type BtnVariant = 'primary' | 'accent' | 'accent-cyan' | 'outline' | 'ghost' | 'danger';
@@ -18,6 +18,7 @@ export function Btn({
   size,
   full,
   disabled,
+  loading,
   onPress,
   children,
   style,
@@ -26,12 +27,15 @@ export function Btn({
   size?: BtnSize;
   full?: boolean;
   disabled?: boolean;
+  loading?: boolean;
   onPress?: () => void;
   children: React.ReactNode;
   style?: ViewStyle | ViewStyle[];
 }): React.JSX.Element {
   const sizeBase = size === 'xs' ? styles.xs : size === 'sm' ? styles.sm : styles.base;
   const variantStyle = VARIANT[variant];
+  const isBusy = loading === true;
+  const isDisabled = disabled === true || isBusy;
   const textStyle = [
     styles.label,
     size === 'xs' ? styles.labelXs : size === 'sm' ? styles.labelSm : styles.labelBase,
@@ -40,24 +44,28 @@ export function Btn({
 
   return (
     <Pressable
-      onPress={disabled ? undefined : onPress}
-      disabled={disabled}
+      onPress={isDisabled ? undefined : onPress}
+      disabled={isDisabled}
       style={({ pressed }) => [
         styles.container,
         sizeBase,
         variantStyle,
         full && styles.full,
-        disabled && styles.disabled,
-        pressed && !disabled && styles.pressed,
+        isDisabled && styles.disabled,
+        pressed && !isDisabled && styles.pressed,
         style,
       ]}
     >
-      {Children.map(children, (child) =>
-        typeof child === 'string' || typeof child === 'number' ? (
-          <Text style={textStyle}>{child}</Text>
-        ) : isValidElement(child) ? (
-          child
-        ) : null,
+      {isBusy ? (
+        <ActivityIndicator size="small" color={TEXT_VARIANT[variant].color} />
+      ) : (
+        Children.map(children, (child) =>
+          typeof child === 'string' || typeof child === 'number' ? (
+            <Text style={textStyle}>{child}</Text>
+          ) : isValidElement(child) ? (
+            child
+          ) : null,
+        )
       )}
     </Pressable>
   );

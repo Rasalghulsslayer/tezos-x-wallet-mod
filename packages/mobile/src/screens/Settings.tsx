@@ -133,7 +133,7 @@ function RevealSheet({ account, onClose }: { account: ViewAccount; onClose: () =
               }}
             />
             {err != null && <ErrorInline title={err.title} detail={err.detail} />}
-            <Btn variant="accent" full disabled={pwd.length === 0 || busy} onPress={submit} style={styles.revealBtn}>
+            <Btn variant="accent" full loading={busy} disabled={pwd.length === 0} onPress={submit} style={styles.revealBtn}>
               Reveal
             </Btn>
           </>

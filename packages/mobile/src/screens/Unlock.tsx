@@ -71,7 +71,7 @@ export function Unlock(): React.JSX.Element {
             returnKeyType="go"
           />
           {err != null && <ErrorInline title={err.title} detail={err.detail} />}
-          <Btn variant="accent" full disabled={!pwd || busy} onPress={submit}>
+          <Btn variant="accent" full loading={busy} disabled={!pwd} onPress={submit}>
             Unlock
           </Btn>
           {ctx.biometricsAvailable && (

@@ -260,7 +260,7 @@ export function AddAccount(): React.JSX.Element {
             {err != null && <View style={styles.confirmErr}><ErrorInline title={err} /></View>}
           </ScrollView>
           <View style={styles.actionBar}>
-            <Btn variant="accent" full disabled={busy} onPress={submit}>
+            <Btn variant="accent" full loading={busy} onPress={submit}>
               Add account
             </Btn>
           </View>

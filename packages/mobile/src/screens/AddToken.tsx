@@ -147,7 +147,7 @@ export function AddToken(): React.JSX.Element {
             ) : null}
           </ScrollView>
           <View style={styles.actionBar}>
-            <Btn variant="accent-cyan" full disabled={!valid || busy} onPress={() => runPeek(false)}>
+            <Btn variant="accent-cyan" full loading={busy} disabled={!valid} onPress={() => runPeek(false)}>
               Continue
             </Btn>
           </View>
@@ -207,7 +207,7 @@ export function AddToken(): React.JSX.Element {
             <Btn variant="outline" onPress={() => ctx.nav.reset('home')}>
               Cancel
             </Btn>
-            <Btn variant="accent-cyan" full disabled={busy} onPress={finish}>
+            <Btn variant="accent-cyan" full loading={busy} onPress={finish}>
               Add {preview.symbol}
             </Btn>
           </View>

@@ -284,7 +284,7 @@ function PasswordStage({
         </View>
       </ScrollView>
       <View style={styles.actionBar}>
-        <Btn variant="accent" full disabled={!pwd || !confirm || busy} onPress={onSubmit}>
+        <Btn variant="accent" full loading={busy} disabled={!pwd || !confirm} onPress={onSubmit}>
           {submitLabel}
         </Btn>
       </View>

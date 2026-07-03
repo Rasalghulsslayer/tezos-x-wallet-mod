@@ -121,7 +121,7 @@ export function Import({ params }: { params: Record<string, unknown> }): React.J
       </ScrollView>
 
       <View style={styles.actionBar}>
-        <Btn variant="accent" full disabled={busy} onPress={submit}>
+        <Btn variant="accent" full loading={busy} onPress={submit}>
           Import wallet
         </Btn>
       </View>
