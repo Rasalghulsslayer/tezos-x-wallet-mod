@@ -3,24 +3,31 @@
  * AddAccountScreen). Three stages tracked by Dots: pick (choose runtime × create
  * or import), input (reveal fresh keys + acknowledge, or paste an existing
  * secret), and confirm (name + a preview of the resulting addresses). Fresh keys
- * gate Continue behind reveal + acknowledgement; imports gate behind a minimum
- * secret length. Submitting adds the mock account and returns Home.
+ * gate Continue behind reveal + acknowledgement; imports gate behind real
+ * mnemonic / edsk / private-key validation. Submitting adds the account through
+ * the vault and returns Home.
  */
 
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { newMnemonic } from '@tezosx/wallet-core/shared/seed';
 import { randomEvmPrivateKey } from '@tezosx/wallet-core/shared/evm-signing';
+import type { AddAccountSource } from '@tezosx/wallet-core/domain/account';
+import { isValidEdsk, isValidMnemonic } from '@tezosx/wallet-core/domain/validation';
+import { formatError } from '@tezosx/wallet-core/domain/error';
 import { colors, fontSize, font, radius } from '../theme';
 import { Icon } from '../ui/icon';
 import { Badge } from '../ui/tx/Badge';
 import { Btn } from '../ui/tx/Btn';
 import { Check } from '../ui/tx/Check';
 import { Dots } from '../ui/tx/Dots';
+import { ErrorInline } from '../ui/tx/ErrorInline';
 import { Identicon } from '../ui/tx/Identicon';
 import { Line } from '../ui/tx/Line';
 import { TopBar } from '../ui/tx/TopBar';
 import { useWallet } from '../wallet/context';
+
+const EVM_PRIVKEY_RE = /^(0x)?[0-9a-fA-F]{64}$/;
 
 type Stage = 'pick' | 'input' | 'confirm';
 type Kind = 'tezos' | 'evm';
@@ -51,6 +58,8 @@ export function AddAccount(): React.JSX.Element {
   const [ack, setAck] = useState(false);
   const [importVal, setImportVal] = useState('');
   const [label, setLabel] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   const nextSeq = ctx.accounts.length + 1;
 
   const idx = { pick: 0, input: 1, confirm: 2 }[stage];
@@ -67,14 +76,42 @@ export function AddAccount(): React.JSX.Element {
     } else setStage('input');
   };
 
-  const continueOk = isCreate ? revealed && ack : importVal.trim().length >= (isTezos ? 12 : 40);
+  const importVal_ = importVal.trim();
+  // Match the keyring, which lowercases a mnemonic before validating; edsk is
+  // case-sensitive base58 so it is checked as-is.
+  const importOk = isTezos
+    ? isValidMnemonic(importVal_.toLowerCase()) || isValidEdsk(importVal_)
+    : EVM_PRIVKEY_RE.test(importVal_);
+  const continueOk = isCreate ? revealed && ack : importOk;
+
+  // The secret the user reveals + acknowledges (fresh) or pastes (import) is the
+  // one persisted — pass it as an explicit source so the backed-up phrase matches
+  // the stored account (never source:'fresh', which would mint a different key).
+  const buildSource = (): AddAccountSource => {
+    if (isCreate) {
+      return isTezos ? { source: 'mnemonic', mnemonic: freshMnemonic } : { source: 'privkey', privateKey: freshKey };
+    }
+    if (isTezos) {
+      return isValidEdsk(importVal_) ? { source: 'edsk', edsk: importVal_ } : { source: 'mnemonic', mnemonic: importVal_ };
+    }
+    return { source: 'privkey', privateKey: importVal_ };
+  };
 
   const submit = (): void => {
-    if (pick == null) return;
+    if (pick == null || busy) return;
+    setErr(null);
     const name = label.trim() !== '' ? label.trim() : `Account ${nextSeq}`;
-    ctx.addAccount(pick.kind, name);
-    ctx.toast(`${name} added`);
-    ctx.nav.reset('home');
+    setBusy(true);
+    void (async () => {
+      try {
+        await ctx.addAccount({ kind: pick.kind, source: buildSource(), label: label.trim() || undefined });
+        ctx.toast(`${name} added`);
+        ctx.nav.reset('home');
+      } catch (e) {
+        setErr(formatError(e).detail);
+        setBusy(false);
+      }
+    })();
   };
 
   return (
@@ -201,19 +238,20 @@ export function AddAccount(): React.JSX.Element {
             />
             <View style={styles.previewCard}>
               <Line
-                label={pick.kind === 'evm' ? 'Address' : 'tz1'}
-                value={<Text style={styles.mono}>{pick.kind === 'evm' ? '0x51F3…4c22' : 'tz1new…8Ri'}</Text>}
+                label={pick.kind === 'evm' ? 'Address' : 'tz1 address'}
+                value={<Text style={styles.previewNote}>{pick.kind === 'evm' ? 'New 0x — shown on Home' : 'New tz1 — shown on Home'}</Text>}
               />
               {pick.kind === 'tezos' && (
                 <>
                   <View style={styles.divider} />
-                  <Line label="EVM alias" value={<Text style={styles.mono}>0xC1a9…F201</Text>} />
+                  <Line label="EVM alias" value={<Text style={styles.previewNote}>Derived from the tz1</Text>} />
                 </>
               )}
             </View>
+            {err != null && <View style={styles.confirmErr}><ErrorInline title={err} /></View>}
           </ScrollView>
           <View style={styles.actionBar}>
-            <Btn variant="accent" full onPress={submit}>
+            <Btn variant="accent" full disabled={busy} onPress={submit}>
               Add account
             </Btn>
           </View>
@@ -293,6 +331,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   previewCard: { marginTop: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, overflow: 'hidden' },
+  previewNote: { fontSize: fontSize.sm, color: colors.fgMuted },
+  confirmErr: { marginTop: 14 },
   divider: { height: 1, backgroundColor: colors.border },
   mono: { fontFamily: font.mono, fontSize: fontSize.md, fontWeight: '500', color: colors.fg },
 

@@ -7,6 +7,7 @@
 
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
+import { formatError } from '@tezosx/wallet-core/domain/error';
 import { colors, fontSize, font, space } from '../theme';
 import { truncAddr } from '../ui/format';
 import { Icon } from '../ui/icon';
@@ -74,8 +75,14 @@ function TokenRow({ token }: { token: RegisteredToken }): React.JSX.Element {
         size="sm"
         disabled={token.builtin === true}
         onPress={() => {
-          ctx.removeToken(token.address);
-          ctx.toast(`${token.symbol} removed`);
+          void (async () => {
+            try {
+              await ctx.removeToken(token.address);
+              ctx.toast(`${token.symbol} removed`);
+            } catch (e) {
+              ctx.toast(formatError(e).title);
+            }
+          })();
         }}
       >
         Remove

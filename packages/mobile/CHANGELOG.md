@@ -8,6 +8,20 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
 ## [Unreleased]
 
 ### Added
+- Account and token management, wired to the vault (third reconciliation step).
+  Add Account now creates a real account in the unlocked vault — a fresh 24-word
+  Tezos mnemonic or a fresh EVM key (the phrase the user reveals and backs up is
+  exactly the one persisted, never a divergent keyring-minted one), or an
+  imported mnemonic / edsk / 0x key, each validated before submit — then makes it
+  active so Home re-scopes to it. Add Token reads a contract's symbol / name /
+  decimals straight from chain (a non-persisting peek) to preview before
+  committing; a contract that doesn't answer `decimals()` offers a "Try anyway"
+  path that registers it at 18 decimals, and duplicate / cap / invalid-address
+  failures surface through `formatError`. Manage-tokens removes a registered
+  ERC-20 (the built-in USDC seed stays protected). Each mutation warms the active
+  account's container and refreshes the affected reads. Reveal-secret was already
+  live per-account; renaming an account is the one remaining account operation,
+  deferred until it has a design surface.
 - Live balances, tokens and activity behind the design (second reconciliation
   step). Home, Tokens, Send and Activity now read the active account off a
   per-account data effect (`use-account-data`) instead of fixtures: the L1 XTZ

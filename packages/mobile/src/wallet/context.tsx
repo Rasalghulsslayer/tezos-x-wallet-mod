@@ -17,12 +17,13 @@ import { accountCardVM, type AccountCardVM } from '@tezosx/wallet-core/view-mode
 import { getState } from '@tezosx/wallet-core/use-cases/get-state';
 import { setActiveAccount as setActiveUseCase } from '@tezosx/wallet-core/use-cases/set-active-account';
 import type { ImportAccountReq } from '@tezosx/wallet-core/use-cases/import-account';
+import type { AddAccountReq, AddAccountResult } from '@tezosx/wallet-core/use-cases/add-account';
 import { keyring, evmAliasCache, deps } from '../composition/wiring';
 import { startAutoLock, type AutoLockHandle } from '../lock/auto-lock';
 import * as vaultActions from './vault-actions';
 import { useAccountData, type AsyncData, type BalancesView, type ActivityView } from './use-account-data';
 import { activeToView, summaryToView, type ViewAccount } from './view-account';
-import type { MockToken, MockSession, PendingKind } from '../mocks';
+import type { MockSession, PendingKind } from '../mocks';
 
 export type VaultView = 'onboarding' | 'locked' | 'unlocked';
 export type TabId = 'home' | 'activity' | 'connections' | 'settings';
@@ -78,9 +79,10 @@ export interface WalletContextValue {
   closeApprove: (goTab?: TabId | null) => void;
   addSession: (origin: string, accountId: string) => void;
   disconnect: (origin: string) => void;
-  addToken: (tok: Omit<MockToken, 'runtime' | 'builtin'>) => void;
-  removeToken: (address: string) => void;
-  addAccount: (kind: 'tezos' | 'evm', label: string) => void;
+  peekToken: (address: string, tryAnyway?: boolean) => Promise<RegisteredToken>;
+  addToken: (address: string, tryAnyway?: boolean) => Promise<RegisteredToken>;
+  removeToken: (address: string) => Promise<void>;
+  addAccount: (req: AddAccountReq) => Promise<AddAccountResult>;
 }
 
 const EMPTY_ACCOUNT: ViewAccount = { id: '', kind: 'tezos', label: '', createdAt: 0, tz1: '', evmAlias: '', identitySeed: '' };
@@ -211,13 +213,24 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
     closeSwitcher: () => setSwitcherOpen(false),
     openApprove: (kind) => setApprove({ kind }),
     closeApprove: (goTab) => { setApprove(null); if (goTab != null) { setStack([]); setTab(goTab); } },
-    // dApp sessions + custom tokens — wired to WalletConnect / tokenStore later.
+    // dApp sessions — wired to WalletConnect in a later step.
     addSession: () => {},
     disconnect: () => { toast('Disconnected'); },
-    addToken: () => {},
-    removeToken: () => {},
-    // Account creation (with the real generated secret) is wired in a later step.
-    addAccount: () => { toast('Adding accounts is coming soon'); },
+    peekToken: (address, tryAnyway) => vaultActions.peekToken(address, tryAnyway),
+    addToken: async (address, tryAnyway) => {
+      const token = await vaultActions.addToken(address, tryAnyway);
+      setDataNonce((n) => n + 1);
+      return token;
+    },
+    removeToken: async (address) => {
+      await vaultActions.removeToken(address);
+      setDataNonce((n) => n + 1);
+    },
+    addAccount: async (req) => {
+      const { state, result } = await vaultActions.addAccount(req);
+      setVaultState(state);
+      return result;
+    },
   }), [booted, vault, bioAvailable, accounts, activeAccount, accountCard, accountData, activeState, approve, switcherOpen,
       toastMsg, stack, navDir, nav, labelFor, toast, copy, lock, enterUnlocked, refresh]);
 

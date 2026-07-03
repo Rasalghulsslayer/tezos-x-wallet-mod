@@ -10,6 +10,8 @@
 
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
+import { formatError, type FormattedError } from '@tezosx/wallet-core/domain/error';
 import { colors, fontSize, font, radius } from '../theme';
 import { truncAddr } from '../ui/format';
 import { Icon } from '../ui/icon';
@@ -21,36 +23,72 @@ import { useWallet } from '../wallet/context';
 
 type Stage = 'paste' | 'confirm';
 const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
-const DAI_ADDRESS = '0x6B175474E89094C44Da98b954EedeAC495271d0F';
+
+/** The core throws NotErc20Error (name-tagged) when decimals() doesn't respond. */
+const isNotErc20 = (e: unknown): boolean => e instanceof Error && e.name === 'NotErc20Error';
 
 export function AddToken(): React.JSX.Element {
   const ctx = useWallet();
   const [stage, setStage] = useState<Stage>('paste');
   const [address, setAddress] = useState('');
   const [tryAnyway, setTryAnyway] = useState(false);
+  const [preview, setPreview] = useState<RegisteredToken | null>(null);
+  const [nonErc20, setNonErc20] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<FormattedError | null>(null);
 
   const trimmed = address.trim();
   const valid = ADDR_RE.test(trimmed);
   const bytes = Math.floor(trimmed.replace(/^0x/i, '').replace(/[^0-9a-fA-F]/g, '').length / 2);
   const idx = stage === 'paste' ? 0 : 1;
 
-  const known = trimmed.toLowerCase() === DAI_ADDRESS.toLowerCase();
-  const meta = known
-    ? { symbol: 'DAI', name: 'Dai Stablecoin', decimals: 18 }
-    : { symbol: 'ORB', name: 'Unknown · non-standard contract', decimals: 18 };
+  const onAddress = (v: string): void => {
+    setAddress(v);
+    setNonErc20(false);
+    setErr(null);
+  };
 
   const back = (): void => {
     if (stage === 'paste') ctx.nav.back();
-    else setStage('paste');
+    else { setStage('paste'); setErr(null); }
   };
-  const proceed = (anyway: boolean): void => {
-    setTryAnyway(anyway);
-    setStage('confirm');
+
+  // Read metadata on-chain (no persist) to preview the token. A strict peek that
+  // hits NotErc20Error surfaces the "Try anyway" escape hatch (18-decimals fallback).
+  const runPeek = (anyway: boolean): void => {
+    if (busy || !valid) return;
+    setBusy(true);
+    setErr(null);
+    void (async () => {
+      try {
+        const token = await ctx.peekToken(trimmed, anyway);
+        setPreview(token);
+        setTryAnyway(anyway);
+        setNonErc20(false);
+        setStage('confirm');
+      } catch (e) {
+        setNonErc20(isNotErc20(e));
+        setErr(formatError(e));
+      } finally {
+        setBusy(false);
+      }
+    })();
   };
+
   const finish = (): void => {
-    ctx.addToken({ address: trimmed, symbol: meta.symbol, name: meta.name, decimals: meta.decimals });
-    ctx.toast(`${meta.symbol} added`);
-    ctx.nav.reset('home');
+    if (busy || preview == null) return;
+    setBusy(true);
+    setErr(null);
+    void (async () => {
+      try {
+        const token = await ctx.addToken(trimmed, tryAnyway);
+        ctx.toast(`${token.symbol} added`);
+        ctx.nav.reset('home');
+      } catch (e) {
+        setErr(formatError(e));
+        setBusy(false);
+      }
+    })();
   };
 
   return (
@@ -73,7 +111,7 @@ export function AddToken(): React.JSX.Element {
               <TextInput
                 style={styles.fieldInput}
                 value={address}
-                onChangeText={setAddress}
+                onChangeText={onAddress}
                 placeholder="0x…"
                 placeholderTextColor={colors.fgSubtle}
                 autoFocus
@@ -81,12 +119,7 @@ export function AddToken(): React.JSX.Element {
                 autoCorrect={false}
                 spellCheck={false}
               />
-              {address === '' ? (
-                <Pressable style={styles.paste} onPress={() => setAddress(DAI_ADDRESS)}>
-                  <Icon name="copy" size={12} color={colors.fg} />
-                  <Text style={styles.pasteText}>Paste</Text>
-                </Pressable>
-              ) : (
+              {address !== '' && (
                 <Icon name={valid ? 'check' : 'alert'} size={18} color={valid ? colors.cyan : colors.danger} />
               )}
             </View>
@@ -97,25 +130,29 @@ export function AddToken(): React.JSX.Element {
               </Text>
             </View>
 
-            {valid && !known && (
+            {nonErc20 ? (
               <View style={styles.nonStandard}>
                 <ErrorCard
                   title="This contract doesn’t look like an ERC-20"
                   detail="It didn’t respond to decimals() — it may be non-standard. You can register it anyway, but balances may display incorrectly."
                 />
-                <Pressable style={styles.tryAnyway} onPress={() => proceed(true)}>
+                <Pressable style={styles.tryAnyway} onPress={() => runPeek(true)}>
                   <Text style={styles.tryAnywayText}>Try anyway</Text>
                 </Pressable>
               </View>
-            )}
+            ) : err != null ? (
+              <View style={styles.nonStandard}>
+                <ErrorCard title={err.title} detail={err.detail} />
+              </View>
+            ) : null}
           </ScrollView>
           <View style={styles.actionBar}>
-            <Btn variant="accent-cyan" full disabled={!valid} onPress={() => proceed(!known)}>
+            <Btn variant="accent-cyan" full disabled={!valid || busy} onPress={() => runPeek(false)}>
               Continue
             </Btn>
           </View>
         </>
-      ) : (
+      ) : preview != null ? (
         <>
           <ScrollView style={styles.scroll} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
             {tryAnyway && (
@@ -127,10 +164,6 @@ export function AddToken(): React.JSX.Element {
                     The wallet defaulted to <Text style={styles.warnStrong}>18 decimals</Text> because the contract
                     didn’t respond cleanly. Verify the actual decimals before sending.
                   </Text>
-                  <Pressable style={styles.verify} onPress={() => ctx.toast('Opening Blockscout…')}>
-                    <Icon name="external-link" size={12} color={colors.fg} />
-                    <Text style={styles.verifyText}>Verify on Blockscout</Text>
-                  </Pressable>
                 </View>
               </View>
             )}
@@ -138,12 +171,12 @@ export function AddToken(): React.JSX.Element {
             <View style={styles.tokenHead}>
               <View style={[styles.mark, tryAnyway && styles.markUnknown]}>
                 <Text style={[styles.markText, tryAnyway && styles.markTextUnknown]}>
-                  {tryAnyway ? '?' : meta.symbol.slice(0, 3)}
+                  {tryAnyway ? '?' : preview.symbol.slice(0, 3)}
                 </Text>
               </View>
               <View style={styles.tokenHeadBody}>
-                <Text style={styles.tokenSymbol}>{meta.symbol}</Text>
-                <Text style={styles.tokenName}>{meta.name}</Text>
+                <Text style={styles.tokenSymbol}>{preview.symbol}</Text>
+                <Text style={styles.tokenName}>{preview.name}</Text>
               </View>
             </View>
 
@@ -154,26 +187,32 @@ export function AddToken(): React.JSX.Element {
 
             <View style={styles.meta}>
               <MetaRow k="Contract" trailing={<Icon name="copy" size={14} color={colors.fgSubtle} />}>
-                {truncAddr(trimmed, 8)}
+                {truncAddr(preview.address, 8)}
               </MetaRow>
               <MetaRow k="Name" sans>
-                {meta.name}
+                {preview.name}
               </MetaRow>
               <MetaRow k="Decimals" last trailing={tryAnyway ? <AssumedTag /> : undefined}>
-                {String(meta.decimals)}
+                {String(preview.decimals)}
               </MetaRow>
             </View>
+
+            {err != null && (
+              <View style={styles.confirmErr}>
+                <ErrorCard title={err.title} detail={err.detail} />
+              </View>
+            )}
           </ScrollView>
           <View style={styles.actionBar}>
             <Btn variant="outline" onPress={() => ctx.nav.reset('home')}>
               Cancel
             </Btn>
-            <Btn variant="accent-cyan" full onPress={finish}>
-              Add {meta.symbol}
+            <Btn variant="accent-cyan" full disabled={busy} onPress={finish}>
+              Add {preview.symbol}
             </Btn>
           </View>
         </>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -245,6 +284,7 @@ const styles = StyleSheet.create({
   bytesOk: { color: colors.cyan },
 
   nonStandard: { marginTop: 14 },
+  confirmErr: { marginTop: 18 },
   tryAnyway: { alignSelf: 'flex-start', marginTop: 12, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.sm, paddingVertical: 8, paddingHorizontal: 12 },
   tryAnywayText: { color: colors.fg, fontSize: fontSize.xs },
 
