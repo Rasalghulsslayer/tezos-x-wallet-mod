@@ -7,6 +7,39 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
 
 ## [Unreleased]
 
+### Changed
+- Vault crypto now runs natively via `react-native-quick-crypto` (OpenSSL /
+  BoringSSL over Nitro/JSI), replacing the pure-JS `@noble` CryptoPort for the
+  mobile vault. Unlocking a vault runs a 600k-iteration PBKDF2 to decrypt it; on
+  Hermes' pure-JS crypto that ground the JS thread for seconds — an unavoidable
+  stall in JS, since deriving the key *is* the unlock. Native crypto runs the
+  same PBKDF2 in OpenSSL and brings unlock into the sub-second range. The vault
+  envelope is unchanged — PBKDF2-HMAC-SHA256 at 600k, AES-256-GCM,
+  ciphertext‖16-byte-tag, no AAD — and stays byte-for-byte identical to the
+  extension's Web Crypto vault: `react-native-quick-crypto` is a `node:crypto`
+  drop-in, and `node:crypto` is already proven byte-identical to `@noble` / Web
+  Crypto at 600k by the cross-impl recipe test (`quick-crypto-port-byte-compat`).
+  Randomness now comes from the native OpenSSL CSPRNG. The `@noble` port stays in
+  the tree as a fallback; Nitro (the runtime quick-crypto needs) was already
+  present via `react-native-mmkv`, so no new native runtime is introduced.
+
+  This adds a native dependency, so it needs a dev build (Nitro/JSI cannot run in
+  Expo Go). After pulling the branch:
+  ```
+  npx expo install react-native-quick-crypto react-native-quick-base64 expo-build-properties
+  npx expo prebuild --clean
+  npx expo run:ios      # or run:android
+  ```
+  Manual on-device test (the native module cannot load under Vitest, so the
+  byte-compat guarantee is completed on-device):
+  1. Create/import a wallet, lock, then unlock — confirm unlock is now fast
+     (sub-second) and balances load.
+  2. Cross-device round-trip at the production 600k factor: seal a vault on
+     mobile and confirm the Chrome extension opens it with the same password,
+     and vice versa (the shared vault envelope must stay portable).
+  3. Enter a wrong password — confirm unlock is rejected (native GCM tag mismatch
+     fails closed).
+
 ### Added
 - Instant account switching + corrected iconography. Switching accounts no
   longer stalls the UI for seconds. The stall was a full 600k-PBKDF2 vault

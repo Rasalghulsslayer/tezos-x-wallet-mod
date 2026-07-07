@@ -1,8 +1,8 @@
 /**
  * Mobile composition root — the equivalent of the extension service worker's
  * adapter wiring, minus a buildContainer (the unlock+balances milestone is
- * read-only and needs no signer/provider Container). Constructs the @noble
- * CryptoPort, the MMKV-backed persistent ports, the Keychain unlock-secret
+ * read-only and needs no signer/provider Container). Constructs the native
+ * (react-native-quick-crypto) CryptoPort, the MMKV-backed persistent ports, the Keychain unlock-secret
  * store, and the Keyring. A single MMKV instance backs vault/sessions/tokens;
  * the unlock secret lives separately in the Keychain behind biometrics.
  */
@@ -15,7 +15,7 @@ import { ensureContainerFor } from '@tezosx/wallet-core/composition/container-bu
 import type { SwState, SwDeps } from '@tezosx/wallet-core/composition/sw-wiring';
 import type { PersistentPorts } from '@tezosx/wallet-core/ports/container';
 import type { ContentPush } from '@tezosx/wallet-core/shared/messages';
-import { NobleCryptoPort } from '../adapters/noble-crypto-port';
+import { QuickCryptoPort } from '../adapters/quick-crypto-port';
 import { MmkvVaultStore } from '../adapters/mmkv-vault-store';
 import { MmkvSessionStore } from '../adapters/mmkv-session-store';
 import { MmkvTokenStore } from '../adapters/mmkv-token-store';
@@ -26,7 +26,7 @@ import { emitProviderEvent } from '../transport/walletconnect';
 
 const mmkv = createMMKV({ id: 'tezosx-wallet' });
 
-export const cryptoPort    = new NobleCryptoPort();
+export const cryptoPort    = new QuickCryptoPort();
 export const vaultStore    = new MmkvVaultStore(mmkv);
 export const sessionStore  = new MmkvSessionStore(mmkv);
 export const tokenStore    = new MmkvTokenStore(mmkv);

@@ -30,7 +30,9 @@
           "cameraPermission": "Tezos X uses the camera to scan a dApp's WalletConnect QR code.",
           "barcodeScannerEnabled": true
         }
-      ]
+      ],
+      "react-native-quick-crypto",
+      "expo-build-properties"
     ]
   }
 }
