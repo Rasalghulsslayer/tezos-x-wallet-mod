@@ -8,6 +8,13 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
 ## [Unreleased]
 
 ### Added
+- Reconciliation cleanup + tests (final step). Removed the mock data layer
+  (`src/mocks`) now that every screen runs on the live composition — no screen
+  imports fixtures anymore. Added a Vitest suite (node env, `test` / `test:watch`
+  scripts) covering the pure view-models: the `ActivityItem` → row mapping
+  (including the amount-scaled-by-decimals conversion that a units bug slipped
+  through earlier) and the `ViewAccount` adapter over `AccountSummary` /
+  `VaultStateUnlocked`.
 - Real dApp surface behind the design (fifth reconciliation step). The Approve
   sheet and Connections screen run on the live WalletConnect transport + the core
   approval queue instead of mocks. Scanning a dApp's WalletConnect QR with the
