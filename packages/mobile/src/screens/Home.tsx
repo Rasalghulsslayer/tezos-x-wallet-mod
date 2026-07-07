@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, fontSize, radius, space } from '../theme';
-import { XTZ, fmtXtz } from '../ui/format';
+import { fmtXtz } from '../ui/format';
 import { Icon } from '../ui/icon';
 import { AccountHeader } from '../ui/tx/AccountHeader';
 import { AssetRow } from '../ui/tx/AssetRow';
@@ -18,6 +18,7 @@ import { ErrorCard } from '../ui/tx/ErrorCard';
 import { IconBtn } from '../ui/tx/IconBtn';
 import { LogoMark } from '../ui/tx/LogoMark';
 import { Spinner } from '../ui/tx/Spinner';
+import { TezosGlyph } from '../ui/tx/TezosGlyph';
 import { useWallet } from '../wallet/context';
 
 export function Home(): React.JSX.Element {
@@ -56,9 +57,10 @@ export function Home(): React.JSX.Element {
             <>
               <View style={styles.num}>
                 <Text style={styles.numValue}>{hidden ? '••••••' : fmtXtz(bal?.xtz ?? '0')}</Text>
-                <Text style={styles.numUnit}>
-                  {XTZ} XTZ
-                </Text>
+                <View style={styles.numUnit}>
+                  <TezosGlyph size={fontSize.xl} color={colors.fgMuted} />
+                  <Text style={styles.numUnitLabel}>XTZ</Text>
+                </View>
               </View>
               <Pressable style={styles.hide} onPress={() => setHidden((h) => !h)}>
                 <Icon name={hidden ? 'eye-off' : 'eye'} size={13} color={colors.fgSubtle} />
@@ -172,7 +174,8 @@ const styles = StyleSheet.create({
     color: colors.fg,
     fontVariant: ['tabular-nums'],
   },
-  numUnit: { fontSize: fontSize.xl, color: colors.fgMuted, fontWeight: '500' },
+  numUnit: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  numUnitLabel: { fontSize: fontSize.xl, color: colors.fgMuted, fontWeight: '500' },
   hide: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 6 },
   hideText: { color: colors.fgSubtle, fontSize: fontSize.xs },
 

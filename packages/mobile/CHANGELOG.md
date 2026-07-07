@@ -40,6 +40,12 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
   3. Enter a wrong password — confirm unlock is rejected (native GCM tag mismatch
      fails closed).
 
+### Fixed
+- The total-balance unit rendered the ꜩ ligature as text, but the on-device font
+  has no glyph for that codepoint (U+A729) so it showed as a tofu box next to the
+  amount. It now renders the `TezosGlyph` SVG mark — font-independent, the same
+  mark the asset rows use — so the ꜩ displays correctly.
+
 ### Added
 - Instant account switching + corrected iconography. Switching accounts no
   longer stalls the UI for seconds. The stall was a full 600k-PBKDF2 vault
