@@ -22,6 +22,15 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Tezos X uses the camera to scan a dApp's WalletConnect QR code.",
+          "barcodeScannerEnabled": true
+        }
+      ]
+    ]
   }
 }

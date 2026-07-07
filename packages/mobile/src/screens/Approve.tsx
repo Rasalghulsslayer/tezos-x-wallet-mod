@@ -7,8 +7,10 @@
  *   - transaction: the dApp's EVM intent AND, for a cross-runtime call, "what you
  *                  actually sign" — the Michelson target / entrypoint / selector /
  *                  mutez the tz1 signs, forwarded to the EVM runtime via NAC.
- * Approving runs a brief signing → done animation before resolving; rejecting (or
- * tapping the scrim) closes immediately. Connect additionally records the session.
+ * Approving is gated behind a per-signature biometric confirm, then resolves the
+ * pending ApprovalQueue request (unblocking the dApp's awaiting promise over
+ * WalletConnect); rejecting — or the scrim / hardware back — resolves it as a
+ * rejection. The core writes the per-origin session on a connect approval.
  */
 
 import { useEffect, useState } from 'react';
@@ -18,52 +20,52 @@ import { colors, fontSize, font, radius, safe } from '../theme';
 import { truncAddr } from '../ui/format';
 import { Icon } from '../ui/icon';
 import { Btn } from '../ui/tx/Btn';
-import { Burst } from '../ui/tx/Burst';
 import { Identicon } from '../ui/tx/Identicon';
 import { Line } from '../ui/tx/Line';
 import { PinnedChip } from '../ui/tx/PinnedChip';
 import { RiskBand } from '../ui/tx/RiskBand';
 import { Spinner } from '../ui/tx/Spinner';
+import type { PendingRequest } from '@tezosx/wallet-core/shared/messages';
 import { useWallet } from '../wallet/context';
-import { MOCK_PENDING, type PendingKind } from '../mocks';
-import type { ViewAccount } from '../wallet/view-account';
 
 function hostOf(origin: string): string {
   const m = /^[a-z]+:\/\/([^/]+)/i.exec(origin);
   return m != null ? m[1] : origin;
 }
 
-type Stage = 'request' | 'signing' | 'done';
+type Stage = 'request' | 'signing';
 
 export function Approve(): React.JSX.Element | null {
   const ctx = useWallet();
-  const pending = ctx.approve;
+  const req = ctx.approve;
   const [stage, setStage] = useState<Stage>('request');
 
   useEffect(() => {
     setStage('request');
-  }, [pending?.kind]);
+  }, [req?.requestId]);
 
-  if (pending == null) return null;
+  if (req == null) return null;
 
-  const req = MOCK_PENDING[pending.kind];
   const host = hostOf(req.origin);
   const pinned = ctx.accounts.find((a) => a.id === req.accountId) ?? ctx.activeAccount;
+  const accent: 'purple' | 'cyan' = req.kind === 'transaction' ? 'purple' : 'cyan';
 
+  // reject resolves the dApp's pending promise immediately; approve gates on the
+  // biometric confirm inside resolveApproval — on cancel it returns false and the
+  // sheet stays open (the request is not resolved).
   const respond = (decision: 'approve' | 'reject'): void => {
     if (decision === 'reject') {
-      ctx.closeApprove();
+      void ctx.resolveApproval('reject');
       return;
     }
     setStage('signing');
-    setTimeout(() => {
-      setStage('done');
-      if (pending.kind === 'connect') ctx.addSession(req.origin, req.accountId);
-      setTimeout(() => ctx.closeApprove(pending.kind === 'connect' ? 'connections' : null), 1000);
-    }, 1300);
+    void (async () => {
+      const ok = await ctx.resolveApproval('approve');
+      if (!ok) setStage('request');
+    })();
   };
 
-  const busy = stage === 'signing' || stage === 'done';
+  const busy = stage === 'signing';
 
   return (
     <Modal
@@ -78,18 +80,8 @@ export function Approve(): React.JSX.Element | null {
           <View style={[styles.sheet, styles.busySheet]}>
             <View style={styles.grip} />
             <View style={styles.busyBody}>
-              {stage === 'signing' ? (
-                <>
-                  <Spinner accent={pending.kind === 'transaction' ? 'purple' : 'cyan'} />
-                  <Text style={styles.busyTitle}>Waiting for confirmation</Text>
-                </>
-              ) : (
-                <>
-                  <Burst />
-                  <Text style={styles.doneTitle}>Done</Text>
-                  <Text style={styles.doneSub}>You can return to {host}.</Text>
-                </>
-              )}
+              <Spinner accent={accent} />
+              <Text style={styles.busyTitle}>Waiting for confirmation</Text>
             </View>
           </View>
         </View>
@@ -97,11 +89,7 @@ export function Approve(): React.JSX.Element | null {
         <Pressable style={styles.overlay} onPress={() => respond('reject')}>
           <Pressable style={styles.sheet} onPress={() => {}}>
             <View style={styles.grip} />
-            <ApproveHead
-              accent={pending.kind === 'transaction' ? 'purple' : 'cyan'}
-              subtitle={SUBTITLE[pending.kind]}
-              host={host}
-            />
+            <ApproveHead accent={accent} subtitle={SUBTITLE[req.kind]} host={host} />
             <ScrollView
               style={styles.scroll}
               contentContainerStyle={styles.scrollContent}
@@ -112,14 +100,14 @@ export function Approve(): React.JSX.Element | null {
                 addr={truncAddr(pinned.kind === 'evm' ? pinned.address : pinned.evmAlias, 8)}
                 leading={<Identicon seed={pinned.identitySeed} size={34} />}
               />
-              <Body pending={pending.kind} pinned={pinned} host={host} />
+              <Body req={req} host={host} />
             </ScrollView>
             <View style={styles.actionBar}>
               <Btn variant="outline" onPress={() => respond('reject')}>
                 Reject
               </Btn>
               <Btn variant="accent" full onPress={() => respond('approve')}>
-                {CONFIRM_LABEL[pending.kind]}
+                {CONFIRM_LABEL[req.kind]}
               </Btn>
             </View>
           </Pressable>
@@ -129,28 +117,25 @@ export function Approve(): React.JSX.Element | null {
   );
 }
 
-const SUBTITLE: Record<PendingKind, string> = {
+const SUBTITLE: Record<PendingRequest['kind'], string> = {
   connect: 'Connection request',
   signature: 'Signature request',
   transaction: 'Transaction request',
 };
 
-const CONFIRM_LABEL: Record<PendingKind, string> = {
+const CONFIRM_LABEL: Record<PendingRequest['kind'], string> = {
   connect: 'Connect',
   signature: 'Sign',
   transaction: 'Approve',
 };
 
 function Body({
-  pending,
+  req,
   host,
 }: {
-  pending: PendingKind;
-  pinned: ViewAccount;
+  req: PendingRequest;
   host: string;
 }): React.JSX.Element {
-  const req = MOCK_PENDING[pending];
-
   if (req.kind === 'connect') {
     return (
       <>
@@ -180,7 +165,7 @@ function Body({
         <RiskBand level="med" title="Moderate" detail="The site only gets a signature — no transaction is broadcast." />
         <Text style={[styles.kicker, styles.kickerSpaced]}>Message</Text>
         <View style={styles.messageCard}>
-          <Text style={styles.messageText}>{req.decoded}</Text>
+          <Text style={styles.messageText}>{req.decoded ?? req.message}</Text>
         </View>
       </>
     );
@@ -190,7 +175,7 @@ function Body({
   return (
     <>
       <Text style={styles.kicker}>Requesting</Text>
-      <Text style={styles.headline}>{req.methodSig}</Text>
+      <Text style={styles.headline}>{req.methodSig ?? 'Transaction'}</Text>
       <RiskBand level="med" title="Moderate" detail="Review the recipient and amount before signing." />
       <Text style={[styles.kicker, styles.kickerSpaced]}>dApp intent</Text>
       <View style={styles.card}>
@@ -198,7 +183,7 @@ function Body({
         <View style={styles.divider} />
         <Line label="Value" value={req.value} />
         <View style={styles.divider} />
-        <Line label="Data" value={<Text style={styles.mono}>{truncAddr(req.data, 10)}</Text>} />
+        <Line label="Data" value={<Text style={styles.mono}>{req.data === '0x' || req.data === '' ? '—' : truncAddr(req.data, 10)}</Text>} />
       </View>
       {cross != null && (
         <>
@@ -208,7 +193,7 @@ function Body({
             <View style={styles.divider} />
             <Line label="Entrypoint" value={cross.entrypoint} />
             <View style={styles.divider} />
-            <Line label="Selector" value={<Text style={styles.mono}>{cross.decodedSelector}</Text>} />
+            <Line label="Selector" value={<Text style={styles.mono}>{cross.decodedSelector ?? '—'}</Text>} />
             <View style={styles.divider} />
             <Line label="Debit (mutez)" value={cross.mutezValue} />
           </View>

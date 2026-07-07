@@ -8,6 +8,26 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
 ## [Unreleased]
 
 ### Added
+- Real dApp surface behind the design (fifth reconciliation step). The Approve
+  sheet and Connections screen run on the live WalletConnect transport + the core
+  approval queue instead of mocks. Scanning a dApp's WalletConnect QR with the
+  camera — or pasting its `wc:` link — on Connections pairs over the relay; the
+  incoming proposal (and any `eth_sendTransaction`)
+  routes through the shared core dispatch, which suspends on the Approve sheet —
+  now driven by the real pending request (observed via `approvalUi`, resolved off
+  the ApprovalQueue), showing the actual origin, the pinned account, and for a
+  cross-runtime transaction both the dApp's EVM intent and the Michelson gateway
+  call the tz1 actually signs. Approving is gated behind the same per-signature
+  biometric confirm the Send flow uses (fail-closed; a no-op on password-only
+  devices), then resolves the request so the dApp gets its answer; rejecting or
+  dismissing the sheet answers the dApp with a rejection. Connections lists the
+  live per-origin sessions and keeps them fresh as they come and go; revoking one
+  tears down both the WalletConnect session and the stored per-origin entry.
+  WalletConnect boots on unlock and restores previously-approved sessions. A
+  request the runtime can't satisfy — an EVM message signature (`personal_sign`
+  / typed data), which a tz1 account has no key for — is rejected promptly (4200)
+  instead of surfacing an approval that would fail. Connecting asks how to pair —
+  scan the dApp's WalletConnect QR (camera, via `expo-camera`) or paste its link.
 - Real Send flow (fourth reconciliation step). The review's Confirm & send now
   calls the core `sendTransfer` through the active account's warm container
   instead of fabricating a hash: a tz1 → tz1 transfer returns the L1 op hash; a

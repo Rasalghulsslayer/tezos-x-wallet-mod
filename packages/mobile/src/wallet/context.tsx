@@ -10,8 +10,8 @@
  * increment; balances / tokens / activity run on the live fetchers.
  */
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { VaultState, VaultStateUnlocked } from '@tezosx/wallet-core/shared/messages';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import type { VaultState, VaultStateUnlocked, PendingRequest } from '@tezosx/wallet-core/shared/messages';
 import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
 import { accountCardVM, type AccountCardVM } from '@tezosx/wallet-core/view-models/account-card-vm';
 import { getState } from '@tezosx/wallet-core/use-cases/get-state';
@@ -20,12 +20,13 @@ import type { ImportAccountReq } from '@tezosx/wallet-core/use-cases/import-acco
 import type { AddAccountReq, AddAccountResult } from '@tezosx/wallet-core/use-cases/add-account';
 import type { SendTransferReq, SendTransferResult } from '@tezosx/wallet-core/use-cases/send-transfer';
 import type { ResolveTxResult } from '@tezosx/wallet-core/use-cases/resolve-tx';
-import { keyring, evmAliasCache, deps } from '../composition/wiring';
+import type { StoredSession } from '@tezosx/wallet-core/ports/session-store';
+import { keyring, evmAliasCache, deps, approvalQueue } from '../composition/wiring';
+import { approvalUi } from '../composition/approval-ui';
 import { startAutoLock, type AutoLockHandle } from '../lock/auto-lock';
 import * as vaultActions from './vault-actions';
 import { useAccountData, type AsyncData, type BalancesView, type ActivityView } from './use-account-data';
 import { activeToView, summaryToView, type ViewAccount } from './view-account';
-import type { MockSession, PendingKind } from '../mocks';
 
 export type VaultView = 'onboarding' | 'locked' | 'unlocked';
 export type TabId = 'home' | 'activity' | 'connections' | 'settings';
@@ -51,8 +52,8 @@ export interface WalletContextValue {
   activeAccount: ViewAccount;
   accountCard: AccountCardVM | null;
   activeId: string;
-  sessions: MockSession[];
-  approve: { kind: PendingKind } | null;
+  sessions: StoredSession[];
+  approve: PendingRequest | null;
   switcherOpen: boolean;
   toastMsg: string | null;
   stack: StackEntry[];
@@ -77,10 +78,9 @@ export interface WalletContextValue {
   resetToWelcome: () => void;
   openSwitcher: () => void;
   closeSwitcher: () => void;
-  openApprove: (kind: PendingKind) => void;
-  closeApprove: (goTab?: TabId | null) => void;
-  addSession: (origin: string, accountId: string) => void;
   disconnect: (origin: string) => void;
+  connect: (uri: string) => Promise<void>;
+  resolveApproval: (decision: 'approve' | 'reject') => Promise<boolean>;
   peekToken: (address: string, tryAnyway?: boolean) => Promise<RegisteredToken>;
   addToken: (address: string, tryAnyway?: boolean) => Promise<RegisteredToken>;
   removeToken: (address: string) => Promise<void>;
@@ -109,7 +109,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
   const [stack, setStack] = useState<StackEntry[]>([]);
   const [navDir, setNavDir] = useState<'fwd' | 'back'>('fwd');
   const [switcherOpen, setSwitcherOpen] = useState(false);
-  const [approve, setApprove] = useState<{ kind: PendingKind } | null>(null);
+  const [sessions, setSessions] = useState<StoredSession[]>([]);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoLock = useRef<AutoLockHandle | null>(null);
@@ -126,8 +126,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
   const accountCard = activeState != null ? accountCardVM(activeState) : null;
   const accountData = useAccountData(activeState, dataNonce);
 
+  // Live dApp approval: the presenter writes the pending requestId to approvalUi;
+  // resolve it to the full request off the queue.
+  const approveId = useSyncExternalStore(approvalUi.subscribe, approvalUi.get);
+  const approve = approveId != null ? approvalQueue.get(approveId) ?? null : null;
+
   const refresh = useCallback(async (): Promise<void> => {
     setVaultState(await getState({ keyring, evmAliasCache }));
+  }, []);
+
+  const reloadSessions = useCallback(async (): Promise<void> => {
+    setSessions(await vaultActions.loadSessions());
   }, []);
 
   // Boot: instant network-free read, then (if unlocked) warm the container +
@@ -156,7 +165,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
     vaultActions.lockWallet();
     autoLock.current?.stop();
     autoLock.current = null;
-    setStack([]); setSwitcherOpen(false); setApprove(null);
+    setStack([]); setSwitcherOpen(false);
     setVaultState({ status: 'locked' });
   }, []);
 
@@ -166,6 +175,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
     autoLock.current = startAutoLock(() => lock());
     return () => { autoLock.current?.stop(); autoLock.current = null; };
   }, [vault, lock]);
+
+  // Keep the dApp session list fresh while unlocked (WalletConnect changes).
+  useEffect(() => {
+    if (vault !== 'unlocked') { setSessions([]); return; }
+    void reloadSessions();
+    return vaultActions.subscribeSessions(() => { void reloadSessions(); });
+  }, [vault, reloadSessions]);
 
   const labelFor = useCallback((a: ViewAccount | undefined): string => {
     if (a == null) return 'Account';
@@ -189,7 +205,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
   const value = useMemo<WalletContextValue>(() => ({
     booted, vault, biometricsAvailable: bioAvailable,
     accounts, activeAccount, accountCard, activeId: activeState?.accountId ?? '',
-    sessions: [], approve, switcherOpen, toastMsg, stack, navDir, nav,
+    sessions, approve, switcherOpen, toastMsg, stack, navDir, nav,
     balances: accountData.balances,
     tokens: accountData.tokens,
     activity: accountData.activity,
@@ -215,11 +231,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
     resetToWelcome: () => { setOnboardingOverride(true); setStack([]); },
     openSwitcher: () => setSwitcherOpen(true),
     closeSwitcher: () => setSwitcherOpen(false),
-    openApprove: (kind) => setApprove({ kind }),
-    closeApprove: (goTab) => { setApprove(null); if (goTab != null) { setStack([]); setTab(goTab); } },
-    // dApp sessions — wired to WalletConnect in a later step.
-    addSession: () => {},
-    disconnect: () => { toast('Disconnected'); },
+    connect: (uri) => vaultActions.connectDapp(uri),
+    resolveApproval: (decision) => vaultActions.resolveApproval(decision),
+    disconnect: (origin) => {
+      void (async () => {
+        try {
+          await vaultActions.disconnectDapp(origin);
+          await reloadSessions();
+          toast('Disconnected');
+        } catch {
+          toast('Could not disconnect');
+        }
+      })();
+    },
     peekToken: (address, tryAnyway) => vaultActions.peekToken(address, tryAnyway),
     addToken: async (address, tryAnyway) => {
       const token = await vaultActions.addToken(address, tryAnyway);
@@ -237,8 +261,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
     },
     sendTransfer: (req) => vaultActions.sendTransfer(req),
     resolveTx: (syntheticHash) => vaultActions.resolveTx(syntheticHash),
-  }), [booted, vault, bioAvailable, accounts, activeAccount, accountCard, accountData, activeState, approve, switcherOpen,
-      toastMsg, stack, navDir, nav, labelFor, toast, copy, lock, enterUnlocked, refresh]);
+  }), [booted, vault, bioAvailable, accounts, activeAccount, accountCard, accountData, activeState, approve, sessions,
+      switcherOpen, toastMsg, stack, navDir, nav, labelFor, toast, copy, lock, enterUnlocked, refresh, reloadSessions]);
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }

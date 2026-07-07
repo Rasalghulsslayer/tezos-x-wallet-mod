@@ -16,15 +16,24 @@ import { addCustomToken } from '@tezosx/wallet-core/use-cases/add-custom-token';
 import { removeCustomToken } from '@tezosx/wallet-core/use-cases/remove-custom-token';
 import { sendTransfer as sendTransferUseCase, type SendTransferReq, type SendTransferResult } from '@tezosx/wallet-core/use-cases/send-transfer';
 import { resolveTx as resolveTxUseCase, type ResolveTxResult } from '@tezosx/wallet-core/use-cases/resolve-tx';
+import { listSessions as listStoredSessions } from '@tezosx/wallet-core/use-cases/list-sessions';
+import { disconnectOrigin } from '@tezosx/wallet-core/use-cases/disconnect-origin';
 import { lockVault } from '@tezosx/wallet-core/use-cases/lock-vault';
 import { getState } from '@tezosx/wallet-core/use-cases/get-state';
 import type { VaultState } from '@tezosx/wallet-core/shared/messages';
 import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
+import type { StoredSession } from '@tezosx/wallet-core/ports/session-store';
 import type { Container } from '@tezosx/wallet-core/ports/container';
 import { TEZLINK_EVM_RPC } from '@tezosx/relayer/constants';
-import { keyring, tokenStore, unlockSecret, evmAliasCache, deps } from '../composition/wiring';
+import { keyring, tokenStore, unlockSecret, evmAliasCache, deps, approvalQueue, sessionStore } from '../composition/wiring';
+import { approvalUi } from '../composition/approval-ui';
 import { readState } from '../composition/read-state';
-import { startWalletConnect } from '../composition/walletconnect-connect';
+import { startWalletConnect, connect as wcConnect } from '../composition/walletconnect-connect';
+import {
+  listSessions as listWcSessions,
+  disconnectSession as disconnectWcSession,
+  subscribeSessions as subscribeWcSessions,
+} from '../transport/walletconnect';
 
 /** Network-free boot read: empty → onboarding, locked, or (rehydrated) unlocked. */
 export function bootState(): Promise<VaultState> {
@@ -157,4 +166,46 @@ export function resolveTx(syntheticHash: string): Promise<ResolveTxResult> {
   const container = deps.state.container;
   if (container == null) throw new Error('Wallet is locked');
   return resolveTxUseCase({ syntheticHash }, { container });
+}
+
+// ── dApp approvals + WalletConnect sessions ───────────────────────────────────
+
+/**
+ * Resolve the pending dApp approval (the one the presenter surfaced via
+ * approvalUi). An approve is gated behind the per-signature biometric confirm
+ * (returns false, leaving the request pending, when the user cancels); a reject
+ * resolves immediately. Returns whether the decision was delivered.
+ */
+export async function resolveApproval(decision: 'approve' | 'reject'): Promise<boolean> {
+  const requestId = approvalUi.get();
+  if (requestId == null) return false;
+  if (decision === 'approve') {
+    const req = approvalQueue.get(requestId);
+    const title = req?.kind === 'signature' ? 'Sign message' : req?.kind === 'transaction' ? 'Confirm transaction' : 'Connect dApp';
+    if (!(await confirmSignature(title))) return false;
+  }
+  approvalQueue.resolve(requestId, decision);
+  return true;
+}
+
+/** Pair with a dApp from a pasted `wc:` URI; the proposal then drives the modal. */
+export function connectDapp(uri: string): Promise<void> {
+  return wcConnect(uri);
+}
+
+/** The persisted per-origin dApp sessions (the Connections list source). */
+export function loadSessions(): Promise<StoredSession[]> {
+  return listStoredSessions({ sessionStore });
+}
+
+/** Live WC session changes (approve / disconnect / dApp-side revoke). */
+export function subscribeSessions(listener: () => void): () => void {
+  return subscribeWcSessions(listener);
+}
+
+/** Revoke a dApp: tear down the live WC session AND drop the stored per-origin entry. */
+export async function disconnectDapp(origin: string): Promise<void> {
+  const topic = listWcSessions().find((s) => s.url === origin)?.topic;
+  if (topic != null) await disconnectWcSession(topic);
+  await disconnectOrigin({ origin }, { sessionStore });
 }

@@ -139,12 +139,24 @@ async function handleProposal(proposal: SessionProposal): Promise<void> {
 
 async function handleRequest(request: SessionRequest): Promise<void> {
   const { topic, id } = request;
+  const method = request.params.request.method;
   const origin = sessionOrigin(topic) ?? '';
+
+  // EVM message signatures a Tezos (tz1) account cannot produce — its 0x is a
+  // kernel-derived alias with no wallet-held secp256k1 key. Reject promptly so
+  // the dApp gets an answer instead of waiting on a signature that never comes
+  // (and so the user isn't asked to approve something that would fail anyway).
+  // When EVM-native accounts land these become signable and can be advertised.
+  if (method === 'personal_sign' || method === 'eth_sign' || method.startsWith('eth_signTypedData')) {
+    await respondToRequest({ topic, id, error: { code: 4200, message: `${method} is not supported by Tezos accounts` } });
+    return;
+  }
+
   const msg: EthereumRequest = {
     type:      'ETHEREUM_REQUEST',
     origin,
     requestId: cryptoPort.randomUUID(),
-    args:      { method: request.params.request.method, params: request.params.request.params },
+    args:      { method, params: request.params.request.params },
   };
   const source: ClassifiedSource = { channel: 'dapp', verifiedOrigin: origin };
 
