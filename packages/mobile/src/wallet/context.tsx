@@ -18,6 +18,8 @@ import { getState } from '@tezosx/wallet-core/use-cases/get-state';
 import { setActiveAccount as setActiveUseCase } from '@tezosx/wallet-core/use-cases/set-active-account';
 import type { ImportAccountReq } from '@tezosx/wallet-core/use-cases/import-account';
 import type { AddAccountReq, AddAccountResult } from '@tezosx/wallet-core/use-cases/add-account';
+import type { SendTransferReq, SendTransferResult } from '@tezosx/wallet-core/use-cases/send-transfer';
+import type { ResolveTxResult } from '@tezosx/wallet-core/use-cases/resolve-tx';
 import { keyring, evmAliasCache, deps } from '../composition/wiring';
 import { startAutoLock, type AutoLockHandle } from '../lock/auto-lock';
 import * as vaultActions from './vault-actions';
@@ -83,6 +85,8 @@ export interface WalletContextValue {
   addToken: (address: string, tryAnyway?: boolean) => Promise<RegisteredToken>;
   removeToken: (address: string) => Promise<void>;
   addAccount: (req: AddAccountReq) => Promise<AddAccountResult>;
+  sendTransfer: (req: SendTransferReq) => Promise<SendTransferResult>;
+  resolveTx: (syntheticHash: string) => Promise<ResolveTxResult>;
 }
 
 const EMPTY_ACCOUNT: ViewAccount = { id: '', kind: 'tezos', label: '', createdAt: 0, tz1: '', evmAlias: '', identitySeed: '' };
@@ -231,6 +235,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
       setVaultState(state);
       return result;
     },
+    sendTransfer: (req) => vaultActions.sendTransfer(req),
+    resolveTx: (syntheticHash) => vaultActions.resolveTx(syntheticHash),
   }), [booted, vault, bioAvailable, accounts, activeAccount, accountCard, accountData, activeState, approve, switcherOpen,
       toastMsg, stack, navDir, nav, labelFor, toast, copy, lock, enterUnlocked, refresh]);
 

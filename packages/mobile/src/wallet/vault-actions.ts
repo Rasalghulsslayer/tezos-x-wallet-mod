@@ -14,10 +14,13 @@ import { setActiveAccount } from '@tezosx/wallet-core/use-cases/set-active-accou
 import { peekCustomToken } from '@tezosx/wallet-core/use-cases/peek-custom-token';
 import { addCustomToken } from '@tezosx/wallet-core/use-cases/add-custom-token';
 import { removeCustomToken } from '@tezosx/wallet-core/use-cases/remove-custom-token';
+import { sendTransfer as sendTransferUseCase, type SendTransferReq, type SendTransferResult } from '@tezosx/wallet-core/use-cases/send-transfer';
+import { resolveTx as resolveTxUseCase, type ResolveTxResult } from '@tezosx/wallet-core/use-cases/resolve-tx';
 import { lockVault } from '@tezosx/wallet-core/use-cases/lock-vault';
 import { getState } from '@tezosx/wallet-core/use-cases/get-state';
 import type { VaultState } from '@tezosx/wallet-core/shared/messages';
 import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
+import type { Container } from '@tezosx/wallet-core/ports/container';
 import { TEZLINK_EVM_RPC } from '@tezosx/relayer/constants';
 import { keyring, tokenStore, unlockSecret, evmAliasCache, deps } from '../composition/wiring';
 import { readState } from '../composition/read-state';
@@ -118,4 +121,40 @@ export async function addToken(address: string, tryAnyway = false): Promise<Regi
 export async function removeToken(address: string): Promise<void> {
   await removeCustomToken({ accountId: activeAccountId(), address }, { tokenStore });
   await deps.rebuildContainer();
+}
+
+/**
+ * Per-signature biometric presence check. No-ops (returns true) on a
+ * password-only device — nothing is sealed to confirm against, so it must not
+ * block signing — and fails closed (false) when biometrics are set but the OS
+ * prompt is cancelled / the enrolment changed.
+ */
+export async function confirmSignature(promptTitle = 'Confirm transfer'): Promise<boolean> {
+  if (!(await biometricsAvailable())) return true;
+  return unlockSecret.confirmBiometric(promptTitle);
+}
+
+/** A guaranteed-warm Container for the active account. rebuildContainer is a
+ *  cache hit when already warm, and covers the add-account background-warm gap. */
+async function warmContainer(): Promise<Container> {
+  if (keyring.getUnlocked() == null) throw new Error('Wallet is locked');
+  await deps.rebuildContainer();
+  const container = deps.state.container;
+  if (container == null) throw new Error('Wallet is locked');
+  return container;
+}
+
+/** Broadcast a transfer, gated behind a biometric confirm. Returns immediately
+ *  with { runtime, hash } — a tz1 → 0x result is a synthetic hash to resolveTx. */
+export async function sendTransfer(req: SendTransferReq): Promise<SendTransferResult> {
+  const container = await warmContainer();
+  if (!(await confirmSignature('Confirm transfer'))) throw new Error('Biometric confirmation cancelled');
+  return sendTransferUseCase(req, { container });
+}
+
+/** One resolution attempt of a synthetic NAC hash to the real EVM hash. */
+export function resolveTx(syntheticHash: string): Promise<ResolveTxResult> {
+  const container = deps.state.container;
+  if (container == null) throw new Error('Wallet is locked');
+  return resolveTxUseCase({ syntheticHash }, { container });
 }

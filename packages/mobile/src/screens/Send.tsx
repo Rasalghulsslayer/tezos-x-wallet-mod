@@ -4,14 +4,22 @@
  *            enter amount (Max / available), validate.
  *   review → From→To lane with runtime pills, amount / routing / network lines,
  *            an insufficient-balance warning, and a routing explainer.
- *   done   → animated StatusTimeline (broadcasting → included → finalized driven
- *            by setTimeout), the sent amount + recipient, and the resulting hash.
+ *   done   → real StatusTimeline driven by trackTx (broadcasting → included →
+ *            finalized), the synthetic→real hash resolution for cross-runtime,
+ *            the sent amount + recipient, and a tappable explorer link.
  * Cross-runtime is inferred from source kind × destination runtime; the routing
  * copy comes verbatim from the design's routingLabel.
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { trackTx } from '@tezosx/wallet-core/shared/tx-status';
+import { startPoller } from '@tezosx/wallet-core/shared/poller';
+import type { TxStatus } from '@tezosx/wallet-core/domain/tx-status';
+import type { ResolveTxResult } from '@tezosx/wallet-core/use-cases/resolve-tx';
+import { formatError, type FormattedError } from '@tezosx/wallet-core/domain/error';
+import { XTZ_L1_ASSET, XTZ_L2_ASSET, type Asset } from '@tezosx/wallet-core/domain/asset';
+import { TEZOS_EXPLORER, EVM_EXPLORER } from '@tezosx/wallet-core/shared/constants';
 import { colors, font, fontSize, radius, space } from '../theme';
 import { detectRuntime, fmtXtz, truncAddr } from '../ui/format';
 import { Icon } from '../ui/icon';
@@ -19,6 +27,7 @@ import { AssetMark } from '../ui/tx/AssetMark';
 import { Btn } from '../ui/tx/Btn';
 import { Burst } from '../ui/tx/Burst';
 import { ChainPill } from '../ui/tx/ChainPill';
+import { ErrorCard } from '../ui/tx/ErrorCard';
 import { ErrorInline } from '../ui/tx/ErrorInline';
 import { Line } from '../ui/tx/Line';
 import { RoutingCard, routingLabel } from '../ui/tx/RoutingCard';
@@ -37,9 +46,20 @@ interface DoneInfo {
   runtime: 'l1' | 'l2';
   sign: string;
   hash: string;
+  pending: boolean;     // cross-runtime synthetic hash still resolving
+  unresolved: boolean;  // resolution timed out — showing the intermediate hash
 }
 
 const AMOUNT_RE = /^\d+(\.\d+)?$/;
+const RESOLVE_POLL_MS = 2_000;
+const RESOLVE_TIMEOUT_MS = 60_000;
+
+/** Human XTZ decimal → 0x-prefixed hex wei (18-dec), the unit sendTransfer expects. */
+function xtzToHexWei(xtz: string): string {
+  const [whole, frac = ''] = xtz.trim().split('.');
+  const padded = (whole + frac.padEnd(18, '0')).slice(0, whole.length + 18);
+  return '0x' + BigInt(padded || '0').toString(16);
+}
 
 export function Send(_props: { params?: Record<string, unknown> } = {}): React.JSX.Element {
   const ctx = useWallet();
@@ -62,7 +82,10 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
   const [amount, setAmount] = useState('');
   const [assetOpen, setAssetOpen] = useState(false);
   const [done, setDone] = useState<DoneInfo | null>(null);
-  const [tlStage, setTlStage] = useState<TimelineStage>('broadcasting');
+  const [txStatus, setTxStatus] = useState<TxStatus | null>(null);
+  const [pendingResolve, setPendingResolve] = useState<{ syntheticHash: string } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<FormattedError | null>(null);
 
   const dest = detectRuntime(to);
   const available =
@@ -83,20 +106,82 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
     else if (stage === 'review') setStage('form');
   };
 
-  // Animate the done timeline: broadcasting → included → finalized.
+  // Map the screen's asset selection to the core Asset union sendTransfer needs.
+  const toCoreAsset = (): Asset => {
+    if (asset.kind === 'xtz') return isEvm ? XTZ_L2_ASSET : XTZ_L1_ASSET;
+    const t = tokens.find((x) => x.address.toLowerCase() === (asset.address ?? '').toLowerCase());
+    return t != null
+      ? { kind: 'erc20', address: t.address, symbol: t.symbol, name: t.name, decimals: t.decimals, runtime: 'evm' }
+      : isEvm ? XTZ_L2_ASSET : XTZ_L1_ASSET;
+  };
+
+  const submit = (): void => {
+    if (submitting) return;
+    setErr(null);
+    setTxStatus(null);
+    setDone({ amount, symbol: asset.symbol, to, runtime: predictedRuntime, sign: '−', hash: '', pending: false, unresolved: false });
+    setStage('done');
+    setSubmitting(true);
+    void (async () => {
+      try {
+        const result = await ctx.sendTransfer({ to, amount: xtzToHexWei(amount), asset: toCoreAsset() });
+        if (result.runtime === 'l1') {
+          setDone((d) => (d != null ? { ...d, hash: result.hash, runtime: 'l1', pending: false } : d));
+        } else {
+          const fromGateway = acc.kind === 'tezos' && dest === 'l2';
+          setDone((d) => (d != null ? { ...d, hash: result.hash, runtime: 'l2', pending: fromGateway } : d));
+          if (fromGateway) setPendingResolve({ syntheticHash: result.hash });
+        }
+      } catch (e) {
+        setErr(formatError(e));
+        setDone(null);
+        setStage('review');
+      } finally {
+        setSubmitting(false);
+      }
+    })();
+  };
+
+  // Cross-runtime (tz1 → 0x): poll the synthetic NAC hash to the real EVM hash,
+  // until resolved or timed out (then keep the intermediate hash, flagged).
   useEffect(() => {
-    if (stage !== 'done') return;
-    setTlStage('broadcasting');
-    const t1 = setTimeout(() => setTlStage('included'), 1600);
-    const t2 = setTimeout(() => setTlStage('finalized'), 3400);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, [stage]);
+    if (pendingResolve == null) return;
+    const poller = startPoller<ResolveTxResult>({
+      fetch: () => ctx.resolveTx(pendingResolve.syntheticHash),
+      onUpdate: (r) => {
+        if (r.resolved) {
+          setDone((d) => (d != null ? { ...d, hash: r.hash, pending: false, unresolved: false } : d));
+          setPendingResolve(null);
+        }
+      },
+      isDone: (r) => r.resolved,
+      intervalMs: RESOLVE_POLL_MS,
+      timeoutMs: RESOLVE_TIMEOUT_MS,
+      onTimeout: () => {
+        setDone((d) => (d != null ? { ...d, pending: false, unresolved: true } : d));
+        setPendingResolve(null);
+      },
+    });
+    return () => poller.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingResolve]);
+
+  // Track on-chain confirmation once a real, resolved hash is in hand.
+  useEffect(() => {
+    if (stage !== 'done' || done == null || done.hash === '' || done.pending || done.unresolved) return;
+    const handle = trackTx({ hash: done.hash, runtime: done.runtime, onUpdate: setTxStatus });
+    return () => handle.stop();
+  }, [stage, done]);
 
   if (stage === 'done' && done != null) {
-    const finalized = tlStage === 'finalized';
+    const status: TxStatus = txStatus ?? { stage: 'broadcasting' };
+    const finalized = status.stage === 'finalized';
+    const failed = status.stage === 'failed' || status.stage === 'unavailable';
+    const tlStage: TimelineStage =
+      status.stage === 'included' ? 'included' : status.stage === 'finalized' ? 'finalized' : 'broadcasting';
+    const explorerUrl = done.runtime === 'l1' ? `${TEZOS_EXPLORER}/${done.hash}` : `${EVM_EXPLORER}/tx/${done.hash}`;
+    const explorerName = done.runtime === 'l1' ? 'tzkt' : 'blockscout';
+
     return (
       <View style={styles.screen}>
         <TopBar />
@@ -106,31 +191,85 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.statusHero}>
-            {finalized ? <Burst /> : <Spinner accent={done.runtime === 'l2' ? 'cyan' : 'purple'} />}
+            {failed ? (
+              <View style={styles.failIco}>
+                <Icon name="alert" size={30} color={colors.danger} />
+              </View>
+            ) : finalized ? (
+              <Burst />
+            ) : (
+              <Spinner accent={done.runtime === 'l2' ? 'cyan' : 'purple'} />
+            )}
             <View style={styles.heroText}>
-              <Text style={styles.sAmt}>
+              <Text style={styles.sAmt} numberOfLines={1} adjustsFontSizeToFit>
                 {done.sign}
                 {fmtXtz(done.amount, 2, 6)} {done.symbol}
               </Text>
-              <Text style={styles.sTo}>
+              <Text style={styles.sTo} numberOfLines={1}>
                 to <Text style={styles.mono}>{truncAddr(done.to, 6)}</Text>
               </Text>
             </View>
           </View>
-          <StatusTimeline stage={tlStage} runtime={done.runtime} />
-          <View style={styles.doneCard}>
-            <Line
-              label={done.runtime === 'l1' ? 'Operation hash' : 'Transaction hash'}
-              value={<Text style={styles.mono}>{truncAddr(done.hash, 6)}</Text>}
-            />
-            <View style={styles.divider} />
-            <Line label="Explorer" value={done.runtime === 'l1' ? 'tzkt' : 'blockscout'} />
-          </View>
+
+          {failed ? (
+            <View style={styles.failWrap}>
+              <ErrorCard
+                title={status.stage === 'failed' ? 'Transaction failed' : 'Status unavailable'}
+                detail={
+                  status.stage === 'failed'
+                    ? `The transfer was rejected on-chain (${status.reason}).`
+                    : "The RPC didn't reply in time. Your transfer was broadcast — check the explorer to see if it landed."
+                }
+              />
+            </View>
+          ) : (
+            <StatusTimeline stage={tlStage} runtime={done.runtime} />
+          )}
+
+          {!failed && done.hash !== '' && (
+            <View style={styles.doneCard}>
+              <Line
+                label={done.runtime === 'l1' ? 'Operation hash' : done.unresolved ? 'Intermediate hash' : 'Transaction hash'}
+                value={<Text style={styles.mono}>{truncAddr(done.hash, 6)}</Text>}
+              />
+              <View style={styles.divider} />
+              <Pressable onPress={() => void Linking.openURL(explorerUrl)}>
+                <Line
+                  label="Explorer"
+                  value={
+                    <View style={styles.explorerVal}>
+                      <Text style={styles.explorerText}>{explorerName}</Text>
+                      <Icon name="external-link" size={13} color={colors.fgMuted} />
+                    </View>
+                  }
+                />
+              </Pressable>
+            </View>
+          )}
+
+          {done.unresolved && (
+            <Text style={styles.unresolvedNote}>
+              The EVM transaction hasn't been indexed yet. The transfer was broadcast on L1 — the final hash resolves shortly.
+            </Text>
+          )}
         </ScrollView>
         <View style={styles.actionBar}>
-          <Btn variant={finalized ? 'accent' : 'outline'} full onPress={() => ctx.nav.reset('home')}>
-            Done
-          </Btn>
+          {failed ? (
+            <Btn variant="outline" full onPress={() => void Linking.openURL(explorerUrl)}>
+              {`View on ${explorerName}`}
+            </Btn>
+          ) : (
+            <Btn
+              variant={finalized ? 'accent' : 'outline'}
+              full
+              onPress={() => {
+                ctx.refreshData();
+                ctx.nav.reset('home');
+              }}
+            >
+              Done
+            </Btn>
+          )}
         </View>
       </View>
     );
@@ -193,6 +332,12 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
             </View>
           )}
 
+          {err != null && (
+            <View style={styles.reviewErr}>
+              <ErrorCard title={err.title} detail={err.detail} />
+            </View>
+          )}
+
           <View style={styles.explainer}>
             <Icon name="info" size={15} color={colors.fgSubtle} />
             <Text style={styles.explainerText}>{reviewCopy}</Text>
@@ -203,25 +348,7 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
           <Btn variant="outline" onPress={back}>
             Cancel
           </Btn>
-          <Btn
-            variant="accent"
-            full
-            disabled={insufficient}
-            onPress={() => {
-              setDone({
-                amount,
-                symbol: asset.symbol,
-                to,
-                runtime: predictedRuntime,
-                sign: '−',
-                hash:
-                  predictedRuntime === 'l1'
-                    ? 'op' + Math.random().toString(36).slice(2, 12)
-                    : '0x' + Math.random().toString(16).slice(2, 12),
-              });
-              setStage('done');
-            }}
-          >
+          <Btn variant="accent" full loading={submitting} disabled={insufficient} onPress={submit}>
             Confirm &amp; send
           </Btn>
         </View>
@@ -502,6 +629,28 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface2,
     borderRadius: radius.lg,
   },
+  failIco: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.dangerBg,
+    borderWidth: 2,
+    borderColor: 'rgba(255,93,93,0.4)',
+  },
+  failWrap: { width: '100%', marginTop: 4 },
+  explorerVal: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  explorerText: { fontSize: fontSize.md, color: colors.fg },
+  unresolvedNote: {
+    fontSize: fontSize.xs,
+    color: colors.fgSubtle,
+    marginTop: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+    paddingHorizontal: 8,
+  },
+  reviewErr: { marginTop: 14 },
 
   actionBar: {
     paddingHorizontal: 16,

@@ -8,6 +8,25 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
 ## [Unreleased]
 
 ### Added
+- Real Send flow (fourth reconciliation step). The review's Confirm & send now
+  calls the core `sendTransfer` through the active account's warm container
+  instead of fabricating a hash: a tz1 → tz1 transfer returns the L1 op hash; a
+  tz1 → 0x cross-runtime transfer returns a synthetic NAC hash that the screen
+  then resolves to the real EVM hash by polling `resolveTx` (2s, up to 60s,
+  falling back to the intermediate hash if the kernel mapping hasn't
+  materialised); an EVM-account send returns the real hash directly. Signing is
+  gated behind a per-signature biometric confirm (Face ID / Touch ID; a no-op on
+  password-only devices, fails closed otherwise). The done screen's
+  StatusTimeline is driven by the real `trackTx` (TzKT for L1 inclusion /
+  finality, the Tezlink EVM RPC for L2), replacing the cosmetic timers; a failed
+  or unavailable status surfaces an ErrorCard, and the hash line links out to
+  tzkt / blockscout. The human amount is converted to hex wei and the screen's
+  asset selection mapped to the core Asset union at the seam; the resolve and
+  track pollers stop on unmount. The status timeline now marks its final
+  "Finalized" step complete on finality (it previously stayed on the pulsing
+  active step, as the renderer had no state beyond finalized), and long detail
+  values (the cross-runtime routing line) and large amounts wrap instead of
+  overflowing their rows.
 - Account and token management, wired to the vault (third reconciliation step).
   Add Account now creates a real account in the unlocked vault — a fresh 24-word
   Tezos mnemonic or a fresh EVM key (the phrase the user reveals and backs up is
