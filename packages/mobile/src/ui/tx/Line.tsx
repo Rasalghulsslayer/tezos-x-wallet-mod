@@ -34,8 +34,9 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     paddingHorizontal: space[4],
   },
-  l: { fontSize: fontSize.md, color: colors.fgMuted },
+  l: { fontSize: fontSize.md, color: colors.fgMuted, flexShrink: 0 },
   v: {
+    flexShrink: 1,
     fontSize: fontSize.md,
     fontWeight: '500',
     textAlign: 'right',

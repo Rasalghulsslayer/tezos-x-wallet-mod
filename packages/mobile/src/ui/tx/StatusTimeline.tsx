@@ -21,7 +21,11 @@ export function StatusTimeline({
   stage: TimelineStage;
   runtime: 'l1' | 'l2';
 }): React.JSX.Element {
-  const idx = ORDER.indexOf(stage === 'confirmed' ? 'finalized' : stage);
+  // At a terminal stage every row (including Finalized) is complete; otherwise the
+  // row at idx is the active one. Without this, the last row would stay 'active'
+  // (purple pulse) forever because there is no stage beyond 'finalized'.
+  const complete = stage === 'finalized' || stage === 'confirmed';
+  const idx = complete ? ORDER.length : ORDER.indexOf(stage);
   const rows = [
     { t: 'Broadcasted', m: runtime === 'l1' ? 'Signed & injected on Tezos L1' : 'Submitted to the EVM runtime' },
     { t: 'Included', m: 'Picked up in a block' },
