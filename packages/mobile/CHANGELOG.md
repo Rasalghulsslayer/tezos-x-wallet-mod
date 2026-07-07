@@ -8,6 +8,23 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
 ## [Unreleased]
 
 ### Added
+- Instant account switching + corrected iconography. Switching accounts no
+  longer stalls the UI for seconds. The stall was a full 600k-PBKDF2 vault
+  re-encrypt on every switch — the keyring persisted the (non-secret) active
+  pointer by re-sealing the whole vault, which on Hermes' pure-JS crypto took
+  seconds. The keyring now flips the active pointer in memory (a synchronous,
+  crypto-free swap that keeps a subsequent send bound to the right account) and
+  the switch re-scopes the UI immediately from the target account's summary (its
+  EVM alias is already resolved there, so no network round-trip and no key
+  derivation on the tap — the per-account signing key is re-derived lazily, a
+  negligible cost, and cached). The vault is no longer re-sealed on a switch at
+  all: that 600k-PBKDF2 encrypt is deferred to the next secret-changing mutation.
+  The one visible trade-off until native crypto lands is that the selected
+  account is not remembered across a lock (it reopens on the default account).
+  Redrew the icons that were rendering as incomplete glyphs: settings (a real
+  gear, was a bare circle), lock (a full padlock, was just the shackle), link (a
+  proper chain — used by Connected sites and the dApps tab) and info (an "i" in a
+  circle, was just the "i").
 - Reconciliation cleanup + tests (final step). Removed the mock data layer
   (`src/mocks`) now that every screen runs on the live composition — no screen
   imports fixtures anymore. Added a Vitest suite (node env, `test` / `test:watch`

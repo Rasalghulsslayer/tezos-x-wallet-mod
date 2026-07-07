@@ -15,7 +15,6 @@ import type { VaultState, VaultStateUnlocked, PendingRequest } from '@tezosx/wal
 import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
 import { accountCardVM, type AccountCardVM } from '@tezosx/wallet-core/view-models/account-card-vm';
 import { getState } from '@tezosx/wallet-core/use-cases/get-state';
-import { setActiveAccount as setActiveUseCase } from '@tezosx/wallet-core/use-cases/set-active-account';
 import type { ImportAccountReq } from '@tezosx/wallet-core/use-cases/import-account';
 import type { AddAccountReq, AddAccountResult } from '@tezosx/wallet-core/use-cases/add-account';
 import type { SendTransferReq, SendTransferResult } from '@tezosx/wallet-core/use-cases/send-transfer';
@@ -213,10 +212,28 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
     labelFor, toast, copy,
     touch: () => autoLock.current?.touch(),
     setActive: (id) => {
+      const s = activeState;
+      if (s == null || id === s.accountId) return;
+      const target = s.accounts.find((a) => a.id === id);
+      if (target == null) return;
+      // Instant switch: the account set is unchanged (only the active pointer
+      // moves) and the target's EVM alias is already resolved in its summary, so
+      // the UI re-scopes with zero network/crypto. The keyring's active pointer
+      // flips synchronously in memory (a send stays bound to the right account).
+      // The vault is deliberately NOT re-sealed here: persisting the (non-secret)
+      // active pointer means a 600k-PBKDF2 re-encrypt, the one step heavy enough
+      // to stall Hermes — so it is left to the next secret-changing mutation
+      // (which persists the whole payload anyway). Until native crypto lands, the
+      // trade-off is that the selected account is not remembered across a lock.
+      evmAliasCache.value = target.kind === 'tezos' ? (target.secondaryAddress ?? null) : target.primaryAddress;
+      keyring.activateInMemory(id);
+      setVaultState(target.kind === 'tezos'
+        ? { status: 'unlocked', kind: 'tezos', accountId: id, tz1: target.primaryAddress, evmAlias: target.secondaryAddress ?? '', accounts: s.accounts }
+        // An EVM summary's primaryAddress is always a 0x address (the account's own).
+        : { status: 'unlocked', kind: 'evm', accountId: id, address: target.primaryAddress as `0x${string}`, accounts: s.accounts });
       void (async () => {
-        await setActiveUseCase({ accountId: id }, { keyring });
-        await deps.rebuildContainer();
-        await refresh();
+        await deps.rebuildContainer();   // warm the container for reads (key derivation is negligible + cached per account)
+        setDataNonce((n) => n + 1);      // re-run the reads (activity) now the container is warm
       })();
     },
     lock,

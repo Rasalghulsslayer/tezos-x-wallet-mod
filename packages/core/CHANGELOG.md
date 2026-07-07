@@ -7,6 +7,24 @@ TypeScript source over the npm-workspace symlink (no build step), by both the
 Chrome extension (`@tezosx/wallet`) and the React Native app
 (`@tezosx/wallet-mobile`).
 
+## [Unreleased]
+
+### Added
+- `Keyring.activateInMemory(accountId)` + `Keyring.flushActive()` — a deferred
+  path for switching the active account. `setActiveAccount` re-seals the whole
+  vault (a 600k-PBKDF2 encrypt) to persist the active pointer, which is
+  imperceptible on the extension's Web Crypto but stalls the mobile app's pure-JS
+  Hermes crypto for seconds on every switch. `activateInMemory` flips the active
+  pointer in memory only — synchronous, no encrypt, no signing-key derivation
+  (the container builder re-derives on demand via `getSigningKeyFor`, and no
+  signing path reads `unlocked.secretKey`) — and marks the pointer dirty;
+  `flushActive` writes it to disk later, off the interaction path. The extension
+  keeps calling `setActiveAccount` (its synchronous persist matters because its
+  service worker can die at any moment); the mobile shell uses the deferred pair.
+  A crash between the two at worst forgets the last selection (the persisted
+  active is restored on unlock). Purely additive — `setActiveAccount` / `persist`
+  behaviour is unchanged.
+
 ## [0.3.0] — 2026-06-30
 
 ### Added

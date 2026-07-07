@@ -73,6 +73,10 @@ function freshEvmPrivkeyHex(crypto: CryptoPort): string {
 
 export class Keyring {
   private unlocked: UnlockedKeyring | null = null;
+  // Set when activateInMemory has flipped the active pointer but the vault has
+  // not yet been re-sealed to disk; cleared once flushActive (or any persist)
+  // writes it. See activateInMemory for why the disk write is deferred.
+  private activeDirty = false;
 
   constructor(
     private readonly vaultStore: VaultStore,
@@ -140,11 +144,13 @@ export class Keyring {
     if (account == null || secret == null) throw new Error('Vault corrupted: active account not found');
     const secretKey = await deriveSigningKey(account, secret);
     this.unlocked = { account, secretKey, payload, password };
+    this.activeDirty = false;
     return { session: this.unlocked, accountId: activeId };
   }
 
   lock(): void {
     this.unlocked = null;
+    this.activeDirty = false;
   }
 
   async exportSecret(password: string): Promise<AccountSecret> {
@@ -231,6 +237,43 @@ export class Keyring {
     await this.persist(next, u.password);
   }
 
+  /**
+   * Flip the active account in memory only — no disk write. The active pointer
+   * is not a secret, so re-sealing the whole vault (a 600k-PBKDF2 encrypt) on
+   * every switch is wasted work that stalls a pure-JS runtime (mobile/Hermes has
+   * no native crypto). The account/payload swap is synchronous and cheap; the
+   * signing key is re-derived on demand by the container builder
+   * (getSigningKeyFor), so no signing path reads the now-stale
+   * unlocked.secretKey. The pointer reaches disk via a later flushActive() (or
+   * the next secret-changing persist); a crash before that at worst forgets the
+   * selection — the last-persisted active is restored on unlock. The extension
+   * keeps setActiveAccount()'s synchronous persist (its Web Crypto makes the
+   * encrypt cheap and its service worker can die at any moment); this is the
+   * deferred-encrypt path a mobile switch takes.
+   */
+  activateInMemory(accountId: AccountId): void {
+    const u = this.requireUnlocked();
+    const next = setActiveOnPayload(u.payload, accountId);
+    if (next === u.payload) return;
+    const account = next.accounts.find(a => a.id === next.active);
+    if (account == null) throw new Error('Vault corrupted after mutation');
+    this.unlocked = { ...u, account, payload: next };
+    this.activeDirty = true;
+  }
+
+  /** Persist a pending active-pointer change (from activateInMemory) to disk.
+   *  A no-op when nothing is pending. This is the one costly step (a 600k-PBKDF2
+   *  vault re-encrypt), so callers run it off the interaction path — never on the
+   *  switch itself. The in-memory signing key is left untouched: no signing path
+   *  reads unlocked.secretKey (the container builder re-derives via
+   *  getSigningKeyFor), so it never needs refreshing here. */
+  async flushActive(): Promise<void> {
+    if (!this.activeDirty) return;
+    const u = this.requireUnlocked();
+    await this.vaultStore.save(await encryptVault(JSON.stringify(u.payload), u.password, this.crypto));
+    this.activeDirty = false;
+  }
+
   async renameAccount(accountId: AccountId, label: string): Promise<void> {
     const u = this.requireUnlocked();
     await this.persist(renameOnPayload(u.payload, accountId, label), u.password);
@@ -296,6 +339,7 @@ export class Keyring {
     if (active == null || secret == null) throw new Error('Vault corrupted after mutation');
     const secretKey = await deriveSigningKey(active, secret);
     this.unlocked = { account: active, secretKey, payload: newPayload, password };
+    this.activeDirty = false;
   }
 
   private requireUnlocked(): UnlockedKeyring {
