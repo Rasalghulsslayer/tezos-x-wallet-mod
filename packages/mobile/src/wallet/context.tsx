@@ -6,8 +6,9 @@
  * overlay state. Screens/components stay pure presentation: they read this
  * context and call its actions; all keyring/container I/O lives below the seam.
  *
- * dApp sessions are still shims here — wired to WalletConnect in a later
- * increment; balances / tokens / activity run on the live fetchers.
+ * dApp sessions run on the live WalletConnect transport: connect/disconnect,
+ * the session list, and approval resolution all route through the shared core
+ * dispatch; balances / tokens / activity run on the live fetchers.
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -21,6 +22,7 @@ import type { SendTransferReq, SendTransferResult } from '@tezosx/wallet-core/us
 import type { ResolveTxResult } from '@tezosx/wallet-core/use-cases/resolve-tx';
 import type { StoredSession } from '@tezosx/wallet-core/ports/session-store';
 import { keyring, evmAliasCache, deps, approvalQueue } from '../composition/wiring';
+import { rebindStoredSessions } from '../composition/walletconnect-connect';
 import { approvalUi } from '../composition/approval-ui';
 import { startAutoLock, type AutoLockHandle } from '../lock/auto-lock';
 import * as vaultActions from './vault-actions';
@@ -219,13 +221,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
       // Instant switch: the account set is unchanged (only the active pointer
       // moves) and the target's EVM alias is already resolved in its summary, so
       // the UI re-scopes with zero network/crypto. The keyring's active pointer
-      // flips synchronously in memory (a send stays bound to the right account).
-      // The vault is deliberately NOT re-sealed here: persisting the (non-secret)
-      // active pointer means a 600k-PBKDF2 re-encrypt, the one step heavy enough
-      // to stall Hermes — so it is left to the next secret-changing mutation
-      // (which persists the whole payload anyway). Until native crypto lands, the
-      // trade-off is that the selected account is not remembered across a lock.
-      evmAliasCache.value = target.kind === 'tezos' ? (target.secondaryAddress ?? null) : target.primaryAddress;
+      // flips synchronously in memory (a send stays bound to the right account);
+      // the disk re-seal that persists it (a PBKDF2 re-encrypt — now cheap on the
+      // native crypto port) is flushed off the tap in the background below, so the
+      // selection survives a lock without the switch itself ever stalling.
+      const alias = target.kind === 'tezos' ? (target.secondaryAddress ?? null) : target.primaryAddress;
+      evmAliasCache.value = alias;
       keyring.activateInMemory(id);
       setVaultState(target.kind === 'tezos'
         ? { status: 'unlocked', kind: 'tezos', accountId: id, tz1: target.primaryAddress, evmAlias: target.secondaryAddress ?? '', accounts: s.accounts }
@@ -234,6 +235,24 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
       void (async () => {
         await deps.rebuildContainer();   // warm the container for reads (key derivation is negligible + cached per account)
         setDataNonce((n) => n + 1);      // re-run the reads (activity) now the container is warm
+        if (alias != null) {
+          // Connected dApps follow the active account (signing always uses it):
+          // rebind the per-origin stored sessions so eth_accounts answers the
+          // new account, and push accountsChanged over WC so the dApp's session
+          // and UI re-point too. Best-effort: a relay hiccup must not block the
+          // active-pointer flush below.
+          try {
+            await rebindStoredSessions({
+              accountId:  id,
+              tz1Address: target.kind === 'tezos' ? target.primaryAddress : '',
+              evmAlias:   alias,
+            });
+            await deps.broadcastEvent({ type: 'PROVIDER_EVENT', event: 'accountsChanged', data: [alias] });
+          } catch {
+            // dApp notification is advisory; the wallet-side switch stays valid.
+          }
+        }
+        await keyring.flushActive();     // persist the active pointer off the tap (cheap now crypto is native) so it survives a lock
       })();
     },
     lock,

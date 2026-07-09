@@ -174,21 +174,45 @@ export function sessionOrigin(topic: string): string | undefined {
  * Push a wallet provider event to every connected dApp. Only accountsChanged /
  * chainChanged map to WalletConnect session events; the other ContentPush kinds
  * (connect/disconnect/WALLET_ROLE/responses) are extension-only and ignored.
+ *
+ * An accountsChanged push also re-points each session's approved namespace at
+ * the new accounts before emitting: a WC session pins its accounts at approval
+ * time, so without the update the dApp's session state (and the Connections
+ * rows, which read it) would keep naming the previous account while the event
+ * announces the new one.
  */
 export async function emitProviderEvent(push: ContentPush): Promise<void> {
   if (walletKit == null) return;
   if (push.type !== 'PROVIDER_EVENT') return;
   if (push.event !== 'accountsChanged' && push.event !== 'chainChanged') return;
 
-  const event = push.event === 'accountsChanged'
-    ? { name: 'accountsChanged', data: push.data.map((a) => `${EIP155_CHAIN}:${a}`) }
+  const caip10 = push.event === 'accountsChanged'
+    ? push.data.map((a) => `${EIP155_CHAIN}:${a}`)
+    : null;
+  const event = caip10 != null
+    ? { name: 'accountsChanged', data: caip10 }
     : { name: 'chainChanged', data: PREVIEWNET_CHAIN_ID };
 
   await Promise.all(
-    Object.values(walletKit.getActiveSessions()).map((session) =>
-      walletKit!.emitSessionEvent({ topic: session.topic, event, chainId: EIP155_CHAIN }).catch(() => {}),
-    ),
+    Object.values(walletKit.getActiveSessions()).map(async (session) => {
+      try {
+        if (caip10 != null && caip10.length > 0) {
+          await walletKit!.updateSession({
+            topic: session.topic,
+            namespaces: {
+              ...session.namespaces,
+              eip155: { ...session.namespaces.eip155, accounts: caip10 },
+            },
+          });
+        }
+        await walletKit!.emitSessionEvent({ topic: session.topic, event, chainId: EIP155_CHAIN });
+      } catch {
+        // Best-effort per session: a stale topic or an unreachable relay must
+        // not block the other sessions (or the caller).
+      }
+    }),
   );
+  if (caip10 != null && caip10.length > 0) notifySessionsChanged();
 }
 
 /** The dApp's display name from a proposal, falling back to its URL. */

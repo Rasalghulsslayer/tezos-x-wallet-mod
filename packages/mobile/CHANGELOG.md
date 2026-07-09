@@ -41,6 +41,13 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
      fails closed).
 
 ### Fixed
+- Connected dApps now follow an account switch. Switching accounts re-points
+  every live WalletConnect session — its approved namespace accounts, and the
+  per-origin stored session that `eth_accounts` answers from — at the newly
+  active account, and emits `accountsChanged` so the dApp updates too.
+  Previously the switch told the dApp nothing: it kept displaying (and
+  addressing) the account approved at connect time, while the Approve sheet and
+  the signature underneath used the newly active one.
 - The total-balance unit rendered the ꜩ ligature as text, but the on-device font
   has no glyph for that codepoint (U+A729) so it showed as a tofu box next to the
   amount. It now renders the `TezosGlyph` SVG mark — font-independent, the same
@@ -56,10 +63,11 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
   the switch re-scopes the UI immediately from the target account's summary (its
   EVM alias is already resolved there, so no network round-trip and no key
   derivation on the tap — the per-account signing key is re-derived lazily, a
-  negligible cost, and cached). The vault is no longer re-sealed on a switch at
-  all: that 600k-PBKDF2 encrypt is deferred to the next secret-changing mutation.
-  The one visible trade-off until native crypto lands is that the selected
-  account is not remembered across a lock (it reopens on the default account).
+  negligible cost, and cached). The vault re-seal that persists the active
+  pointer no longer runs on the tap; it is flushed off the interaction path in
+  the background — a PBKDF2 re-encrypt that is cheap now the crypto port is
+  native — so the selected account still survives a lock while the switch stays
+  instant.
   Redrew the icons that were rendering as incomplete glyphs: settings (a real
   gear, was a bare circle), lock (a full padlock, was just the shackle), link (a
   proper chain — used by Connected sites and the dApps tab) and info (an "i" in a
@@ -91,6 +99,17 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
   / typed data), which a tz1 account has no key for — is rejected promptly (4200)
   instead of surfacing an approval that would fail. Connecting asks how to pair —
   scan the dApp's WalletConnect QR (camera, via `expo-camera`) or paste its link.
+
+  Manual test — pairing with the playground (`playground/`): set
+  `NEXT_PUBLIC_WC_PROJECT_ID` in `playground/.env.local` and run `npm run dev`
+  there. On the phone (dev build, `EXPO_PUBLIC_WC_PROJECT_ID` set, tz1 funded
+  with a couple of tez), unlock first — WalletConnect boots on unlock (Metro
+  logs `[wc] WalletKit initialised`) — then Connections → scan the playground's
+  QR (or paste the copied `wc:` link) and approve. Drive the Counter panel and
+  a transfer from the browser; each `eth_sendTransaction` raises the Approve
+  sheet. The hash the dApp receives from a tz1 account is a synthetic NAC hash
+  the public RPC never indexes — verify by re-reading state (counter value,
+  balances, ~15-40 s), not by receipt lookup.
 - Real Send flow (fourth reconciliation step). The review's Confirm & send now
   calls the core `sendTransfer` through the active account's warm container
   instead of fabricating a hash: a tz1 → tz1 transfer returns the L1 op hash; a
