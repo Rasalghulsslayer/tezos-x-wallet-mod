@@ -81,12 +81,12 @@ function routingLabel(sourceKind: 'tezos' | 'evm', dest: DestRuntime): string {
   if (dest == null) return '—';
   if (sourceKind === 'tezos') {
     return dest === 'l1'
-      ? 'Same-runtime · Tezos L1'
-      : 'Cross-runtime · L1 → L2 via NAC gateway';
+      ? 'Same-runtime · Michelson runtime'
+      : 'Cross-runtime · Michelson → EVM via NAC gateway';
   }
   return dest === 'l2'
-    ? 'Same-runtime · Tezos L2 (EVM)'
-    : 'Cross-runtime · L2 → L1 via NAC precompile';
+    ? 'Same-runtime · Tezos X (EVM)'
+    : 'Cross-runtime · EVM → Michelson via NAC precompile';
 }
 
 export function Send({ state, onDone }: { state: VaultState; onDone: () => void }) {
@@ -339,7 +339,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
     const destChain: 'l1' | 'l2' = dest === 'l2' ? 'l2' : 'l1';
     const reviewCopy = state.kind === 'tezos'
       ? (isCross
-          ? 'Your tz1 signs an L1 op routed to the EVM runtime through the NAC gateway. The receiving 0x address is credited atomically.'
+          ? 'Your tz1 signs a Michelson-runtime op routed to the EVM runtime through the NAC gateway. The receiving 0x address is credited atomically.'
           : 'Make sure the recipient is correct — transfers can\'t be reversed.')
       : (isCross
           ? 'Your 0x signs an EVM transaction that calls the NAC precompile. The kernel forwards the value to the receiving tz1 atomically.'

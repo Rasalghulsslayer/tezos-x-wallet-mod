@@ -51,15 +51,15 @@ export function Welcome({ onDone: _onDone }: { onDone: () => void }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, width: '100%', marginTop: 8 }}>
             <KindCard
               accent="purple"
-              chain="L1"
-              title="Michelson"
+              chain="tz1"
+              title="Michelson runtime"
               detail="tz1 · BIP-39 mnemonic"
               selected={kind === 'tezos'}
               onClick={() => setKind('tezos')}
             />
             <KindCard
               accent="cyan"
-              chain="L2"
+              chain="0x"
               title="EVM runtime"
               detail="0x · secp256k1 key"
               selected={kind === 'evm'}

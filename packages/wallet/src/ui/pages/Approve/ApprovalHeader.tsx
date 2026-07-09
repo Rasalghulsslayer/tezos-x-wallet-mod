@@ -26,7 +26,7 @@ export function ApprovalHeader({
           <span>{subtitle}</span>
         </div>
       </div>
-      <Badge variant={accent}>{accent === 'cyan' ? 'L2' : 'L1'}</Badge>
+      <Badge variant={accent}>{accent === 'cyan' ? 'EVM' : 'Michelson'}</Badge>
     </div>
   );
 }

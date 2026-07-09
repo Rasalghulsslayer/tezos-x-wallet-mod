@@ -2,7 +2,7 @@ export function KindCard({
   accent, chain, title, detail, selected, onClick,
 }: {
   accent:   'purple' | 'cyan';
-  chain:    'L1' | 'L2';
+  chain:    'tz1' | '0x';
   title:    string;
   detail:   string;
   selected: boolean;

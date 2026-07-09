@@ -51,7 +51,7 @@ function titleFor(status: TxStatus): string {
 }
 
 function routeFor(status: TxStatus, runtime: 'l1' | 'l2'): string {
-  const runtimeLabel = runtime === 'l1' ? 'L1 native' : 'L1 → L2 · NAC';
+  const runtimeLabel = runtime === 'l1' ? 'Michelson native' : 'Michelson → EVM · NAC';
   if (status.stage === 'broadcasting') return `${runtimeLabel} · Tezos X Previewnet`;
   if (status.stage === 'included')     return `Block #${status.blockLevel.toLocaleString()}`;
   if (status.stage === 'finalized')    return `Finalized · ${runtimeLabel}`;
@@ -115,7 +115,7 @@ function EtaChip({ status, runtime }: { status: TxStatus; runtime: 'l1' | 'l2' }
   const text =
     status.stage === 'finalized' ? finalizedText(status, runtime, startedAt)
     : status.stage === 'included' ? (runtime === 'l2'
-        ? `Finalizing · waiting on L1 inclusion`
+        ? `Finalizing · anchoring on Tezos L1`
         : `Finalizing · 1 / ${TEZOS_L1_FINALITY_BLOCKS} attestations`)
     : 'Usually included in ~10 s';
 
@@ -145,7 +145,7 @@ function finalizedText(
   if (runtime === 'l2') {
     // L2 finality = inclusion in a finalised L1 block. The "X confirmations"
     // framing of Ethereum mainnet doesn't apply on Tezos X.
-    return `Final on L1 · ${formatElapsed(startedAt)} total`;
+    return `Anchored on Tezos L1 · ${formatElapsed(startedAt)} total`;
   }
   const n = status.confirmations ?? TEZOS_L1_FINALITY_BLOCKS;
   return `${n} attestation${n === 1 ? '' : 's'} · ${formatElapsed(startedAt)} total`;

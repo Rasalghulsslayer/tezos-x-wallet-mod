@@ -6,6 +6,35 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [Unreleased]
+
+### Changed
+- **Runtime naming.** No shipped string presents the two runtimes as layers
+  anymore: badges, pills and toggles say "Michelson" / "EVM", routing copy says
+  "Same-runtime · Michelson runtime", "Cross-runtime · Michelson → EVM via NAC
+  gateway", "Same-runtime · Tezos X (EVM)" and "Cross-runtime · EVM → Michelson
+  via NAC precompile", and the finality strings anchor on "Tezos L1" (the
+  actual chain) rather than a bare "L1". Touches Send, StatusHero,
+  StatusTimeline, AccountCard, Welcome, AddAccount and the Approve header.
+- The keyring model changed underneath (see `@tezosx/wallet-core`
+  [Unreleased]): the unlocked keyring retains a zeroizable derived key instead
+  of the plaintext password, the vault payload is v3 with optional HD
+  derivation from the wallet seed, and old v2 vaults migrate transparently on
+  unlock. Extension UX is unchanged; the derived-account picker is not yet
+  surfaced in this UI (the mobile app ships it first).
+
+### Fixed
+- **Add account persisted a different secret than the one the user backed
+  up.** The create path submitted `source: 'fresh'`, so the keyring minted a
+  new mnemonic / private key instead of storing the exact one the user had
+  just revealed and acknowledged. The revealed material is now passed
+  explicitly, so the backup matches the stored account.
+- `e2e/scripts/gen-vault.ts` compiles again (it imported the keyring from its
+  pre-core path and missed the CryptoPort argument) and now writes
+  `vault-v3.encrypted.json`; the committed `vault-v2.encrypted.json` fixture
+  stays frozen so the unlock spec keeps proving the v2 → v3 upgrade-on-read
+  end-to-end.
+
 ## [0.12.0] — 2026-06-24
 
 Migrates the cross-runtime native-transfer paths off the gateway entrypoints the Tezos X release candidate removes. Ships alongside `@tezosx/relayer` 0.6.0.

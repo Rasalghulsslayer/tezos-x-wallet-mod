@@ -208,13 +208,25 @@ export function AddAccount({ state, onChanged }: { state: VaultState; onChanged:
     setSubmitting(true);
     try {
       const trimmedLabel = label.trim();
-      const src: AddAccountSource = isCreate
-        ? { source: 'fresh' }
-        : pick.kind === 'tezos'
+      // The secret the user revealed and acknowledged is the one persisted —
+      // pass it explicitly. 'fresh' would make the keyring mint a different
+      // key than the one the user just backed up.
+      let src: AddAccountSource;
+      if (isCreate) {
+        if (pick.kind === 'tezos') {
+          if (tzMnemonic == null) throw new Error('No mnemonic was generated');
+          src = { source: 'mnemonic', mnemonic: tzMnemonic };
+        } else {
+          if (evmPrivkey == null) throw new Error('No private key was generated');
+          src = { source: 'privkey', privateKey: evmPrivkey };
+        }
+      } else {
+        src = pick.kind === 'tezos'
           ? tzMode === 'mnemonic'
             ? { source: 'mnemonic', mnemonic: tzImportValue.trim().toLowerCase() }
             : { source: 'edsk', edsk: tzImportValue.trim() }
           : { source: 'privkey', privateKey: normaliseEvmPrivateKey(evmImportValue.trim()) };
+      }
 
       const { accountId } = await sendPopupRequest<{ accountId: AccountId }>({
         type:   'ADD_ACCOUNT',

@@ -60,8 +60,8 @@ export function TxView({
               <Line label="Debit (mutez)"   value={cross.mutezValue} />
             </div>
             <div className="tx-cross-note">
-              Your tz1 signs an L1 operation that the kernel forwards to the EVM
-              runtime — cross-runtime via NAC gateway.
+              Your tz1 signs a Michelson-runtime operation that the kernel forwards
+              to the EVM runtime — cross-runtime via NAC gateway.
             </div>
           </>
         )}

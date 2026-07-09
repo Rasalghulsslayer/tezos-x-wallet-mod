@@ -59,12 +59,12 @@ export function ConfirmStep({
             {isTezos && preview?.primary != null && (
               <>
                 <div className="ah-addr">
-                  <span className="badge l1">L1</span>
+                  <span className="badge l1">Michelson</span>
                   <span className="v">{shortAddr(preview.primary, 8, 6)}</span>
                 </div>
                 {preview.secondary != null && (
                   <div className="ah-addr">
-                    <span className="badge l2">L2</span>
+                    <span className="badge l2">EVM</span>
                     <span className="v">{shortAddr(preview.secondary, 8, 6)}</span>
                   </div>
                 )}
@@ -72,7 +72,7 @@ export function ConfirmStep({
             )}
             {!isTezos && preview?.primary != null && (
               <div className="ah-addr">
-                <span className="badge l2">L2</span>
+                <span className="badge l2">EVM</span>
                 <span className="v">{shortAddr(preview.primary, 8, 6)}</span>
               </div>
             )}
