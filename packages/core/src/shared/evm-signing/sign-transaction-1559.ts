@@ -7,6 +7,7 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { keccak256 } from './keccak';
 import { rlpEncode, type RlpInput } from './rlp';
 import { bigIntToBytes, bytesToHex, concatBytes, hexToBytes } from './bytes';
+import { wipe } from '../wipe';
 
 export interface EvmTx1559 {
   chainId:              bigint;
@@ -52,6 +53,9 @@ export function signTransaction1559(tx: EvmTx1559, privateKeyHex: string): `0x${
   const yParity  = sigBytes[0];
   const r        = BigInt(`0x${bytesToHex(sigBytes.subarray(1, 33))}`);
   const s        = BigInt(`0x${bytesToHex(sigBytes.subarray(33, 65))}`);
+  // The key bytes have served their purpose (noble keeps its own internal
+  // copy out of reach; the signature itself becomes public on broadcast).
+  wipe(privBytes, sigBytes);
 
   // EIP-1559 uses yParity (0 or 1) directly, not the legacy v = 27 + recovery.
   const signedFields: RlpInput = [

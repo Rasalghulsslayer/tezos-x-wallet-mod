@@ -58,7 +58,7 @@ describe('keyring — vault crypto', () => {
     await expect(k.unlock(PASSWORD)).rejects.toThrow(/Incorrect password/);
   });
 
-  it('uses a fresh random salt and IV on every save', async () => {
+  it('re-seals with a fresh IV while pinning the salt of the retained key', async () => {
     const store = new MemoryVaultStore();
     const k = new Keyring(store, new WebCryptoPort());
     await k.create(PASSWORD);
@@ -69,18 +69,34 @@ describe('keyring — vault crypto', () => {
 
     await k.renameAccount(k.getUnlocked()!.account.id, 'Renamed'); // forces a re-encrypt
     const second = store.vault!;
-    expect(second.salt).not.toBe(first.salt);
+    // Mutations re-seal with the key derived at unlock: GCM demands a fresh
+    // IV per encryption, while the salt (which only defends the KDF) stays
+    // pinned — re-salting would require retaining the password to re-derive.
     expect(second.iv).not.toBe(first.iv);
+    expect(second.salt).toBe(first.salt);
   });
 
-  it('rejects a vault whose decrypted payload is not version 2 (parseV2 guard)', async () => {
+  it('lock zeroizes the retained vault key', async () => {
+    const store = new MemoryVaultStore();
+    const k = new Keyring(store, new WebCryptoPort());
+    await k.create(PASSWORD);
+    const key = k.getUnlocked()!.km.key;
+    expect(key.some((b) => b !== 0)).toBe(true);
+
+    k.lock();
+    expect(key.every((b) => b === 0)).toBe(true);
+  });
+
+  it('rejects vault payload versions it does not know (1 and 4)', async () => {
     const store = new MemoryVaultStore();
     const k = new Keyring(store, new WebCryptoPort());
     store.vault = await forgeVault({ version: 1, accounts: [] }, PASSWORD);
     await expect(k.unlock(PASSWORD)).rejects.toThrow(/Vault format unsupported/);
+    store.vault = await forgeVault({ version: 4, accounts: [] }, PASSWORD);
+    await expect(k.unlock(PASSWORD)).rejects.toThrow(/Vault format unsupported/);
   });
 
-  it('rejects a v2 vault whose accounts field is not an array (parseV2 guard)', async () => {
+  it('rejects a vault whose accounts field is not an array (parse guard)', async () => {
     const store = new MemoryVaultStore();
     const k = new Keyring(store, new WebCryptoPort());
     store.vault = await forgeVault({ version: 2, accounts: 'nope' }, PASSWORD);

@@ -4,16 +4,29 @@
  * payload and this request, what is the next payload" lives here.
  */
 
-import type { Account, AccountId } from './account';
+import type { Account, AccountId, AccountKind } from './account';
 import { MAX_ACCOUNTS_PER_VAULT, MAX_LABEL_LENGTH } from '../shared/constants';
 
 export type AccountSecret =
   | { kind: 'mnemonic'; value: string }
   | { kind: 'edsk';     value: string }
-  | { kind: 'evm-pk';   value: string };
+  | { kind: 'evm-pk';   value: string }
+  // Resolved against the wallet-level seed at this HD index; the curve comes
+  // from the account's kind. Keeping this as a secret kind preserves the
+  // invariant that every account has a `secrets[id]` entry.
+  | { kind: 'derived';  index: number };
+
+/** What reveal/export flows hand the user: always concrete signing material —
+ *  a `derived` marker is resolved before it leaves the keyring. */
+export type RevealedSecret = Exclude<AccountSecret, { kind: 'derived' }>;
 
 export interface MultiAccountVaultPayload {
-  version:  2;
+  version:  3;
+  /** Wallet-level BIP-39 phrase behind `derived` secrets. Written only by
+   *  onboarding (the user demonstrably holds that phrase); vaults migrated
+   *  from v2 have none, because the provenance of a v2 account's mnemonic is
+   *  unknowable and silently promoting one would change export semantics. */
+  seed?:    { mnemonic: string };
   accounts: Account[];
   active:   AccountId;
   secrets:  Record<AccountId, AccountSecret>;
@@ -38,6 +51,37 @@ export class AccountNotFoundError extends Error {
     super(`Account ${accountId} not found in vault`);
     this.name = 'AccountNotFoundError';
   }
+}
+
+export class NoWalletSeedError extends Error {
+  constructor() {
+    super('This wallet has no seed phrase to derive from');
+    this.name = 'NoWalletSeedError';
+  }
+}
+
+export class DuplicateAccountError extends Error {
+  constructor(public readonly address: string) {
+    super(`An account with address ${address} already exists in the vault`);
+    this.name = 'DuplicateAccountError';
+  }
+}
+
+/**
+ * Next unused HD index for `kind`. Gaps left by removed accounts are not
+ * reused — re-deriving an interior index would resurrect an address the user
+ * deliberately removed. Removing the highest index and re-adding derives the
+ * same address again, which is standard HD-wallet behavior: a derived account
+ * is always recoverable from the phrase, so funds can never be orphaned.
+ */
+export function nextDerivationIndex(payload: MultiAccountVaultPayload, kind: AccountKind): number {
+  let next = 0;
+  for (const a of payload.accounts) {
+    if (a.kind !== kind) continue;
+    const secret = payload.secrets[a.id];
+    if (secret?.kind === 'derived' && secret.index >= next) next = secret.index + 1;
+  }
+  return next;
 }
 
 export function addAccountToPayload(
@@ -70,7 +114,7 @@ export function removeAccountFromPayload(
     ? [...remaining].sort((a, b) => a.createdAt - b.createdAt)[0].id
     : payload.active;
 
-  return { version: 2, accounts: remaining, active, secrets };
+  return { ...payload, accounts: remaining, active, secrets };
 }
 
 export function setActiveOnPayload(

@@ -3,6 +3,7 @@ import {
   deriveTezosIdentity,
   deriveTezosIdentityFromSecretKey,
   newMnemonic,
+  tezosDerivationPath,
   TEZOS_DERIVATION_PATH,
   MNEMONIC_WORDS,
 } from '../seed';
@@ -59,5 +60,39 @@ describe('seed — Tezos identity derivation', () => {
 
   it('uses the standard Tezos BIP44 ed25519 path', () => {
     expect(TEZOS_DERIVATION_PATH).toBe("m/44'/1729'/0'/0'");
+  });
+});
+
+describe('seed — indexed HD derivation (one phrase, many accounts)', () => {
+  // Regression anchors for ZERO_MNEMONIC, produced by this stack (Taquito
+  // SLIP-10 ed25519) at introduction time — they guard against derivation
+  // drift, they are not independent vectors (none are published per-index
+  // for Tezos).
+  const INDEX_TZ1 = [
+    'tz1YegD188fgGzXotMUQMcM4UFCyNAvHtw6p',
+    'tz1gYmRMDMqochE1pfhWGpbrvQmsY43TnLve',
+    'tz1bujSK4VCCfg4WtVCh11JxiRghUybtjt7D',
+  ];
+
+  it('tezosDerivationPath increments the hardened account level', () => {
+    expect(tezosDerivationPath(0)).toBe("m/44'/1729'/0'/0'");
+    expect(tezosDerivationPath(7)).toBe("m/44'/1729'/7'/0'");
+    expect(() => tezosDerivationPath(-1)).toThrow();
+    expect(() => tezosDerivationPath(1.5)).toThrow();
+  });
+
+  it('index 0 is byte-identical to the historical single-account derivation', async () => {
+    const legacy  = await deriveTezosIdentity(ZERO_MNEMONIC);
+    const indexed = await deriveTezosIdentity(ZERO_MNEMONIC, 0);
+    expect(indexed.tz1).toBe(legacy.tz1);
+    expect(indexed.secretKey).toBe(legacy.secretKey);
+  });
+
+  it('indices 0/1/2 derive the pinned distinct addresses deterministically', async () => {
+    for (const [i, expected] of INDEX_TZ1.entries()) {
+      const id = await deriveTezosIdentity(ZERO_MNEMONIC, i);
+      expect(id.tz1).toBe(expected);
+    }
+    expect(new Set(INDEX_TZ1).size).toBe(INDEX_TZ1.length);
   });
 });

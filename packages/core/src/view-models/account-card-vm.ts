@@ -1,8 +1,8 @@
 /**
  * AccountCardVM: presentation shape for the active account, unifying Tezos
  * and EVM kinds for AccountCard, Home, Send, Receive, Settings. Tezos
- * accounts expose both an L1 (tz1) and an L2 (alias) face; EVM accounts
- * expose only their 0x address.
+ * accounts expose both a Michelson (tz1) and an EVM (alias) face; EVM
+ * accounts expose only their 0x address.
  */
 
 import type { VaultStateUnlocked } from '../shared/messages';
@@ -25,7 +25,7 @@ export function accountCardVM(state: VaultStateUnlocked): AccountCardVM {
     return {
       kind:         'tezos',
       identitySeed: state.tz1,
-      primary:      { chain: 'l1', label: 'Michelson',   address: state.tz1 },
+      primary:      { chain: 'l1', label: 'Michelson runtime', address: state.tz1 },
       secondary:    { chain: 'l2', label: 'EVM runtime', address: state.evmAlias },
     };
   }

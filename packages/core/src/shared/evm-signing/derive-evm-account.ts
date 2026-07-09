@@ -6,6 +6,7 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { hexToBytes, bytesToHex } from './bytes';
+import { wipe } from '../wipe';
 
 export interface EvmIdentity {
   address:    `0x${string}`;
@@ -37,6 +38,7 @@ export function deriveEvmAccount(privateKeyHex: string): EvmIdentity {
   const privBytes  = hexToBytes('0x' + normalised);
 
   const uncompressed = secp256k1.getPublicKey(privBytes, false);  // 65 bytes: 0x04 || X || Y
+  wipe(privBytes);                                                 // key bytes done; only public data below
   const xy           = uncompressed.slice(1);                     // strip 0x04
   const hash         = keccak_256(xy);                             // 32 bytes
   const addrBytes    = hash.slice(-20);                            // last 20 bytes

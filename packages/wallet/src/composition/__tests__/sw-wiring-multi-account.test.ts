@@ -189,12 +189,25 @@ describe('sw-wiring multi-account dispatch', () => {
     expect(exported.kind).toBe('evm-pk');
     expect(`0x${exported.value}`.toLowerCase()).toBe(addedPriv.toLowerCase());
 
-    // Default (no accountId) returns the active one (a Tezos mnemonic from create()).
+    // Default (no accountId) returns the active account's signing material.
+    // The onboarding account is derived from the wallet seed, so its
+    // per-account reveal is the concrete edsk — the phrase itself has its own
+    // export path (EXPORT_WALLET_SEED).
     const def = await send(h.deps, { type: 'EXPORT_SEED', password: PASSWORD });
     if (!def.ok) throw new Error('default export failed');
-    expect((def.data as { kind: string }).kind).toBe('mnemonic');
+    expect((def.data as { kind: string }).kind).toBe('edsk');
     // Confirm the active is firstId still.
     expect(h.keyring.getUnlocked()!.account.id).toBe(firstId);
+  });
+
+  it('EXPORT_WALLET_SEED returns the onboarding phrase behind the password', async () => {
+    const exp = await send(h.deps, { type: 'EXPORT_WALLET_SEED', password: PASSWORD });
+    if (!exp.ok) throw new Error('export failed');
+    expect(typeof exp.data).toBe('string');
+    expect((exp.data as string).trim().split(/\s+/).length).toBeGreaterThanOrEqual(12);
+
+    const bad = await send(h.deps, { type: 'EXPORT_WALLET_SEED', password: 'wrong-password' });
+    expect(bad.ok).toBe(false);
   });
 });
 

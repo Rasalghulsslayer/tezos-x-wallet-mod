@@ -20,7 +20,7 @@ const tz1Acc = (id: string, createdAt: number, label?: string): TezosAccount => 
 const tz1Sec: AccountSecret = { kind: 'mnemonic', value: 'mnem-placeholder' };
 
 const payloadOf = (...accounts: Account[]): MultiAccountVaultPayload => ({
-  version:  2,
+  version:  3,
   accounts,
   active:   accounts[0].id,
   secrets:  Object.fromEntries(accounts.map(a => [a.id, tz1Sec])),

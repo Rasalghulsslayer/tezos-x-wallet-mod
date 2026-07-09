@@ -5,7 +5,7 @@
  * account's secret.
  */
 
-import type { Keyring, VaultPayload } from '../background/keyring';
+import type { Keyring, RevealedSecret } from '../background/keyring';
 import type { AccountId } from '../domain/account';
 
 export interface ExportSecretReq {
@@ -17,7 +17,7 @@ export interface ExportSecretDeps {
   keyring: Keyring;
 }
 
-export async function exportSecret(req: ExportSecretReq, deps: ExportSecretDeps): Promise<VaultPayload> {
+export async function exportSecret(req: ExportSecretReq, deps: ExportSecretDeps): Promise<RevealedSecret> {
   if (req.accountId == null) return deps.keyring.exportSecret(req.password);
   return deps.keyring.exportSecretFor(req.accountId, req.password);
 }

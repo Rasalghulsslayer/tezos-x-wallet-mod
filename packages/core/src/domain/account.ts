@@ -32,7 +32,10 @@ export type AddAccountSource =
   | { source: 'fresh' }
   | { source: 'mnemonic'; mnemonic:   string }
   | { source: 'edsk';     edsk:       string }
-  | { source: 'privkey';  privateKey: string };
+  | { source: 'privkey';  privateKey: string }
+  // Next account derived from the wallet seed phrase at the next unused HD
+  // index for the requested kind — nothing new to back up.
+  | { source: 'derived' };
 
 export interface AccountSummary {
   id:                AccountId;
@@ -41,4 +44,7 @@ export interface AccountSummary {
   primaryAddress:    string;
   secondaryAddress?: string;
   createdAt:         number;
+  /** HD index for accounts derived from the wallet seed; absent for
+   *  standalone (imported / per-account-secret) accounts. */
+  derivationIndex?:  number;
 }

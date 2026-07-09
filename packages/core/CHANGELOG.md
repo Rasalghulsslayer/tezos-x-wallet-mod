@@ -10,6 +10,63 @@ Chrome extension (`@tezosx/wallet`) and the React Native app
 ## [Unreleased]
 
 ### Added
+- HD multi-account derivation from a single seed phrase. The vault payload is
+  now version 3 and can carry a wallet-level BIP-39 phrase (`seed`), written
+  only by mnemonic onboarding — the first account sits at the historical index
+  0 path, so its address is unchanged. `AddAccountSource` gains
+  `{ source: 'derived' }`: the keyring derives the next unused per-curve index
+  (`m/44'/1729'/i'/0'` for Tezos, `m/44'/60'/0'/0/i` for EVM via the new
+  `deriveEvmFromMnemonic` on `@scure/bip32`), stores only
+  `{ kind: 'derived', index }` — nothing new to back up — and refuses with
+  `NoWalletSeedError` when the vault has no phrase (seedless imports). Gaps
+  from removed accounts are not reused; removing the highest index and
+  re-adding derives the same address again, so derived funds are always
+  recoverable. Reveal flows resolve a derived marker to the concrete edsk /
+  EVM private key (`RevealedSecret`); the phrase itself has its own
+  password-gated path (`exportWalletSeed`, `EXPORT_WALLET_SEED`).
+  `VaultStateUnlocked` gains `hasSeed` and `AccountSummary` gains
+  `derivationIndex` (both additive). Existing v2 vaults migrate on read —
+  same password, same envelope, byte-identical signing keys for all three
+  legacy secret kinds — and never gain a seed by migration, because the
+  provenance of a v2 mnemonic is unknowable; their derived option simply
+  stays hidden.
+- `trackCrossRuntimeTx` in `shared/tx-status.ts` — status tracking for a
+  Tezos → EVM gateway transfer that reports progress honestly. The kernel
+  synthesizes the EVM transaction only after the L1 operation lands, and by
+  the time the synthetic hash resolves the receipt's block has usually already
+  reached the `finalized` tag — so polling the L2 receipt alone sits silent
+  through the whole inclusion window, then jumps straight to finalized. The
+  new tracker drives 'included' from the L1 operation on TzKT (capped there:
+  finality for this transfer means the L2 receipt's block reached the
+  finalized tag, not L1 attestation depth) and hands over to the L2 receipt
+  once the real hash is known. To feed it, the NAC gateway path of
+  `sendTransfer` now returns the underlying `l1OpHash` (`ProviderPort` gains
+  the optional `getPendingL1Hash`).
+
+### Changed
+- **Breaking (type):** an unlocked keyring no longer retains the vault
+  password. `UnlockedKeyring.password` is replaced by `UnlockedKeyring.km` —
+  the PBKDF2-derived AES key plus the salt / work factor it was derived at.
+  Vault mutations re-seal with that key (fresh IV, pinned salt), account
+  removal re-verifies the password by deriving a candidate key and comparing
+  in constant time, and vaults sealed at older work factors are upgraded to
+  600k iterations at unlock (the one moment the password is in scope) instead
+  of at the next mutation. The key is zeroized on lock. Sealed-envelope format
+  and cross-runtime portability are unchanged; `deriveVaultKey`,
+  `encryptVaultWithKey`, `decryptVaultWithKey` and `freshVaultSalt` are
+  additive on `shared/vault-crypto`.
+
+### Security
+- Transient secret byte-buffers are zeroized immediately after use: the
+  PBKDF2-derived vault key and the decrypted vault plaintext bytes in
+  `shared/vault-crypto`, and the private-key / signature buffers in the shared
+  EVM signing path (`shared/wipe.ts` provides the best-effort `wipe` helper
+  and a constant-time comparison). JavaScript strings remain immutable and
+  GC-bound, and Taquito / noble keep internal copies out of reach — this
+  shortens the window secrets stay readable in memory rather than
+  guaranteeing erasure. Sealed-envelope bytes are unchanged, so vault
+  portability across the extension and mobile is unaffected.
+
 - `Keyring.activateInMemory(accountId)` + `Keyring.flushActive()` — a deferred
   path for switching the active account. `setActiveAccount` re-seals the whole
   vault (a 600k-PBKDF2 encrypt) to persist the active pointer, which is

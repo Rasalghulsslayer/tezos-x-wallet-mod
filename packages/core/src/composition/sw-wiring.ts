@@ -31,6 +31,7 @@ import { importAccount }           from '../use-cases/import-account';
 import { unlockVault }             from '../use-cases/unlock-vault';
 import { lockVault }               from '../use-cases/lock-vault';
 import { exportSecret }            from '../use-cases/export-secret';
+import { exportWalletSeed }        from '../use-cases/export-wallet-seed';
 import { listPending }             from '../use-cases/list-pending';
 import { listSessions }            from '../use-cases/list-sessions';
 import { disconnectOrigin }        from '../use-cases/disconnect-origin';
@@ -172,6 +173,11 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
       case 'EXPORT_SEED': {
         const secret = await exportSecret({ password: msg.password, accountId: msg.accountId }, { keyring: deps.keyring });
         return { ok: true, data: secret };
+      }
+
+      case 'EXPORT_WALLET_SEED': {
+        const mnemonic = await exportWalletSeed({ password: msg.password }, { keyring: deps.keyring });
+        return { ok: true, data: mnemonic };
       }
 
       case 'LIST_PENDING':

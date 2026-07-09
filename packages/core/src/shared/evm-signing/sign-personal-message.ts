@@ -6,6 +6,7 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { keccak256 } from './keccak';
 import { bytesToHex, concatBytes, hexToBytes } from './bytes';
+import { wipe } from '../wipe';
 
 /**
  * Normalise a `personal_sign` data parameter to the exact bytes to sign.
@@ -45,5 +46,9 @@ export function signPersonalMessage(
   out.set(recovered.subarray(1, 33), 0);    // r
   out.set(recovered.subarray(33, 65), 32);  // s
   out[64] = 27 + recovered[0];              // v
-  return `0x${bytesToHex(out)}` as `0x${string}`;
+  const hex = `0x${bytesToHex(out)}` as `0x${string}`;
+  // The key bytes have served their purpose (noble keeps its own internal
+  // copy out of reach; the signature itself is handed to the dApp anyway).
+  wipe(privBytes, recovered);
+  return hex;
 }

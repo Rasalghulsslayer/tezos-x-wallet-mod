@@ -5,7 +5,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { trackTx } from '../tx-status';
+import { trackTx, trackCrossRuntimeTx } from '../tx-status';
 import type { TxStatus } from '../../domain/tx-status';
 
 const TX_HASH    = '0xabc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abcd';
@@ -70,6 +70,58 @@ async function captureFirstNonBroadcasting(runtime: 'l1' | 'l2', hash: string): 
       },
     });
     // Safety: if no non-broadcasting status arrives within 6s, fail.
+    setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        handle.stop();
+        resolve({ stage: 'unavailable' });
+      }
+    }, 6_000);
+  });
+}
+
+/** Serve TzKT (by url) and the EVM RPC (by JSON-RPC method) from one stub. */
+function stubBothNetworks(
+  l1: { op: { level: number; timestamp: string; status: string } | null; headLevel: number },
+  rpc: RpcMock,
+) {
+  return vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+    const u = String(url);
+    if (u.includes('/v1/operations/transactions')) {
+      return new Response(JSON.stringify(l1.op == null ? [] : [l1.op]), { status: 200 });
+    }
+    if (u.includes('/v1/head')) {
+      return new Response(JSON.stringify({ level: l1.headLevel }), { status: 200 });
+    }
+    const body = JSON.parse((init?.body as string) ?? '{}') as { method: string };
+    if (body.method === 'eth_getTransactionReceipt') {
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: rpc.receipt }), { status: 200 });
+    }
+    if (body.method === 'eth_getBlockByNumber') {
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: rpc.finalizedBlock }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, error: { message: 'unknown method' } }), { status: 200 });
+  });
+}
+
+/** Like captureFirstNonBroadcasting, for the cross-runtime tracker. */
+async function captureCross(
+  l1OpHash: string | null,
+  getRealHash: () => string | null,
+): Promise<TxStatus> {
+  return new Promise<TxStatus>((resolve) => {
+    let resolved = false;
+    const handle = trackCrossRuntimeTx({
+      l1OpHash,
+      getRealHash,
+      onUpdate: (status) => {
+        if (status.stage === 'broadcasting') return;
+        if (resolved) return;
+        resolved = true;
+        handle.stop();
+        resolve(status);
+      },
+    });
     setTimeout(() => {
       if (!resolved) {
         resolved = true;
@@ -159,6 +211,51 @@ describe('pollL1 — L1 Tenderbake finality (unchanged)', () => {
       1_002,
     );
     const status = await captureFirstNonBroadcasting('l1', TX_OP_HASH);
+    expect(status.stage).toBe('failed');
+    if (status.stage === 'failed') expect(status.reason).toBe('backtracked');
+  }, 10_000);
+});
+
+describe('trackCrossRuntimeTx — L1 op drives inclusion until the kernel hash resolves', () => {
+  const APPLIED = { level: 1_000, timestamp: '2026-05-15T10:00:00Z', status: 'applied' };
+
+  it('L1 op applied, real hash unknown → stage: included (before any resolution)', async () => {
+    stubBothNetworks({ op: APPLIED, headLevel: 1_000 }, {});
+    const status = await captureCross(TX_OP_HASH, () => null);
+    expect(status.stage).toBe('included');
+    if (status.stage === 'included') expect(status.blockLevel).toBe(1_000);
+  }, 10_000);
+
+  it('L1 op past attestation depth, real hash unknown → still included, never finalized', async () => {
+    // Finality for this transfer is the L2 receipt reaching the finalized tag,
+    // not L1 attestation depth — the L1 signal must stay capped at included.
+    stubBothNetworks({ op: APPLIED, headLevel: 1_010 }, {});
+    const status = await captureCross(TX_OP_HASH, () => null);
+    expect(status.stage).toBe('included');
+  }, 10_000);
+
+  it('real hash resolved, receipt final → stage: finalized via the L2 receipt', async () => {
+    stubBothNetworks(
+      { op: APPLIED, headLevel: 1_010 },
+      { receipt: { blockNumber: hex(TX_BLOCK), status: '0x1' }, finalizedBlock: { number: hex(TX_BLOCK) } },
+    );
+    const status = await captureCross(TX_OP_HASH, () => TX_HASH);
+    expect(status.stage).toBe('finalized');
+    if (status.stage === 'finalized') expect(status.blockLevel).toBe(TX_BLOCK);
+  }, 10_000);
+
+  it('no L1 hash available, real hash resolved → the L2 receipt still concludes', async () => {
+    stubBothNetworks(
+      { op: null, headLevel: 0 },
+      { receipt: { blockNumber: hex(TX_BLOCK), status: '0x1' }, finalizedBlock: { number: hex(TX_BLOCK) } },
+    );
+    const status = await captureCross(null, () => TX_HASH);
+    expect(status.stage).toBe('finalized');
+  }, 10_000);
+
+  it('L1 op rejected → stage: failed', async () => {
+    stubBothNetworks({ op: { ...APPLIED, status: 'backtracked' }, headLevel: 1_002 }, {});
+    const status = await captureCross(TX_OP_HASH, () => null);
     expect(status.stage).toBe('failed');
     if (status.stage === 'failed') expect(status.reason).toBe('backtracked');
   }, 10_000);

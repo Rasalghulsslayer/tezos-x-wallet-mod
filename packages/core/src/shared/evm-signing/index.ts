@@ -15,3 +15,4 @@ export {
   normaliseEvmPrivateKey,
   type EvmIdentity,
 } from './derive-evm-account';
+export { deriveEvmFromMnemonic, evmDerivationPath } from './derive-evm-from-mnemonic';

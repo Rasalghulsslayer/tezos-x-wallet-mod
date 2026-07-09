@@ -20,6 +20,7 @@ export type VaultStateUnlocked =
       tz1:       string;
       evmAlias:  string;             // alias derived from tz1
       accounts:  AccountSummary[];   // every account in the vault, sorted by createdAt ASC
+      hasSeed?:  boolean;            // wallet-level seed present → derived accounts available
     }
   | {
       status:    'unlocked';
@@ -27,6 +28,7 @@ export type VaultStateUnlocked =
       accountId: string;
       address:   `0x${string}`;
       accounts:  AccountSummary[];
+      hasSeed?:  boolean;
     };
 
 export type VaultState =
@@ -92,6 +94,7 @@ export type PopupRequest =
   | { type: 'UNLOCK';        password: string }
   | { type: 'LOCK' }
   | { type: 'EXPORT_SEED';   password: string; accountId?: AccountId }
+  | { type: 'EXPORT_WALLET_SEED'; password: string }
   | { type: 'SEND_TX';       to: string; amount: string; asset: Asset }
   | { type: 'RESOLVE_TX';    syntheticHash: string }
   | { type: 'LIST_PENDING' }
@@ -158,7 +161,9 @@ export type WalletResponse<T = unknown> =
  */
 export type SendTxResult =
   | { runtime: 'l1'; hash: string }
-  | { runtime: 'l2'; hash: string };
+  // `l1OpHash` is present on the NAC gateway path: the L1 operation whose
+  // inclusion can be tracked on TzKT while the kernel hash resolves.
+  | { runtime: 'l2'; hash: string; l1OpHash?: string };
 
 /** Result of a RESOLVE_TX call. */
 export type ResolveTxResult =

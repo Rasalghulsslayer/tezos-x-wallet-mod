@@ -26,6 +26,8 @@ export async function getState(deps: GetStateDeps): Promise<VaultState> {
     .slice()
     .sort((a, b) => a.createdAt - b.createdAt);
 
+  const hasSeed = deps.keyring.hasWalletSeed();
+
   if (account.kind === 'tezos') {
     const alias = deps.evmAliasCache.value ?? await deriveEvmAlias(account.tz1);
     deps.evmAliasCache.value = alias;
@@ -36,6 +38,7 @@ export async function getState(deps: GetStateDeps): Promise<VaultState> {
       tz1:       account.tz1,
       evmAlias:  alias,
       accounts:  summaries,
+      hasSeed,
     };
   }
 
@@ -46,5 +49,6 @@ export async function getState(deps: GetStateDeps): Promise<VaultState> {
     accountId: account.id,
     address:   account.address,
     accounts:  summaries,
+    hasSeed,
   };
 }

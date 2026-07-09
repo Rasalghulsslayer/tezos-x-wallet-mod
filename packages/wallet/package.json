@@ -22,7 +22,6 @@
     "@noble/ciphers": "1.2.1",
     "@noble/curves": "2.2.0",
     "@noble/hashes": "2.2.0",
-    "@scure/bip32": "^2.2.0",
     "@scure/bip39": "^2.2.0",
     "@taquito/rpc": "^24.3.0",
     "@taquito/signer": "^24.3.0",

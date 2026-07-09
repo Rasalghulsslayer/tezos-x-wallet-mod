@@ -41,6 +41,54 @@ export function trackTx({ hash, runtime, onUpdate }: TrackTxArgs): PollHandle {
   return { stop: () => poller.stop() };
 }
 
+export interface TrackCrossRuntimeTxArgs {
+  l1OpHash:    string | null;
+  getRealHash: () => string | null;
+  onUpdate:    (status: TxStatus) => void;
+}
+
+/**
+ * Track a Tezos → EVM cross-runtime transfer. The user's signature lands as
+ * an L1 operation first; the kernel then synthesizes the EVM transaction,
+ * whose hash only becomes known once the resolver finds it in a block — and
+ * by then that block has usually already reached the `finalized` tag, so
+ * polling the L2 receipt alone stays silent through the whole inclusion
+ * window and jumps straight to finalized. Instead, while the real hash is
+ * unknown, the L1 operation drives the timeline — capped at 'included',
+ * because "finalized" for this transfer means the L2 receipt's block reached
+ * the finalized tag, not L1 attestation depth. Once `getRealHash` returns
+ * the kernel hash, the L2 receipt takes over and can conclude.
+ */
+export function trackCrossRuntimeTx({ l1OpHash, getRealHash, onUpdate }: TrackCrossRuntimeTxArgs): PollHandle {
+  onUpdate({ stage: 'broadcasting' });
+
+  const poller = startPoller<TxStatus>({
+    fetch: async () => {
+      const realHash = getRealHash();
+      if (realHash != null) return pollL2(realHash);
+      if (l1OpHash == null) return null;
+      const l1 = await pollL1(l1OpHash);
+      if (l1 == null) return null;
+      if (l1.stage === 'finalized') {
+        return { stage: 'included', blockLevel: l1.blockLevel, timestampMs: Date.now() };
+      }
+      return l1;
+    },
+    onUpdate: (status) => {
+      onUpdate(status);
+      if (status.stage === 'included') {
+        poller.slowDown(TX_POLL_INTERVAL_SLOW_MS);
+      }
+    },
+    isDone:    (s) => s.stage === 'finalized' || s.stage === 'failed',
+    intervalMs: TX_POLL_INTERVAL_FAST_MS,
+    timeoutMs:  e2eConfig()?.txPollTimeoutMs ?? TX_POLL_TIMEOUT_MS,
+    onTimeout:  () => onUpdate({ stage: 'unavailable' }),
+  });
+
+  return { stop: () => poller.stop() };
+}
+
 // ── L1 polling via TzKT ─────────────────────────────────────────────────
 
 interface TzktOperation {

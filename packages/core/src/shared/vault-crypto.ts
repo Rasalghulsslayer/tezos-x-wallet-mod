@@ -10,6 +10,7 @@
 
 import type { CryptoPort } from '../ports/crypto-port';
 import type { EncryptedVault } from '../ports/vault-store';
+import { wipe } from './wipe';
 
 // OWASP-recommended floor for PBKDF2-HMAC-SHA256 (also MetaMask's setting).
 // The encrypted vault sits in plaintext on disk, so this work factor is the
@@ -69,14 +70,22 @@ export async function sealVault(
   iv: Uint8Array,
   iterations: number,
 ): Promise<EncryptedVault> {
+  // The derived AES key and the plaintext bytes (every secret in the vault)
+  // are zeroized once the ciphertext exists. The plaintext *string* argument
+  // is immutable and stays GC-bound — the unavoidable residual.
   const key = await crypto.pbkdf2Sha256(password, salt, iterations, AES_KEY_BYTES);
-  const ciphertext = await crypto.aesGcmEncrypt(key, iv, utf8Encoder.encode(plaintext));
-  return {
-    ciphertext: bytesToBase64(ciphertext),
-    iv:         bytesToBase64(iv),
-    salt:       bytesToBase64(salt),
-    iterations,
-  };
+  const plaintextBytes = utf8Encoder.encode(plaintext);
+  try {
+    const ciphertext = await crypto.aesGcmEncrypt(key, iv, plaintextBytes);
+    return {
+      ciphertext: bytesToBase64(ciphertext),
+      iv:         bytesToBase64(iv),
+      salt:       bytesToBase64(salt),
+      iterations,
+    };
+  } finally {
+    wipe(key, plaintextBytes);
+  }
 }
 
 /** Seal plaintext with a fresh random salt/iv at the current work factor. */
@@ -97,7 +106,73 @@ export async function decryptVault(
   password: string,
   crypto: CryptoPort,
 ): Promise<string> {
-  const key = await crypto.pbkdf2Sha256(password, base64ToBytes(vault.salt), vault.iterations, AES_KEY_BYTES);
-  const plaintext = await crypto.aesGcmDecrypt(key, base64ToBytes(vault.iv), base64ToBytes(vault.ciphertext));
-  return utf8Decoder.decode(plaintext);
+  // Key and plaintext bytes are zeroized once decoded; the returned string
+  // copy is immutable and stays GC-bound — the unavoidable residual.
+  const key = await deriveVaultKey(password, vault.salt, vault.iterations, crypto);
+  try {
+    return await decryptVaultWithKey(vault, key, crypto);
+  } finally {
+    wipe(key);
+  }
+}
+
+/** The retained unlock material: the PBKDF2-derived AES key with the salt and
+ *  work factor it was derived at. Re-seals pin the salt (it only defends the
+ *  KDF, and the key is already derived) and use a fresh IV, as GCM requires. */
+export interface VaultKeyMaterial {
+  key:        Uint8Array;
+  salt:       string;   // base64, as stored in the envelope
+  iterations: number;
+}
+
+/** Derive the vault AES key for a password at the given salt / work factor. */
+export async function deriveVaultKey(
+  password: string,
+  saltB64: string,
+  iterations: number,
+  crypto: CryptoPort,
+): Promise<Uint8Array> {
+  return crypto.pbkdf2Sha256(password, base64ToBytes(saltB64), iterations, AES_KEY_BYTES);
+}
+
+/** Generate a fresh random salt, encoded as the envelope stores it. */
+export function freshVaultSalt(crypto: CryptoPort): string {
+  return bytesToBase64(crypto.randomBytes(SALT_BYTES));
+}
+
+/** Seal plaintext with already-derived key material (fresh IV, pinned salt).
+ *  The caller owns — and eventually wipes — the key. */
+export async function encryptVaultWithKey(
+  plaintext: string,
+  km: VaultKeyMaterial,
+  crypto: CryptoPort,
+): Promise<EncryptedVault> {
+  const iv = crypto.randomBytes(IV_BYTES);
+  const plaintextBytes = utf8Encoder.encode(plaintext);
+  try {
+    const ciphertext = await crypto.aesGcmEncrypt(km.key, iv, plaintextBytes);
+    return {
+      ciphertext: bytesToBase64(ciphertext),
+      iv:         bytesToBase64(iv),
+      salt:       km.salt,
+      iterations: km.iterations,
+    };
+  } finally {
+    wipe(plaintextBytes);
+  }
+}
+
+/** Open a vault with an already-derived key. The caller owns the key. */
+export async function decryptVaultWithKey(
+  vault: EncryptedVault,
+  key: Uint8Array,
+  crypto: CryptoPort,
+): Promise<string> {
+  let plaintext: Uint8Array | null = null;
+  try {
+    plaintext = await crypto.aesGcmDecrypt(key, base64ToBytes(vault.iv), base64ToBytes(vault.ciphertext));
+    return utf8Decoder.decode(plaintext);
+  } finally {
+    wipe(plaintext);
+  }
 }

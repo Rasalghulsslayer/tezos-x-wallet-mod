@@ -24,7 +24,10 @@ export interface SendTransferDeps {
 
 export type SendTransferResult =
   | { runtime: 'l1'; hash: string }
-  | { runtime: 'l2'; hash: string };
+  // For the NAC gateway path, `l1OpHash` is the underlying L1 operation —
+  // its inclusion is observable on TzKT long before the kernel-synthesized
+  // EVM hash resolves, so status tracking can report progress in between.
+  | { runtime: 'l2'; hash: string; l1OpHash?: string };
 
 export async function sendTransfer(
   req:  SendTransferReq,
@@ -50,7 +53,8 @@ export async function sendTransfer(
         data:  req.asset.kind === 'xtz' ? '0x' : req.amount,
       }],
     }) as string;
-    return { runtime: 'l2', hash: synthetic };
+    const l1OpHash = deps.container.provider.getPendingL1Hash?.(synthetic) ?? undefined;
+    return { runtime: 'l2', hash: synthetic, l1OpHash };
   }
 
   // EVM signer paths

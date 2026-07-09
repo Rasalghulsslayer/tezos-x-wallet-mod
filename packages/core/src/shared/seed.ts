@@ -2,8 +2,18 @@ import { generateMnemonic } from '@scure/bip39';
 import { wordlist as englishWordlist } from '@scure/bip39/wordlists/english.js';
 import { InMemorySigner } from '@taquito/signer';
 
-/** Standard Tezos ed25519 derivation path (BIP44 coin type 1729). */
-export const TEZOS_DERIVATION_PATH = "m/44'/1729'/0'/0'";
+/**
+ * BIP44 ed25519 path for the Tezos account at `index` (coin type 1729; every
+ * level hardened, as SLIP-10 ed25519 requires). Incrementing the account level
+ * is the Temple/Kukai convention for "next account from the same phrase".
+ */
+export function tezosDerivationPath(index: number): string {
+  if (!Number.isInteger(index) || index < 0) throw new Error('Invalid derivation index');
+  return `m/44'/1729'/${index}'/0'`;
+}
+
+/** Standard Tezos ed25519 derivation path (BIP44 coin type 1729), index 0. */
+export const TEZOS_DERIVATION_PATH = tezosDerivationPath(0);
 
 /** Word count for the primary wallet seed (industry default: 24 words = 256-bit entropy). */
 export const MNEMONIC_WORDS = 24;
@@ -17,17 +27,19 @@ export function newMnemonic(): string {
 export const ENGLISH_WORDLIST = englishWordlist;
 
 /**
- * Derive the tz1 identity (address + public key + encoded secret key) from a
- * mnemonic. Uses SLIP-10 ed25519 derivation under `TEZOS_DERIVATION_PATH`.
+ * Derive the tz1 identity (address + public key + encoded secret key) at
+ * `index` from a mnemonic. Uses SLIP-10 ed25519 derivation under
+ * `tezosDerivationPath(index)`; the default index 0 is the historical
+ * single-account path, so existing callers derive unchanged addresses.
  */
-export async function deriveTezosIdentity(mnemonic: string): Promise<{
+export async function deriveTezosIdentity(mnemonic: string, index = 0): Promise<{
   tz1:       string;
   publicKey: string;
   secretKey: string;
 }> {
   const signer = InMemorySigner.fromMnemonic({
     mnemonic,
-    derivationPath: TEZOS_DERIVATION_PATH,
+    derivationPath: tezosDerivationPath(index),
     curve:          'ed25519',
   });
 
