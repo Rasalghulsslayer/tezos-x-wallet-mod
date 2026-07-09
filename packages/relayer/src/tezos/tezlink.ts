@@ -32,7 +32,7 @@ export class TezlinkClient {
     this.rpcUrl = rpcUrl;
   }
 
-  /** Returns the EVM chain ID as a 0x-prefixed hex string (e.g. '0x1f094'). */
+  /** Returns the EVM chain ID as a 0x-prefixed hex string (e.g. '0x1f440'). */
   async getChainId(): Promise<string> {
     return jsonRpc<string>(this.rpcUrl, 'eth_chainId');
   }
