@@ -45,8 +45,8 @@ function groupByDay(items: ActivityRowVM[], now: number): DayGroup[] {
 
 const RUNTIME_OPTIONS: { v: RuntimeFilter; l: string; accent: 'purple' | 'cyan' }[] = [
   { v: 'all', l: 'All runtimes', accent: 'purple' },
-  { v: 'l1', l: 'Tezos L1', accent: 'purple' },
-  { v: 'l2', l: 'Tezos L2', accent: 'cyan' },
+  { v: 'l1', l: 'Michelson runtime', accent: 'purple' },
+  { v: 'l2', l: 'EVM runtime', accent: 'cyan' },
   { v: 'cross', l: 'Cross-runtime', accent: 'cyan' },
 ];
 

@@ -21,13 +21,16 @@ export function StatusTimeline({
   stage: TimelineStage;
   runtime: 'l1' | 'l2';
 }): React.JSX.Element {
-  // At a terminal stage every row (including Finalized) is complete; otherwise the
-  // row at idx is the active one. Without this, the last row would stay 'active'
-  // (purple pulse) forever because there is no stage beyond 'finalized'.
+  // A stage names the latest milestone REACHED, so its own row renders as
+  // complete (green check) and the pulsing 'active' dot sits on the next row —
+  // the thing actually being waited on. Anything else reads wrong: rendering
+  // the reached stage as 'active' kept "Included" purple until finality, so it
+  // only ever turned green together with "Finalized". At a terminal stage
+  // every row is complete.
   const complete = stage === 'finalized' || stage === 'confirmed';
-  const idx = complete ? ORDER.length : ORDER.indexOf(stage);
+  const idx = complete ? ORDER.length : ORDER.indexOf(stage) + 1;
   const rows = [
-    { t: 'Broadcasted', m: runtime === 'l1' ? 'Signed & injected on Tezos L1' : 'Submitted to the EVM runtime' },
+    { t: 'Broadcasted', m: runtime === 'l1' ? 'Signed & injected on the Michelson runtime' : 'Submitted to the EVM runtime' },
     { t: 'Included', m: 'Picked up in a block' },
     { t: 'Finalized', m: '≥ 2 confirmations' },
   ];

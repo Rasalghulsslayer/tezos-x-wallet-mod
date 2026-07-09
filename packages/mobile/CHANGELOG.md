@@ -7,7 +7,63 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
 
 ## [Unreleased]
 
+### Security
+- Locking the wallet (manually, on idle timeout, or on backgrounding) now also
+  clears the in-memory container cache, so decrypted signing keys held by live
+  signers — including Taquito's internal copy — no longer outlive the lock.
+  The extension already did this in its LOCK handler; the mobile shell's
+  single long-lived JS thread made the omission persistent rather than
+  transient, since no service-worker death ever evicted the cache.
+- Screens drop secret-bearing state as soon as their flow completes: Unlock
+  clears the password on success (not only on error), Create / Import / Add
+  account clear the mnemonic, private key and passwords once the vault
+  operation lands (and Add account also when backing out of the input step),
+  and the reveal sheet scrubs its password immediately after a successful
+  export, scrubs everything on any way out, and auto-closes 30 seconds after
+  showing a secret. JavaScript strings cannot be overwritten, so this shortens
+  how long secrets stay referenced rather than guaranteeing erasure. The
+  native crypto port now also zeroizes its transient buffers (the PBKDF2
+  output's native Buffer, the AES decrypt chunks) once copied.
+
+### Added
+- **Account removal.** Each row of the account switcher carries a trash
+  affordance opening a password-gated confirm sheet (the vault re-verifies the
+  password; the last account cannot be removed). Removing the active account
+  re-scopes to the oldest remaining one and re-points connected dApps at it —
+  stored sessions rebound, WalletConnect namespaces updated, `accountsChanged`
+  emitted — exactly like an account switch.
+- **HD accounts from the wallet seed phrase.** When the vault holds a wallet
+  seed (any wallet onboarded from a mnemonic), Add account leads with two new
+  default cards — "Next account from your seed phrase" for Tezos and EVM —
+  that derive the next unused index (`m/44'/1729'/i'/0'` / `m/44'/60'/0'/0/i`)
+  with nothing new to back up, skipping the reveal step entirely. The previous
+  create cards remain as "New separate seed phrase (advanced)". Settings gains
+  a "Reveal seed phrase" row (password-gated, same sheet) for the wallet-level
+  phrase; the per-account reveal now always shows the concrete signing key.
+  Existing vaults keep working untouched — they simply don't show the derived
+  cards, since no phrase was ever blessed as the wallet seed.
+
+### Fixed
+- **The cross-runtime Send timeline reported "Included" only when the
+  transfer was already final.** Tracking used to start only after the
+  synthetic hash resolved to the kernel-synthesized EVM hash — and by then the
+  receipt's block had usually reached the finalized tag, so the timeline sat
+  on "Broadcasted" for the whole inclusion window and then lit "Included" and
+  "Finalized" in the same instant. The gateway path now returns the underlying
+  L1 operation hash and a dedicated tracker drives "Included" from that
+  operation's inclusion on TzKT (~one L1 block after the send), handing over
+  to the L2 receipt for "Finalized" once the real hash resolves. Each step now
+  lights up when the thing it names actually happened.
+
 ### Changed
+- **Runtime naming.** No shipped string presents the two runtimes as layers
+  anymore: the chain pills, address badges and Add-account badges say
+  "Michelson" / "EVM", the activity tags and filters say "Michelson runtime" /
+  "EVM runtime", the routing card says "Same-runtime · Michelson runtime",
+  "Cross-runtime · Michelson → EVM via NAC gateway", "Same-runtime · Tezos X
+  (EVM)" and "Cross-runtime · EVM → Michelson via NAC precompile", and the
+  Send / Approve explainers describe "a Michelson-runtime operation" instead
+  of "an L1 op".
 - Vault crypto now runs natively via `react-native-quick-crypto` (OpenSSL /
   BoringSSL over Nitro/JSI), replacing the pure-JS `@noble` CryptoPort for the
   mobile vault. Unlocking a vault runs a 600k-iteration PBKDF2 to decrypt it; on

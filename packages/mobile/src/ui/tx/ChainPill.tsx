@@ -1,6 +1,6 @@
 /**
- * ChainPill — the "L1"/"L2" runtime chip (mirrors mobile.css .chain-pill). A
- * glowing dot (purple for L1 / Michelson, cyan for L2 / EVM) next to the label.
+ * ChainPill — the runtime chip (mirrors mobile.css .chain-pill). A glowing dot
+ * (purple for Michelson, cyan for EVM) next to the runtime label.
  */
 
 import { StyleSheet, Text, View } from 'react-native';
@@ -17,7 +17,7 @@ export function ChainPill({ chain }: { chain: 'l1' | 'l2' }): React.JSX.Element 
           { backgroundColor: accent, shadowColor: accent },
         ]}
       />
-      <Text style={styles.label}>{isL1 ? 'L1' : 'L2'}</Text>
+      <Text style={styles.label}>{isL1 ? 'Michelson' : 'EVM'}</Text>
     </View>
   );
 }

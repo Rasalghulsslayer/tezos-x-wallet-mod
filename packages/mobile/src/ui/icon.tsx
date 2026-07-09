@@ -37,6 +37,7 @@ const ICON_PATHS = {
   grid:              'M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 13h6v6h-6z',
   send:              'M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z',
   key:               'M15 7a4 4 0 1 1-4 4l-6 6v3h3l1-1v-2h2v-2h2l1-1',
+  trash:             'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M10 11v6M14 11v6',
 } as const;
 
 export type IconName = keyof typeof ICON_PATHS;

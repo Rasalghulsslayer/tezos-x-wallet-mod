@@ -22,6 +22,7 @@
 
 import { pbkdf2, createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'react-native-quick-crypto';
 import type { CryptoPort } from '@tezosx/wallet-core/ports/crypto-port';
+import { wipe } from '@tezosx/wallet-core/shared/wipe';
 
 const GCM_TAG_BYTES = 16;
 
@@ -67,7 +68,11 @@ export class QuickCryptoPort implements CryptoPort {
           reject(err ?? new Error('pbkdf2 derivation returned no key'));
           return;
         }
-        resolve(new Uint8Array(key));
+        // Hand the caller its own copy and zeroize the native-side Buffer
+        // (a Uint8Array subclass) — the caller owns the copy's lifecycle.
+        const out = new Uint8Array(key);
+        wipe(key as unknown as Uint8Array);
+        resolve(out);
       });
     });
   }
@@ -93,6 +98,10 @@ export class QuickCryptoPort implements CryptoPort {
     // final() authenticates: a wrong password or tampered ciphertext throws here
     // (native EVP), which is how decryptVault surfaces "wrong password".
     const final = new Uint8Array(decipher.final());
-    return concatBytes(body, final);
+    const out = concatBytes(body, final);
+    // The intermediate chunks hold vault plaintext; the caller owns (and
+    // wipes) the concatenated copy it receives.
+    wipe(body, final);
+    return out;
   }
 }

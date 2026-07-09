@@ -31,7 +31,7 @@ const EVM_PRIVKEY_RE = /^(0x)?[0-9a-fA-F]{64}$/;
 
 type Stage = 'pick' | 'input' | 'confirm';
 type Kind = 'tezos' | 'evm';
-type Source = 'fresh' | 'import';
+type Source = 'fresh' | 'import' | 'derived';
 interface Pick {
   kind: Kind;
   source: Source;
@@ -40,10 +40,17 @@ interface Pick {
   specs: [string, string][];
 }
 
+// Shown first (the default path) when the vault holds a wallet seed: the next
+// account comes off the existing phrase, so there is nothing new to back up.
+const DERIVED_CARDS: Pick[] = [
+  { kind: 'tezos', source: 'derived', title: 'Tezos account', sub: 'Next account from your seed phrase. No new backup needed.', specs: [['Addresses', 'tz1 + 0x'], ['Key', 'Your phrase']] },
+  { kind: 'evm', source: 'derived', title: 'EVM account', sub: 'Next EVM account from your seed phrase. No new backup needed.', specs: [['Address', '0x only'], ['Key', 'Your phrase']] },
+];
+
 const CARDS: Pick[] = [
-  { kind: 'tezos', source: 'fresh', title: 'Tezos account', sub: 'Fresh BIP-39 mnemonic. Get a tz1 + EVM alias.', specs: [['Addresses', 'tz1 + 0x'], ['Key', 'BIP-39']] },
+  { kind: 'tezos', source: 'fresh', title: 'Tezos account', sub: 'New separate seed phrase (advanced). Get a tz1 + EVM alias.', specs: [['Addresses', 'tz1 + 0x'], ['Key', 'BIP-39']] },
   { kind: 'tezos', source: 'import', title: 'Tezos account', sub: 'Paste a recovery phrase or an edsk private key.', specs: [['Accepts', '12–24 words'], ['Yields', 'tz1 + 0x']] },
-  { kind: 'evm', source: 'fresh', title: 'EVM account', sub: 'Fresh 256-bit private key. EVM runtime only.', specs: [['Address', '0x only'], ['Key', '64-char hex']] },
+  { kind: 'evm', source: 'fresh', title: 'EVM account', sub: 'New separate private key (advanced). EVM runtime only.', specs: [['Address', '0x only'], ['Key', '64-char hex']] },
   { kind: 'evm', source: 'import', title: 'EVM account', sub: 'Paste a 0x-prefixed or raw hex private key.', specs: [['Accepts', '0x… hex'], ['Yields', '0x address']] },
 ];
 
@@ -63,7 +70,9 @@ export function AddAccount(): React.JSX.Element {
   const [err, setErr] = useState<string | null>(null);
   const nextSeq = ctx.accounts.length + 1;
 
-  const idx = { pick: 0, input: 1, confirm: 2 }[stage];
+  const isDerived = pick?.source === 'derived';
+  const idx = stage === 'pick' ? 0 : stage === 'input' ? 1 : isDerived ? 1 : 2;
+  const steps = isDerived ? 2 : 3;
   const isCreate = pick != null && pick.source === 'fresh';
   const isTezos = pick != null && pick.kind === 'tezos';
   const title = { pick: 'Add account', input: isCreate ? 'Secure your keys' : 'Import account', confirm: 'Confirm' }[stage];
@@ -76,7 +85,9 @@ export function AddAccount(): React.JSX.Element {
     setImportVal('');
     setErr(null);
     setFresh(c.source === 'fresh' ? (c.kind === 'tezos' ? newMnemonic() : randomEvmPrivateKey()) : '');
-    setStage('input');
+    // A derived account has no secret to reveal or paste — the input stage
+    // would be empty, so it jumps straight to naming/confirm.
+    setStage(c.source === 'derived' ? 'confirm' : 'input');
   };
 
   const back = (): void => {
@@ -85,7 +96,11 @@ export function AddAccount(): React.JSX.Element {
       setStage('pick');
       setRevealed(false);
       setAck(false);
-    } else setStage('input');
+      // Abandoning the input stage — drop the generated/pasted secret rather
+      // than keeping it referenced behind the picker.
+      setFresh('');
+      setImportVal('');
+    } else setStage(pick?.source === 'derived' ? 'pick' : 'input');
   };
 
   const importVal_ = importVal.trim();
@@ -100,6 +115,7 @@ export function AddAccount(): React.JSX.Element {
   // one persisted — pass it as an explicit source so the backed-up phrase matches
   // the stored account (never source:'fresh', which would mint a different key).
   const buildSource = (): AddAccountSource => {
+    if (pick?.source === 'derived') return { source: 'derived' };
     if (isCreate) {
       return isTezos ? { source: 'mnemonic', mnemonic: fresh } : { source: 'privkey', privateKey: fresh };
     }
@@ -117,6 +133,9 @@ export function AddAccount(): React.JSX.Element {
     void (async () => {
       try {
         await ctx.addAccount({ kind: pick.kind, source: buildSource(), label: label.trim() || undefined });
+        // Flow complete — drop the secret-bearing references before leaving.
+        setFresh('');
+        setImportVal('');
         ctx.toast(`${name} added`);
         ctx.nav.reset('home');
       } catch (e) {
@@ -128,7 +147,7 @@ export function AddAccount(): React.JSX.Element {
 
   return (
     <View style={styles.screen}>
-      <TopBar title={title} onBack={back} right={<View style={styles.dots}><Dots i={idx} n={3} /></View>} />
+      <TopBar title={title} onBack={back} right={<View style={styles.dots}><Dots i={idx} n={steps} /></View>} />
 
       {stage === 'pick' && (
         <ScrollView style={styles.scroll} contentContainerStyle={styles.pickScroll} showsVerticalScrollIndicator={false}>
@@ -140,17 +159,17 @@ export function AddAccount(): React.JSX.Element {
             </Text>
           </View>
           <View style={styles.pickList}>
-            {CARDS.map((c, i) => (
+            {[...(ctx.hasSeed ? DERIVED_CARDS : []), ...CARDS].map((c, i) => (
               <Pressable
                 key={i}
                 style={({ pressed }) => [styles.pickCard, pressed && styles.pickCardPressed]}
                 onPress={() => choose(c)}
               >
                 <View style={styles.pickHead}>
-                  <Badge variant={c.kind === 'evm' ? 'cyan' : 'purple'}>{c.kind === 'evm' ? 'L2' : 'L1'}</Badge>
+                  <Badge variant={c.kind === 'evm' ? 'cyan' : 'purple'}>{c.kind === 'evm' ? 'EVM' : 'Michelson'}</Badge>
                   <Text style={styles.pickCardTitle}>{c.title}</Text>
                   <Badge variant="neutral" style={styles.pickSourceBadge}>
-                    {c.source === 'fresh' ? 'Create' : 'Import'}
+                    {c.source === 'fresh' ? 'Create' : c.source === 'derived' ? 'Derive' : 'Import'}
                   </Badge>
                 </View>
                 <Text style={styles.pickCardSub}>{c.sub}</Text>

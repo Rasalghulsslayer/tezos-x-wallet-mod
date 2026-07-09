@@ -4,16 +4,18 @@
  *            enter amount (Max / available), validate.
  *   review → From→To lane with runtime pills, amount / routing / network lines,
  *            an insufficient-balance warning, and a routing explainer.
- *   done   → real StatusTimeline driven by trackTx (broadcasting → included →
- *            finalized), the synthetic→real hash resolution for cross-runtime,
- *            the sent amount + recipient, and a tappable explorer link.
+ *   done   → real StatusTimeline (broadcasting → included → finalized): trackTx
+ *            for same-runtime sends, trackCrossRuntimeTx for the gateway path
+ *            (the L1 op drives 'included' while the synthetic hash resolves to
+ *            the kernel-synthesized EVM hash), the sent amount + recipient, and
+ *            a tappable explorer link.
  * Cross-runtime is inferred from source kind × destination runtime; the routing
  * copy comes verbatim from the design's routingLabel.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { trackTx } from '@tezosx/wallet-core/shared/tx-status';
+import { trackTx, trackCrossRuntimeTx } from '@tezosx/wallet-core/shared/tx-status';
 import { startPoller } from '@tezosx/wallet-core/shared/poller';
 import type { TxStatus } from '@tezosx/wallet-core/domain/tx-status';
 import type { ResolveTxResult } from '@tezosx/wallet-core/use-cases/resolve-tx';
@@ -84,6 +86,10 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
   const [done, setDone] = useState<DoneInfo | null>(null);
   const [txStatus, setTxStatus] = useState<TxStatus | null>(null);
   const [pendingResolve, setPendingResolve] = useState<{ syntheticHash: string } | null>(null);
+  const [crossTrack, setCrossTrack] = useState<{ l1OpHash: string | null } | null>(null);
+  // The resolved kernel hash, read by the cross-runtime tracker on each poll
+  // tick — a ref, so the running tracker sees it without being restarted.
+  const realHashRef = useRef<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<FormattedError | null>(null);
 
@@ -119,6 +125,8 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
     if (submitting) return;
     setErr(null);
     setTxStatus(null);
+    setCrossTrack(null);
+    realHashRef.current = null;
     setDone({ amount, symbol: asset.symbol, to, runtime: predictedRuntime, sign: '−', hash: '', pending: false, unresolved: false });
     setStage('done');
     setSubmitting(true);
@@ -130,7 +138,10 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
         } else {
           const fromGateway = acc.kind === 'tezos' && dest === 'l2';
           setDone((d) => (d != null ? { ...d, hash: result.hash, runtime: 'l2', pending: fromGateway } : d));
-          if (fromGateway) setPendingResolve({ syntheticHash: result.hash });
+          if (fromGateway) {
+            setPendingResolve({ syntheticHash: result.hash });
+            setCrossTrack({ l1OpHash: result.l1OpHash ?? null });
+          }
         }
       } catch (e) {
         setErr(formatError(e));
@@ -150,6 +161,7 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
       fetch: () => ctx.resolveTx(pendingResolve.syntheticHash),
       onUpdate: (r) => {
         if (r.resolved) {
+          realHashRef.current = r.hash;
           setDone((d) => (d != null ? { ...d, hash: r.hash, pending: false, unresolved: false } : d));
           setPendingResolve(null);
         }
@@ -166,12 +178,27 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingResolve]);
 
-  // Track on-chain confirmation once a real, resolved hash is in hand.
+  // Same-runtime sends return a real hash immediately — track it directly.
+  // The gateway path is handled by the cross-runtime tracker below.
   useEffect(() => {
-    if (stage !== 'done' || done == null || done.hash === '' || done.pending || done.unresolved) return;
+    if (stage !== 'done' || done == null || done.hash === '' || crossTrack != null) return;
+    if (done.pending || done.unresolved) return;
     const handle = trackTx({ hash: done.hash, runtime: done.runtime, onUpdate: setTxStatus });
     return () => handle.stop();
-  }, [stage, done]);
+  }, [stage, done, crossTrack]);
+
+  // Cross-runtime: track from broadcast time. The L1 operation's inclusion
+  // drives 'included' while the kernel hash is still resolving; once resolved
+  // (via realHashRef) the L2 receipt concludes the timeline.
+  useEffect(() => {
+    if (stage !== 'done' || crossTrack == null) return;
+    const handle = trackCrossRuntimeTx({
+      l1OpHash:    crossTrack.l1OpHash,
+      getRealHash: () => realHashRef.current,
+      onUpdate:    setTxStatus,
+    });
+    return () => handle.stop();
+  }, [stage, crossTrack]);
 
   if (stage === 'done' && done != null) {
     const status: TxStatus = txStatus ?? { stage: 'broadcasting' };
@@ -249,7 +276,7 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
 
           {done.unresolved && (
             <Text style={styles.unresolvedNote}>
-              The EVM transaction hasn't been indexed yet. The transfer was broadcast on L1 — the final hash resolves shortly.
+              The EVM transaction hasn't been indexed yet. The transfer was broadcast on the Michelson runtime — the final hash resolves shortly.
             </Text>
           )}
         </ScrollView>
@@ -281,7 +308,7 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
     const reviewCopy = isCross
       ? isEvm
         ? 'Your 0x signs an EVM transaction that calls the NAC precompile. The kernel forwards the value to the receiving tz1 atomically.'
-        : 'Your tz1 signs an L1 op routed to the EVM runtime through the NAC gateway. The receiving 0x address is credited atomically.'
+        : 'Your tz1 signs a Michelson-runtime op routed to the EVM runtime through the NAC gateway. The receiving 0x address is credited atomically.'
       : 'Make sure the recipient is correct — transfers can’t be reversed.';
     const r = routingLabel(acc.kind, dest);
 
@@ -419,7 +446,7 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
         {asset.kind === 'token' && dest === 'l1' && (
           <ErrorInline
             title="ERC-20 tokens live on the EVM runtime"
-            detail="Pick a 0x recipient — L1 destinations aren’t valid for this asset."
+            detail="Pick a 0x recipient — Michelson-runtime destinations aren’t valid for this asset."
           />
         )}
       </ScrollView>

@@ -40,6 +40,9 @@ export function Import({ params }: { params: Record<string, unknown> }): React.J
         if (isEvm) await ctx.importWallet({ source: 'evm-privkey', privateKey: value, password: pwd });
         else if (mode === 'mnemonic') await ctx.importWallet({ source: 'mnemonic', mnemonic: value, password: pwd });
         else await ctx.importWallet({ source: 'edsk', edsk: value, password: pwd });
+        // Flow complete (the Gate re-scopes to the unlocked shell) — drop every
+        // secret-bearing reference now rather than at fiber GC.
+        setSecret(''); setPwd(''); setConfirm('');
       } catch (e) {
         setErr(formatError(e).detail);
       } finally {

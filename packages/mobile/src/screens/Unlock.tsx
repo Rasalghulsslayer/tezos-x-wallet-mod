@@ -34,6 +34,9 @@ export function Unlock(): React.JSX.Element {
     void (async () => {
       try {
         await ctx.unlock(pwd);
+        // Drop the reference now rather than at fiber GC — a JS string can't
+        // be overwritten, but nothing should keep pointing at it either.
+        setPwd('');
       } catch (e) {
         setErr(formatError(e));
         setPwd('');

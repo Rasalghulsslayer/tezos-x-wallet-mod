@@ -41,8 +41,8 @@ export function Create({ params }: { params: Record<string, unknown> }): React.J
   const [busy, setBusy] = useState(false);
 
   // Freshly generated on first render; only persisted (encrypted) on submit.
-  const [mnemonic] = useState(() => newMnemonic());
-  const [privkey] = useState(() => randomEvmPrivateKey());
+  const [mnemonic, setMnemonic] = useState(() => newMnemonic());
+  const [privkey, setPrivkey] = useState(() => randomEvmPrivateKey());
   const words = useMemo(() => mnemonic.split(' '), [mnemonic]);
   const allCorrect = POSITIONS.every(
     (p, i) => cv[i].trim().toLowerCase() === words[p - 1],
@@ -66,6 +66,10 @@ export function Create({ params }: { params: Record<string, unknown> }): React.J
       try {
         if (isEvm) await ctx.importWallet({ source: 'evm-privkey', privateKey: privkey, password: pwd });
         else await ctx.createTezosWallet(mnemonic, pwd);
+        // Flow complete (the Gate re-scopes to the unlocked shell) — drop every
+        // secret-bearing reference now rather than at fiber GC.
+        setPwd(''); setConfirm(''); setCv(['', '', '']);
+        setMnemonic(''); setPrivkey('');
       } catch (e) {
         setErr(formatError(e).detail);
       } finally {

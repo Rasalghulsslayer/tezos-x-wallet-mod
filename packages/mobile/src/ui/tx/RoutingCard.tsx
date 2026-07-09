@@ -21,12 +21,12 @@ export function routingLabel(sourceKind: 'tezos' | 'evm', dest: 'l1' | 'l2' | nu
   if (dest == null) return { title: '—', sub: 'Enter a recipient to see routing', cross: false };
   if (sourceKind === 'tezos') {
     return dest === 'l1'
-      ? { title: 'Same-runtime · Tezos L1', sub: 'Native transfer via Taquito', cross: false }
-      : { title: 'Cross-runtime', sub: 'L1 → L2 via NAC gateway', cross: true };
+      ? { title: 'Same-runtime · Michelson runtime', sub: 'Native transfer via Taquito', cross: false }
+      : { title: 'Cross-runtime', sub: 'Michelson → EVM via NAC gateway', cross: true };
   }
   return dest === 'l2'
-    ? { title: 'Same-runtime · Tezos L2 (EVM)', sub: 'Native EVM transfer', cross: false }
-    : { title: 'Cross-runtime', sub: 'L2 → L1 via NAC precompile', cross: true };
+    ? { title: 'Same-runtime · Tezos X (EVM)', sub: 'Native EVM transfer', cross: false }
+    : { title: 'Cross-runtime', sub: 'EVM → Michelson via NAC precompile', cross: true };
 }
 
 export function RoutingCard({

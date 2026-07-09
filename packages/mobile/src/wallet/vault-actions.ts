@@ -10,6 +10,7 @@ import { unlockVault } from '@tezosx/wallet-core/use-cases/unlock-vault';
 import { createAccount } from '@tezosx/wallet-core/use-cases/create-account';
 import { importAccount, type ImportAccountReq } from '@tezosx/wallet-core/use-cases/import-account';
 import { addAccount as addAccountUseCase, type AddAccountReq, type AddAccountResult } from '@tezosx/wallet-core/use-cases/add-account';
+import { removeAccount as removeAccountUseCase } from '@tezosx/wallet-core/use-cases/remove-account';
 import { setActiveAccount } from '@tezosx/wallet-core/use-cases/set-active-account';
 import { peekCustomToken } from '@tezosx/wallet-core/use-cases/peek-custom-token';
 import { addCustomToken } from '@tezosx/wallet-core/use-cases/add-custom-token';
@@ -28,7 +29,7 @@ import { TEZLINK_EVM_RPC } from '@tezosx/relayer/constants';
 import { keyring, tokenStore, unlockSecret, evmAliasCache, deps, approvalQueue, sessionStore } from '../composition/wiring';
 import { approvalUi } from '../composition/approval-ui';
 import { readState } from '../composition/read-state';
-import { startWalletConnect, connect as wcConnect } from '../composition/walletconnect-connect';
+import { startWalletConnect, connect as wcConnect, rebindStoredSessions } from '../composition/walletconnect-connect';
 import {
   listSessions as listWcSessions,
   disconnectSession as disconnectWcSession,
@@ -82,6 +83,12 @@ export async function importWallet(req: ImportAccountReq): Promise<VaultState> {
 
 export function lockWallet(): void {
   lockVault({ keyring, approvalQueue: deps.approvalQueue });
+  // Mobile has one long-lived JS thread — no MV3 service-worker death ever
+  // evicts these for us. The cached Containers hold live signers with
+  // plaintext key material (and Taquito's InMemorySigner keeps its own
+  // internal copy), so lock must drop them explicitly, exactly as the
+  // extension's LOCK handler does.
+  deps.containerCache.clear();
   evmAliasCache.value = null;
   void deps.rebuildContainer(); // keyring is now locked → drops the warm container
 }
@@ -107,6 +114,42 @@ export async function addAccount(req: AddAccountReq): Promise<AddAccountOutcome>
   // (or fail) on it; read/send paths rebuild it lazily when needed.
   void deps.rebuildContainer().catch(() => { /* rebuilt lazily on next read/send */ });
   return { state, result };
+}
+
+/**
+ * Remove an account from the unlocked vault; the keyring re-verifies the
+ * password and refuses to drop the last account. Account operations don't go
+ * through a message dispatch on mobile, so the shell reproduces what the
+ * extension's handler does around the use-case: evict the account's cached
+ * container, and — when the active account was the one removed — re-scope to
+ * the auto-selected replacement and re-point connected dApps at it, exactly
+ * like an account switch.
+ */
+export async function removeAccount(accountId: string, password: string): Promise<VaultState> {
+  const wasActive = activeAccountId() === accountId;
+  await removeAccountUseCase({ accountId, password }, { keyring });
+  deps.containerCache.evict(accountId);
+  if (wasActive) {
+    evmAliasCache.value = null;
+    await deps.rebuildContainer();
+  }
+  const state = await getState({ keyring, evmAliasCache });
+  if (wasActive && state.status === 'unlocked') {
+    const alias = state.kind === 'tezos' ? state.evmAlias : state.address;
+    if (alias !== '') {
+      try {
+        await rebindStoredSessions({
+          accountId:  state.accountId,
+          tz1Address: state.kind === 'tezos' ? state.tz1 : '',
+          evmAlias:   alias,
+        });
+        await deps.broadcastEvent({ type: 'PROVIDER_EVENT', event: 'accountsChanged', data: [alias] });
+      } catch {
+        // dApp notification is advisory; the removal itself already landed.
+      }
+    }
+  }
+  return state;
 }
 
 function activeAccountId(): string {

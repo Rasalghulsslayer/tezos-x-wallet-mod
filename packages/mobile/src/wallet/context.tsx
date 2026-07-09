@@ -53,6 +53,7 @@ export interface WalletContextValue {
   activeAccount: ViewAccount;
   accountCard: AccountCardVM | null;
   activeId: string;
+  hasSeed: boolean;
   sessions: StoredSession[];
   approve: PendingRequest | null;
   switcherOpen: boolean;
@@ -86,6 +87,7 @@ export interface WalletContextValue {
   addToken: (address: string, tryAnyway?: boolean) => Promise<RegisteredToken>;
   removeToken: (address: string) => Promise<void>;
   addAccount: (req: AddAccountReq) => Promise<AddAccountResult>;
+  removeAccount: (id: string, password: string) => Promise<void>;
   sendTransfer: (req: SendTransferReq) => Promise<SendTransferResult>;
   resolveTx: (syntheticHash: string) => Promise<ResolveTxResult>;
 }
@@ -206,6 +208,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
   const value = useMemo<WalletContextValue>(() => ({
     booted, vault, biometricsAvailable: bioAvailable,
     accounts, activeAccount, accountCard, activeId: activeState?.accountId ?? '',
+    hasSeed: activeState?.hasSeed ?? false,
     sessions, approve, switcherOpen, toastMsg, stack, navDir, nav,
     balances: accountData.balances,
     tokens: accountData.tokens,
@@ -229,9 +232,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
       evmAliasCache.value = alias;
       keyring.activateInMemory(id);
       setVaultState(target.kind === 'tezos'
-        ? { status: 'unlocked', kind: 'tezos', accountId: id, tz1: target.primaryAddress, evmAlias: target.secondaryAddress ?? '', accounts: s.accounts }
+        ? { status: 'unlocked', kind: 'tezos', accountId: id, tz1: target.primaryAddress, evmAlias: target.secondaryAddress ?? '', accounts: s.accounts, hasSeed: s.hasSeed }
         // An EVM summary's primaryAddress is always a 0x address (the account's own).
-        : { status: 'unlocked', kind: 'evm', accountId: id, address: target.primaryAddress as `0x${string}`, accounts: s.accounts });
+        : { status: 'unlocked', kind: 'evm', accountId: id, address: target.primaryAddress as `0x${string}`, accounts: s.accounts, hasSeed: s.hasSeed });
       void (async () => {
         await deps.rebuildContainer();   // warm the container for reads (key derivation is negligible + cached per account)
         setDataNonce((n) => n + 1);      // re-run the reads (activity) now the container is warm
@@ -294,6 +297,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
       const { state, result } = await vaultActions.addAccount(req);
       setVaultState(state);
       return result;
+    },
+    removeAccount: async (id, password) => {
+      const state = await vaultActions.removeAccount(id, password);
+      setVaultState(state);
+      setDataNonce((n) => n + 1);
+      toast('Account removed');
     },
     sendTransfer: (req) => vaultActions.sendTransfer(req),
     resolveTx: (syntheticHash) => vaultActions.resolveTx(syntheticHash),

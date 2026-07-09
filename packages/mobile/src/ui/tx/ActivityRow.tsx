@@ -28,7 +28,7 @@ export function ActivityRow({
 }): React.JSX.Element {
   const st = item.status;
   const ident: Ident = st === 'pending' ? 'pending' : st === 'failed' ? 'failed' : item.runtime;
-  const tag = item.runtime === 'cross' ? 'Cross-runtime' : item.runtime === 'l2' ? 'Tezos L2' : 'Tezos L1';
+  const tag = item.runtime === 'cross' ? 'Cross-runtime' : item.runtime === 'l2' ? 'EVM runtime' : 'Michelson runtime';
   const sign = item.dir === 'in' ? '+' : '−';
   const arrow = item.dir === 'in' ? 'arrow-down-left' : 'arrow-up-right';
 

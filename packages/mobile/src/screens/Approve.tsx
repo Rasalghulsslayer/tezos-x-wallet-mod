@@ -198,7 +198,7 @@ function Body({
             <Line label="Debit (mutez)" value={cross.mutezValue} />
           </View>
           <Text style={styles.crossNote}>
-            Your tz1 signs an L1 operation that the kernel forwards to the EVM runtime — cross-runtime via NAC gateway.
+            Your tz1 signs a Michelson-runtime operation that the kernel forwards to the EVM runtime — cross-runtime via NAC gateway.
           </Text>
         </>
       )}

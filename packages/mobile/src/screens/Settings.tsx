@@ -7,7 +7,7 @@
  * "Reveal secret" opens a password-gated bottom sheet.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, fontSize, font, radius } from '../theme';
 import { Icon } from '../ui/icon';
@@ -17,6 +17,7 @@ import { ErrorInline } from '../ui/tx/ErrorInline';
 import { LinkRow } from '../ui/tx/LinkRow';
 import { Sheet } from '../ui/tx/Sheet';
 import { exportSecret } from '@tezosx/wallet-core/use-cases/export-secret';
+import { exportWalletSeed } from '@tezosx/wallet-core/use-cases/export-wallet-seed';
 import { formatError, type FormattedError } from '@tezosx/wallet-core/domain/error';
 import { useWallet } from '../wallet/context';
 import { keyring } from '../composition/wiring';
@@ -27,6 +28,7 @@ export function Settings(): React.JSX.Element {
   const acc = ctx.activeAccount;
   const isEvm = acc.kind === 'evm';
   const [reveal, setReveal] = useState(false);
+  const [revealSeed, setRevealSeed] = useState(false);
 
   return (
     <View style={styles.screen}>
@@ -63,9 +65,17 @@ export function Settings(): React.JSX.Element {
         <LinkRow
           icon="shield"
           title="Reveal secret"
-          sub={isEvm ? 'EVM private key' : 'Recovery phrase or private key'}
+          sub={isEvm ? 'EVM private key' : 'Private key for this account'}
           onPress={() => setReveal(true)}
         />
+        {ctx.hasSeed && (
+          <LinkRow
+            icon="key"
+            title="Reveal seed phrase"
+            sub="Controls every account derived from it"
+            onPress={() => setRevealSeed(true)}
+          />
+        )}
         <LinkRow icon="lock" title="Lock wallet" onPress={ctx.lock} trailing={<View />} />
 
         <SectionHead label="About" />
@@ -75,6 +85,7 @@ export function Settings(): React.JSX.Element {
       </ScrollView>
 
       {reveal && <RevealSheet account={acc} onClose={() => setReveal(false)} />}
+      {revealSeed && <RevealSheet account={acc} walletSeed onClose={() => setRevealSeed(false)} />}
     </View>
   );
 }
@@ -87,12 +98,40 @@ function SectionHead({ label }: { label: string }): React.JSX.Element {
   );
 }
 
-function RevealSheet({ account, onClose }: { account: ViewAccount; onClose: () => void }): React.JSX.Element {
+// How long a revealed secret stays on screen before the sheet scrubs itself —
+// enough to copy a phrase to paper, short enough not to linger on a table.
+const REVEAL_AUTO_CLOSE_MS = 30_000;
+
+function RevealSheet({
+  account,
+  walletSeed = false,
+  onClose,
+}: {
+  account: ViewAccount;
+  /** Reveal the wallet-level seed phrase instead of this account's own secret. */
+  walletSeed?: boolean;
+  onClose: () => void;
+}): React.JSX.Element {
   const [pwd, setPwd] = useState('');
   const [secret, setSecret] = useState<string | null>(null);
   const [err, setErr] = useState<FormattedError | null>(null);
   const [busy, setBusy] = useState(false);
   const isEvm = account.kind === 'evm';
+
+  // Every way out of the sheet scrubs the password and the revealed secret
+  // first — the strings stay GC-bound, but nothing keeps referencing them.
+  const close = (): void => {
+    setPwd('');
+    setSecret(null);
+    onClose();
+  };
+
+  useEffect(() => {
+    if (secret == null) return;
+    const t = setTimeout(close, REVEAL_AUTO_CLOSE_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secret]);
 
   const submit = (): void => {
     if (pwd.length === 0 || busy) return;
@@ -100,8 +139,11 @@ function RevealSheet({ account, onClose }: { account: ViewAccount; onClose: () =
     setBusy(true);
     void (async () => {
       try {
-        const result = await exportSecret({ password: pwd, accountId: account.id }, { keyring });
-        setSecret(result.value);
+        const value = walletSeed
+          ? await exportWalletSeed({ password: pwd }, { keyring })
+          : (await exportSecret({ password: pwd, accountId: account.id }, { keyring })).value;
+        setSecret(value);
+        setPwd(''); // the password has done its job once the secret is shown
       } catch (e) {
         setErr(formatError(e));
       } finally {
@@ -111,13 +153,22 @@ function RevealSheet({ account, onClose }: { account: ViewAccount; onClose: () =
   };
 
   return (
-    <Sheet title="Reveal secret" onClose={onClose}>
+    <Sheet title={walletSeed ? 'Reveal seed phrase' : 'Reveal secret'} onClose={close}>
       <View style={styles.revealBody}>
         {secret == null ? (
           <>
             <Text style={styles.revealIntro}>
-              Enter your password to reveal the {isEvm ? 'private key' : 'recovery phrase'} for{' '}
-              <Text style={styles.revealStrong}>{account.label}</Text>. Never share it.
+              {walletSeed ? (
+                <>
+                  Enter your password to reveal your wallet&rsquo;s seed phrase. It controls every account
+                  derived from it. Never share it.
+                </>
+              ) : (
+                <>
+                  Enter your password to reveal the {isEvm ? 'private key' : 'signing secret'} for{' '}
+                  <Text style={styles.revealStrong}>{account.label}</Text>. Never share it.
+                </>
+              )}
             </Text>
             <TextInput
               style={styles.input}
@@ -152,7 +203,7 @@ function RevealSheet({ account, onClose }: { account: ViewAccount; onClose: () =
             <View style={styles.secretCard}>
               <Text style={styles.secretText}>{secret}</Text>
             </View>
-            <Btn variant="outline" full onPress={onClose} style={styles.revealBtn}>
+            <Btn variant="outline" full onPress={close} style={styles.revealBtn}>
               Done
             </Btn>
           </>
