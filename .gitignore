@@ -5,3 +5,10 @@ frontend/next-env.d.ts
 /node_modules
 /.claude
 CLAUDE.md
+
+# Local env files carrying per-developer ids (Reown project ids); the committed
+# templates are the .env.example files next to them.
+packages/mobile/.env*.local
+playground/.env*
+!playground/.env.example
+playground/.next/

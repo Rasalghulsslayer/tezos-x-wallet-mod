@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useEip6963 } from './useEip6963';
+import { useWalletConnect } from './useWalletConnect';
 
 interface RelayerState {
   isConnected:  boolean;
@@ -33,14 +34,19 @@ function isMethodNotFound(err: unknown): boolean {
 
 export function useRelayer() {
   const eip6963Providers = useEip6963();
+  const wc = useWalletConnect();
 
   const providers = useMemo<Eip6963ProviderDetail[]>(() => {
     const list = [...eip6963Providers];
     if (typeof window !== 'undefined' && window.ethereum != null && list.length === 0) {
       list.push({ info: FALLBACK_INFO, provider: window.ethereum });
     }
+    // The WalletConnect entry (mobile wallet pairing) comes last, after the
+    // window.ethereum fallback check — it is always present, so pushing it
+    // earlier would suppress the fallback.
+    list.push(wc.detail);
     return list;
-  }, [eip6963Providers]);
+  }, [eip6963Providers, wc.detail]);
 
   const [active, setActive] = useState<EIP1193Provider | null>(null);
   const [state, setState]   = useState<RelayerState>({
@@ -122,5 +128,13 @@ export function useRelayer() {
     return hash;
   }, [active]);
 
-  return { ...state, providers, connect, disconnect, sendTransaction };
+  return {
+    ...state,
+    providers,
+    connect,
+    disconnect,
+    sendTransaction,
+    wcPairingUri: wc.pairingUri,
+    dismissWcPairing: wc.dismissPairing,
+  };
 }
