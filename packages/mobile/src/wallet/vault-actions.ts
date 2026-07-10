@@ -29,7 +29,7 @@ import { TEZLINK_EVM_RPC } from '@tezosx/relayer/constants';
 import { keyring, tokenStore, unlockSecret, evmAliasCache, deps, approvalQueue, sessionStore } from '../composition/wiring';
 import { approvalUi } from '../composition/approval-ui';
 import { readState } from '../composition/read-state';
-import { startWalletConnect, connect as wcConnect, rebindStoredSessions } from '../composition/walletconnect-connect';
+import { startWalletConnect, connect as wcConnect } from '../composition/walletconnect-connect';
 import {
   listSessions as listWcSessions,
   disconnectSession as disconnectWcSession,
@@ -121,35 +121,24 @@ export async function addAccount(req: AddAccountReq): Promise<AddAccountOutcome>
  * password and refuses to drop the last account. Account operations don't go
  * through a message dispatch on mobile, so the shell reproduces what the
  * extension's handler does around the use-case: evict the account's cached
- * container, and — when the active account was the one removed — re-scope to
- * the auto-selected replacement and re-point connected dApps at it, exactly
- * like an account switch.
+ * container, tear down the dApp connections that were bound to the removed
+ * account (each dApp learns via WalletConnect's session_delete), and — when the
+ * active account was the one removed — re-scope to the auto-selected
+ * replacement. dApps connected with *other* accounts are untouched: a removal
+ * must not disclose or re-point another origin's account.
  */
 export async function removeAccount(accountId: string, password: string): Promise<VaultState> {
   const wasActive = activeAccountId() === accountId;
+  // Capture the sessions bound to this account before it's gone.
+  const orphaned = (await sessionStore.list()).filter((s) => s.accountId === accountId);
   await removeAccountUseCase({ accountId, password }, { keyring });
   deps.containerCache.evict(accountId);
+  await Promise.all(orphaned.map((s) => disconnectDapp(s.origin).catch(() => { /* best-effort */ })));
   if (wasActive) {
     evmAliasCache.value = null;
     await deps.rebuildContainer();
   }
-  const state = await getState({ keyring, evmAliasCache });
-  if (wasActive && state.status === 'unlocked') {
-    const alias = state.kind === 'tezos' ? state.evmAlias : state.address;
-    if (alias !== '') {
-      try {
-        await rebindStoredSessions({
-          accountId:  state.accountId,
-          tz1Address: state.kind === 'tezos' ? state.tz1 : '',
-          evmAlias:   alias,
-        });
-        await deps.broadcastEvent({ type: 'PROVIDER_EVENT', event: 'accountsChanged', data: [alias] });
-      } catch {
-        // dApp notification is advisory; the removal itself already landed.
-      }
-    }
-  }
-  return state;
+  return getState({ keyring, evmAliasCache });
 }
 
 function activeAccountId(): string {

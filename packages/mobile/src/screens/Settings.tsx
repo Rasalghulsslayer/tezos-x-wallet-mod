@@ -22,6 +22,8 @@ import { formatError, type FormattedError } from '@tezosx/wallet-core/domain/err
 import { useWallet } from '../wallet/context';
 import { keyring } from '../composition/wiring';
 import type { ViewAccount } from '../wallet/view-account';
+import { version as APP_VERSION } from '../../package.json';
+import { version as CORE_VERSION } from '@tezosx/wallet-core/package.json';
 
 export function Settings(): React.JSX.Element {
   const ctx = useWallet();
@@ -79,7 +81,7 @@ export function Settings(): React.JSX.Element {
         <LinkRow icon="lock" title="Lock wallet" onPress={ctx.lock} trailing={<View />} />
 
         <SectionHead label="About" />
-        <LinkRow icon="info" title="Version" sub="Wallet v0.11.3 · Relayer v0.5.5" trailing={<View />} />
+        <LinkRow icon="info" title="Version" sub={`Wallet v${APP_VERSION} · Core v${CORE_VERSION}`} trailing={<View />} />
         <LinkRow icon="info" title="Network" sub="Tezos X Previewnet" trailing={<View />} />
         <View style={styles.foot} />
       </ScrollView>

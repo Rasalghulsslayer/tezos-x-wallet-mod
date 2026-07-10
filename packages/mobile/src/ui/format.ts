@@ -34,10 +34,10 @@ export function runtimeAccent(runtime: 'l1' | 'l2' | 'cross'): 'purple' | 'cyan'
   return runtime === 'l2' || runtime === 'cross' ? 'cyan' : 'purple';
 }
 
-/** tz1/KT1 → 'l1', 0x… → 'l2', otherwise null (for Send routing). */
-export function detectRuntime(addr: string): 'l1' | 'l2' | null {
-  const a = (addr || '').trim();
-  if (/^(tz1|tz2|tz3|KT1)/.test(a)) return 'l1';
-  if (/^0x[0-9a-fA-F]{6,}/.test(a)) return 'l2';
-  return null;
-}
+/**
+ * tz1/KT1 → 'l1', 0x… → 'l2', otherwise null (for Send routing). Delegates to
+ * the core validator so a malformed address (`tz1abc`, a short `0x123456`) is
+ * rejected here exactly as it is everywhere else — the previous prefix-only
+ * local check accepted them and let a bad recipient reach review.
+ */
+export { detectRuntime } from '@tezosx/wallet-core/domain/validation';

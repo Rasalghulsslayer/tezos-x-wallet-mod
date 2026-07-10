@@ -22,6 +22,7 @@ import type { ResolveTxResult } from '@tezosx/wallet-core/use-cases/resolve-tx';
 import { formatError, type FormattedError } from '@tezosx/wallet-core/domain/error';
 import { XTZ_L1_ASSET, XTZ_L2_ASSET, type Asset } from '@tezosx/wallet-core/domain/asset';
 import { TEZOS_EXPLORER, EVM_EXPLORER } from '@tezosx/wallet-core/shared/constants';
+import { NAC_CONTRACT } from '@tezosx/relayer/constants';
 import { colors, font, fontSize, radius, space } from '../theme';
 import { detectRuntime, fmtXtz, truncAddr } from '../ui/format';
 import { Icon } from '../ui/icon';
@@ -56,11 +57,22 @@ const AMOUNT_RE = /^\d+(\.\d+)?$/;
 const RESOLVE_POLL_MS = 2_000;
 const RESOLVE_TIMEOUT_MS = 60_000;
 
-/** Human XTZ decimal → 0x-prefixed hex wei (18-dec), the unit sendTransfer expects. */
-function xtzToHexWei(xtz: string): string {
-  const [whole, frac = ''] = xtz.trim().split('.');
-  const padded = (whole + frac.padEnd(18, '0')).slice(0, whole.length + 18);
+/**
+ * Human decimal → 0x-prefixed base-units hex, scaled by `decimals`. XTZ uses 18
+ * (the wei convention the relayer converts ÷10^12 to mutez); an ERC-20 uses its
+ * own token decimals so the signed `transfer` amount matches what was typed.
+ */
+function amountToBaseUnits(human: string, decimals: number): string {
+  const [whole, frac = ''] = human.trim().split('.');
+  const padded = (whole + frac.padEnd(decimals, '0')).slice(0, whole.length + decimals);
   return '0x' + BigInt(padded || '0').toString(16);
+}
+
+/** Human XTZ decimal → integer mutez string (6 dp), for the what-you-sign card. */
+function amountToMutez(human: string): string {
+  const [whole, frac = ''] = human.trim().split('.');
+  const m = (whole + frac.padEnd(6, '0')).slice(0, whole.length + 6);
+  return BigInt(m || '0').toString();
 }
 
 export function Send(_props: { params?: Record<string, unknown> } = {}): React.JSX.Element {
@@ -101,6 +113,7 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
     dest != null &&
     AMOUNT_RE.test(amount) &&
     Number(amount) > 0 &&
+    !insufficient &&
     !(asset.kind === 'token' && dest === 'l1');
   const isCross = acc.kind === 'tezos' ? dest === 'l2' : dest === 'l1';
   const predictedRuntime: 'l1' | 'l2' =
@@ -132,7 +145,9 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
     setSubmitting(true);
     void (async () => {
       try {
-        const result = await ctx.sendTransfer({ to, amount: xtzToHexWei(amount), asset: toCoreAsset() });
+        const coreAsset = toCoreAsset();
+        const amountHex = amountToBaseUnits(amount, coreAsset.kind === 'xtz' ? 18 : coreAsset.decimals);
+        const result = await ctx.sendTransfer({ to, amount: amountHex, asset: coreAsset });
         if (result.runtime === 'l1') {
           setDone((d) => (d != null ? { ...d, hash: result.hash, runtime: 'l1', pending: false } : d));
         } else {
@@ -344,6 +359,28 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
             <Line label="Network" value="Tezos X Previewnet" />
           </View>
 
+          {!isEvm && isCross && (
+            <>
+              <Text style={[styles.kicker, styles.crossKicker]}>What you actually sign</Text>
+              <View style={styles.card}>
+                <Line label="Michelson target" value={truncAddr(NAC_CONTRACT, 6)} />
+                <View style={styles.divider} />
+                <Line label="Entrypoint" value={asset.kind === 'xtz' ? 'call' : 'call_evm'} />
+                {asset.kind === 'token' && (
+                  <>
+                    <View style={styles.divider} />
+                    <Line label="Method" value="transfer(address,uint256)" />
+                  </>
+                )}
+                <View style={styles.divider} />
+                <Line
+                  label="Debit (mutez)"
+                  value={asset.kind === 'xtz' ? amountToMutez(amount) : '0'}
+                />
+              </View>
+            </>
+          )}
+
           {insufficient && (
             <View style={styles.warnBanner}>
               <View style={styles.warnIco}>
@@ -423,7 +460,7 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
             value={amount}
             placeholder="0"
             placeholderTextColor={colors.fgSubtle}
-            onChangeText={(v) => setAmount(v.replace(/[^0-9.]/g, ''))}
+            onChangeText={(v) => { if (v === '' || /^\d*\.?\d*$/.test(v)) setAmount(v); }}
             textAlign="center"
           />
           <View style={styles.avail}>
@@ -517,6 +554,7 @@ const styles = StyleSheet.create({
   kickerFirst: { paddingTop: 10, paddingBottom: 8 },
   kickerRecipient: { paddingTop: 18, paddingBottom: 8 },
   kickerAmount: { paddingTop: 20, paddingBottom: 8 },
+  crossKicker: { marginTop: space[4], marginBottom: 6 },
 
   assetPicker: {
     backgroundColor: colors.surface2,

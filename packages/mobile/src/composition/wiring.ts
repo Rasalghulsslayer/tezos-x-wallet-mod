@@ -19,6 +19,8 @@ import { QuickCryptoPort } from '../adapters/quick-crypto-port';
 import { MmkvVaultStore } from '../adapters/mmkv-vault-store';
 import { MmkvSessionStore } from '../adapters/mmkv-session-store';
 import { MmkvTokenStore } from '../adapters/mmkv-token-store';
+import { MmkvUnlockGuardStore } from '../adapters/mmkv-unlock-guard-store';
+import { MmkvPendingOpsStore } from '../adapters/mmkv-pending-ops-store';
 import { NoopNotificationPort } from '../adapters/noop-notification-port';
 import { KeychainUnlockSecret } from '../adapters/keychain-unlock-secret';
 import { MobileApprovalPresenter } from '../adapters/mobile-approval-presenter';
@@ -33,7 +35,7 @@ export const tokenStore    = new MmkvTokenStore(mmkv);
 export const notifications = new NoopNotificationPort();
 export const unlockSecret  = new KeychainUnlockSecret();
 
-export const keyring = new Keyring(vaultStore, cryptoPort);
+export const keyring = new Keyring(vaultStore, cryptoPort, new MmkvUnlockGuardStore(mmkv));
 
 /** Mutable holder for the resolved EVM alias, mirroring the SW's evmAliasCache
  *  (getState fills it on the first unlocked read). Cleared on lock. */
@@ -49,6 +51,7 @@ export const persistentPorts: PersistentPorts = {
   sessionStore,
   tokenStore,
   notifications,
+  pendingOpsStore: (accountId) => new MmkvPendingOpsStore(mmkv, accountId),
 };
 
 export const approvalPresenter = new MobileApprovalPresenter();

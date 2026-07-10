@@ -76,29 +76,6 @@ async function reconcileStoredSessions(): Promise<void> {
   );
 }
 
-/**
- * Re-point every stored dApp session at the given account. Connected dApps
- * follow the active account (`eth_accounts` answers from the stored session,
- * and signing uses the active account), so an account switch must rebind the
- * per-origin sessions or the two would answer different accounts. Mirrors the
- * fields the connect flow writes; origin / chainId / connectedAt are kept.
- */
-export async function rebindStoredSessions(account: {
-  accountId:  string;
-  tz1Address: string;
-  evmAlias:   string;
-}): Promise<void> {
-  const stored = await sessionStore.list();
-  await Promise.all(
-    stored.map((s) => sessionStore.upsert({
-      ...s,
-      accountId:  account.accountId,
-      tz1Address: account.tz1Address,
-      evmAlias:   account.evmAlias,
-    })),
-  );
-}
-
 /** Pair with a dApp from a pasted `wc:` URI. */
 export async function connect(uri: string): Promise<void> {
   await pairWithUri(uri);

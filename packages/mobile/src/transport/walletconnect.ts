@@ -171,48 +171,38 @@ export function sessionOrigin(topic: string): string | undefined {
 }
 
 /**
- * Push a wallet provider event to every connected dApp. Only accountsChanged /
+ * Push a wallet provider event to connected dApps. Only accountsChanged /
  * chainChanged map to WalletConnect session events; the other ContentPush kinds
  * (connect/disconnect/WALLET_ROLE/responses) are extension-only and ignored.
  *
- * An accountsChanged push also re-points each session's approved namespace at
- * the new accounts before emitting: a WC session pins its accounts at approval
- * time, so without the update the dApp's session state (and the Connections
- * rows, which read it) would keep naming the previous account while the event
- * announces the new one.
+ * A per-origin accountsChanged (`push.origin` set) reaches only the session for
+ * that origin — each dApp only ever hears about the account bound to its own
+ * session, never another account's. Today the only accountsChanged the wallet
+ * emits is `[]` to an origin whose account was just removed (a disconnect
+ * notification); switching the active account tells connected dApps nothing.
  */
 export async function emitProviderEvent(push: ContentPush): Promise<void> {
   if (walletKit == null) return;
   if (push.type !== 'PROVIDER_EVENT') return;
   if (push.event !== 'accountsChanged' && push.event !== 'chainChanged') return;
 
-  const caip10 = push.event === 'accountsChanged'
-    ? push.data.map((a) => `${EIP155_CHAIN}:${a}`)
-    : null;
-  const event = caip10 != null
-    ? { name: 'accountsChanged', data: caip10 }
+  const targetOrigin = push.event === 'accountsChanged' ? push.origin : undefined;
+  const event = push.event === 'accountsChanged'
+    ? { name: 'accountsChanged', data: push.data.map((a) => `${EIP155_CHAIN}:${a}`) }
     : { name: 'chainChanged', data: PREVIEWNET_CHAIN_ID };
 
   await Promise.all(
-    Object.values(walletKit.getActiveSessions()).map(async (session) => {
-      try {
-        if (caip10 != null && caip10.length > 0) {
-          await walletKit!.updateSession({
-            topic: session.topic,
-            namespaces: {
-              ...session.namespaces,
-              eip155: { ...session.namespaces.eip155, accounts: caip10 },
-            },
-          });
+    Object.values(walletKit.getActiveSessions())
+      .filter((session) => targetOrigin == null || session.peer.metadata.url === targetOrigin)
+      .map(async (session) => {
+        try {
+          await walletKit!.emitSessionEvent({ topic: session.topic, event, chainId: EIP155_CHAIN });
+        } catch {
+          // Best-effort per session: a stale topic or an unreachable relay must
+          // not block the other sessions (or the caller).
         }
-        await walletKit!.emitSessionEvent({ topic: session.topic, event, chainId: EIP155_CHAIN });
-      } catch {
-        // Best-effort per session: a stale topic or an unreachable relay must
-        // not block the other sessions (or the caller).
-      }
-    }),
+      }),
   );
-  if (caip10 != null && caip10.length > 0) notifySessionsChanged();
 }
 
 /** The dApp's display name from a proposal, falling back to its URL. */

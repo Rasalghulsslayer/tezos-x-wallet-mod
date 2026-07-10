@@ -22,7 +22,6 @@ import type { SendTransferReq, SendTransferResult } from '@tezosx/wallet-core/us
 import type { ResolveTxResult } from '@tezosx/wallet-core/use-cases/resolve-tx';
 import type { StoredSession } from '@tezosx/wallet-core/ports/session-store';
 import { keyring, evmAliasCache, deps, approvalQueue } from '../composition/wiring';
-import { rebindStoredSessions } from '../composition/walletconnect-connect';
 import { approvalUi } from '../composition/approval-ui';
 import { startAutoLock, type AutoLockHandle } from '../lock/auto-lock';
 import * as vaultActions from './vault-actions';
@@ -238,23 +237,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
       void (async () => {
         await deps.rebuildContainer();   // warm the container for reads (key derivation is negligible + cached per account)
         setDataNonce((n) => n + 1);      // re-run the reads (activity) now the container is warm
-        if (alias != null) {
-          // Connected dApps follow the active account (signing always uses it):
-          // rebind the per-origin stored sessions so eth_accounts answers the
-          // new account, and push accountsChanged over WC so the dApp's session
-          // and UI re-point too. Best-effort: a relay hiccup must not block the
-          // active-pointer flush below.
-          try {
-            await rebindStoredSessions({
-              accountId:  id,
-              tz1Address: target.kind === 'tezos' ? target.primaryAddress : '',
-              evmAlias:   alias,
-            });
-            await deps.broadcastEvent({ type: 'PROVIDER_EVENT', event: 'accountsChanged', data: [alias] });
-          } catch {
-            // dApp notification is advisory; the wallet-side switch stays valid.
-          }
-        }
+        // No dApp notification: switching the active account (for the user's own
+        // Send/Receive) does not change what a connected dApp sees — each origin
+        // stays bound to the account it connected with. Re-pointing every session
+        // to the active account was the SEC-1 leak.
         await keyring.flushActive();     // persist the active pointer off the tap (cheap now crypto is native) so it survives a lock
       })();
     },

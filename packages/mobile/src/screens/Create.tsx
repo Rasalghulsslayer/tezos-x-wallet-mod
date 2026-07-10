@@ -141,6 +141,14 @@ export function Create({ params }: { params: Record<string, unknown> }): React.J
             <Text style={styles.lead}>
               Write these {words.length} words down in order. Keep them offline.
             </Text>
+            <View style={styles.noteBox}>
+              <Icon name="info" size={14} color={colors.fgSubtle} />
+              <Text style={styles.noteText}>
+                This phrase restores every account you create in this wallet. A Tezos
+                secret key or EVM private key you import isn't derived from it — back
+                those up separately.
+              </Text>
+            </View>
             <View>
               <View style={styles.seedGrid}>
                 {words.map((w, i) => (
@@ -310,6 +318,16 @@ const styles = StyleSheet.create({
   },
   lead: { fontSize: fontSize.md, color: colors.fgMuted, marginBottom: space[4], lineHeight: 22 },
   checks: { gap: space[4] },
+  noteBox: {
+    flexDirection: 'row',
+    gap: space[2],
+    alignItems: 'flex-start',
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    padding: 12,
+    marginBottom: space[4],
+  },
+  noteText: { flex: 1, fontSize: fontSize.sm, color: colors.fgMuted, lineHeight: 19 },
 
   seedGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space[2] },
   seedWord: {

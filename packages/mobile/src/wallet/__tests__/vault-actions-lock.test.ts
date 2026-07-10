@@ -41,7 +41,6 @@ vi.mock('../../composition/read-state', () => ({ readState: vi.fn() }));
 vi.mock('../../composition/walletconnect-connect', () => ({
   startWalletConnect: vi.fn(),
   connect: vi.fn(),
-  rebindStoredSessions: vi.fn(),
 }));
 vi.mock('../../transport/walletconnect', () => ({
   listSessions: () => [],

@@ -8,6 +8,26 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
 ## [Unreleased]
 
 ### Security
+- Security-review remediation (mobile arm):
+  - **Unlock throttle** via the core `UnlockGuardStore` (`MmkvUnlockGuardStore`)
+    — repeated wrong passwords arm a persisted, capped lockout.
+  - **Account switch no longer re-points connected dApps.** The earlier
+    "dApps follow the active account" behaviour re-wrote every WalletConnect
+    session to the newly-active account and announced it to all of them — it
+    disclosed an account to origins that never authorized it. Switching now
+    tells connected dApps nothing (each keeps the account it connected with);
+    removing an account tears down only that account's sessions.
+  - **Cross-runtime resolution state persists** in MMKV (`MmkvPendingOpsStore`),
+    so a Send timeline survives a lock or account switch mid-resolution.
+  - **Dev logging can no longer leak on device.** The shared `devLog` now keys
+    off React Native's `__DEV__` (false in release builds) rather than only
+    `process.env.NODE_ENV`, which Metro/Hermes may leave undefined — a release
+    build no longer risks logging signed transaction payloads.
+  - **MMKV at-rest encryption (`encryptionKey`) is still deferred.** The vault
+    blob itself is AES-256-GCM encrypted, but sessions/tokens remain plaintext
+    in MMKV. Adding a Keychain-held key requires an async composition-root
+    bootstrap plus a plaintext→encrypted migration for existing installs, and is
+    tracked as its own on-device change.
 - Locking the wallet (manually, on idle timeout, or on backgrounding) now also
   clears the in-memory container cache, so decrypted signing keys held by live
   signers — including Taquito's internal copy — no longer outlive the lock.
@@ -54,6 +74,27 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
   operation's inclusion on TzKT (~one L1 block after the send), handing over
   to the L2 receipt for "Finalized" once the real hash resolves. Each step now
   lights up when the thing it names actually happened.
+- **The status timeline marks a reached step complete and pulses the next one**,
+  so "Included" turns green on inclusion instead of only at finality (it used
+  to stay purple until "Finalized" lit at the same moment).
+- **ERC-20 sends from a tz1 account** now sign a real `transfer(address,uint256)`
+  scaled by the token's decimals (was the raw amount as 18-decimal calldata).
+- **A sub-mutez native transfer amount is rejected** instead of silently
+  floored to 0.
+- **The Send recipient validator is the strict core one** — `tz1abc` or a short
+  `0x123456` no longer pass; only canonical addresses do.
+- **The Receive QR is a real, scannable code** (`react-native-qrcode-svg`)
+  instead of a decorative grid.
+- **The Settings version is sourced from `package.json`** (was a hardcoded,
+  stale string).
+- **The Send amount field rejects invalid input** (a second decimal point, a
+  letter) instead of mutating what you typed.
+- **A "What you actually sign" card** appears on the Send review for a
+  cross-runtime transfer — the NAC gateway target, the entrypoint
+  (`call` / `call_evm`), the ERC-20 method when applicable, and the mutez debit.
+- **The recovery-phrase screen notes what the seed doesn't cover** — a Tezos
+  secret key or EVM private key imported separately isn't derived from the
+  phrase and must be backed up on its own.
 
 ### Changed
 - **Runtime naming.** No shipped string presents the two runtimes as layers
