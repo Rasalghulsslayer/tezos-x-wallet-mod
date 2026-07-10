@@ -1,6 +1,6 @@
 import EventEmitter from 'eventemitter3';
 import { TezlinkClient } from './tezlink.js';
-import { buildTezosToEvmCall, UnknownSelectorError, SubMutezPrecisionError } from '../use-cases/build-tezos-to-evm-call.js';
+import { buildTezosToEvmCall, UnknownSelectorError, SubMutezPrecisionError, InvalidDestinationError } from '../use-cases/build-tezos-to-evm-call.js';
 import { deriveEvmAlias } from '../use-cases/derive-alias.js';
 import { l1OpHashToEvmHash } from '../use-cases/build-synthetic-receipt.js';
 import { findRealHash } from '../use-cases/resolve-synthetic-hash.js';
@@ -13,24 +13,13 @@ import type {
   ProviderConnectInfo,
 } from '../domain/eip-1193.js';
 import type { EthTransactionRequest } from '../domain/eth-tx.js';
-import type { PendingOpView } from '../domain/cross-runtime.js';
+import type { PendingOpView, PendingOp } from '../domain/cross-runtime.js';
+import type { PendingOpsStore } from '../ports/pending-ops-store.js';
 
 interface RelayerSession {
   tz1Address: string;
   evmAlias:   string;
   chainId:    string;
-}
-
-interface PendingOp {
-  l1OpHash:       string;
-  from:           string;    // EVM alias of the sender (informational)
-  to:             string;    // destination address — matched against the
-                              // synthesized tx's `to` to correlate
-  value:          string;    // 0x-prefixed wei the user requested — matched
-                              // against the synthesized tx's `value`
-  fromBlock:      string;    // 0x-prefixed hex: EVM block number at send time
-  broadcastedAt:  number;    // Date.now() at submission, exposed via listPendingOps
-  realHash?:      string;    // cached real EVM tx hash once resolved
 }
 
 // ── EIP-1193 error codes ───────────────────────────────────────────────────
@@ -64,10 +53,26 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
    * @param walletClient Wallet backend implementing ITezosWalletClient. Pass
    *                     BeaconClient for Temple integration, or a custom
    *                     LocalSignerClient for a standalone wallet.
+   * @param pendingOpsStore Optional per-account persistence for cross-runtime
+   *                     resolution state, so a synthetic hash stays resolvable
+   *                     across lock / switch / SW eviction. Omit for an
+   *                     in-memory-only provider (SDK/tests).
    */
-  constructor(walletClient: ITezosWalletClient) {
+  constructor(walletClient: ITezosWalletClient, private readonly pendingOpsStore?: PendingOpsStore) {
     super();
     this.beacon = walletClient;
+
+    // Rehydrate any in-flight ops persisted by a previous provider instance
+    // (previous unlock / active account / SW lifetime).
+    if (this.pendingOpsStore != null) {
+      void this.pendingOpsStore.load().then((snap) => {
+        if (snap == null) return;
+        for (const [hash, op] of Object.entries(snap.ops)) {
+          if (!this.pendingOps.has(hash)) this.pendingOps.set(hash, op);
+        }
+        for (const h of snap.claimed) this.claimedRealHashes.add(h);
+      });
+    }
 
     // Restore session if Temple already has an active account (page reload)
     void this.beacon.getActiveAccount().then((account) => {
@@ -129,7 +134,20 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
           (args.params as string[])[1] ?? 'latest',
         );
 
-      // Fees handled by the NAC gateway on L1 — return constants.
+      // Fee estimation is intentionally constant on this transport. A tz1-source
+      // transaction is not paid for in EVM gas: the kernel executes it as an L1
+      // NAC gateway operation whose real cost is the L1 mutez fee, computed and
+      // charged when the wallet signs the Michelson op (see the tezos-signer
+      // adapter's fee logic). There is no EVM gas market to sample here, so we
+      // answer with fixed values that keep dApps' fee math well-defined:
+      //   - eth_estimateGas → 0x1e8480 (2,000,000): a flat headroom figure so a
+      //     dApp's gasLimit check passes. The kernel allocates the sub-call
+      //     budget itself; this number is not the amount actually consumed.
+      //   - eth_gasPrice / eth_maxPriorityFeePerGas → 0x0: gas × price is zero,
+      //     so a dApp estimating cost as gasLimit × gasPrice reads 0 EVM cost —
+      //     correct, because the fee is denominated in L1 mutez, not EVM gas.
+      //   - eth_feeHistory → all-zero series: same rationale, shaped so callers
+      //     that average historical fees don't divide by an empty array.
       case 'eth_estimateGas':
         return '0x1e8480';
       case 'eth_gasPrice':
@@ -241,7 +259,7 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
     try {
       ({ entrypoint, michelineArg, mutezAmount } = await buildTezosToEvmCall(tx));
     } catch (err) {
-      if (err instanceof UnknownSelectorError || err instanceof SubMutezPrecisionError) {
+      if (err instanceof UnknownSelectorError || err instanceof SubMutezPrecisionError || err instanceof InvalidDestinationError) {
         throw rpcError(JSON_RPC_INVALID_PARAMS, err.message);
       }
       throw err;
@@ -270,8 +288,19 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
       fromBlock,
       broadcastedAt: Date.now(),
     });
+    this.persistPendingOps();
 
     return syntheticHash;
+  }
+
+  /** Persist the current pending-op + claimed-hash state (best-effort, fire
+   *  and forget). No-op when no store was injected. */
+  private persistPendingOps(): void {
+    if (this.pendingOpsStore == null) return;
+    void this.pendingOpsStore.save({
+      ops:     Object.fromEntries(this.pendingOps),
+      claimed: [...this.claimedRealHashes],
+    }).catch(() => { /* persistence is best-effort; tracking still works in-memory */ });
   }
 
   /**
@@ -328,6 +357,10 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
       if (hash != null) {
         pending.realHash = hash;
         devLog.info('[TezosX Relayer] real EVM hash resolved →', hash);
+        // Persist the resolved hash + the newly-claimed real hash (findRealHash
+        // mutated claimedRealHashes by reference) so a later provider instance
+        // doesn't re-resolve or double-claim.
+        this.persistPendingOps();
       }
       return hash;
     });
@@ -416,6 +449,7 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
     this.pendingOps.clear();
     this.claimedRealHashes.clear();
     this.inFlightResolutions.clear();
+    void this.pendingOpsStore?.clear().catch(() => {});
     await this.beacon.disconnect();
     this.emit('accountsChanged', []);
     this.emit('disconnect', rpcError(EIP1193_UNAUTHORIZED, 'Wallet disconnected'));

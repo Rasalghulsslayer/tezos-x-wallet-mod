@@ -35,6 +35,34 @@ const NAC_ABI = [
   },
 ] as const;
 
+const ERC20_ABI = [
+  {
+    type: 'function',
+    name: 'transfer',
+    inputs: [
+      { name: 'to',     type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ type: 'bool' }],
+    stateMutability: 'nonpayable',
+  },
+] as const;
+
+/**
+ * Encode an ERC-20 `transfer(address,uint256)` call. `amount` is in the token's
+ * base units (already scaled by its decimals). The wallet routes a tz1-source
+ * ERC-20 send through the NAC gateway with this as calldata and the token
+ * contract as `to` — so what's signed is a real ABI transfer, not the raw
+ * amount masquerading as calldata.
+ */
+export function encodeErc20Transfer(to: string, amount: bigint): Hex {
+  return encodeFunctionData({
+    abi:          ERC20_ABI,
+    functionName: 'transfer',
+    args:         [to as `0x${string}`, amount],
+  });
+}
+
 export interface NacHttpHeader { key: string; value: string }
 
 /**

@@ -6,6 +6,53 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [Unreleased]
+
+### Added
+- **`encodeErc20Transfer(to, amount)`** (`shared/abi.ts`, exported from
+  `@tezosx/relayer/evm`) — encodes a real `transfer(address,uint256)` calldata,
+  so the wallet's tz1-source ERC-20 send routes an actual ABI transfer through
+  the gateway instead of the raw amount masquerading as calldata.
+- **`weiToMutezExact`** is now exported (`@tezosx/relayer/tezos` and the
+  use-case path) so the wallet's native transfer paths enforce the same
+  no-silent-floor rule as the gateway boundary.
+- **`InvalidDestinationError`** (`build-tezos-to-evm-call.ts`) — `buildTezosToEvmCall`
+  now rejects a non-canonical `0x` destination before it can be embedded
+  verbatim into the signed Micheline (past the truncated approval display).
+- **`PendingOpsStore` port** + optional 2nd `RelayerProvider` constructor
+  argument. When supplied, the provider rehydrates its pending synthetic→real
+  hash state on construction and persists it on each mutation, so resolution
+  survives a lock / account switch / service-worker eviction. `PendingOp` moved
+  to `domain/cross-runtime.ts` and is exported.
+- **`GatewayCall.methodSig`** — `buildTezosToEvmCall` now returns the
+  human-readable ABI signature it resolved for a `call_evm` (e.g.
+  `transfer(address,uint256)`); it was already embedded in the signed Micheline
+  but not surfaced. The wallet uses it to name the method in the cross-runtime
+  approval instead of showing a bare 4-byte selector. Undefined for a bare
+  native transfer on the `call` entrypoint.
+
+### Changed
+- The constant fee-estimation replies on the Tezos-source transport
+  (`eth_estimateGas`, `eth_gasPrice`, `eth_maxPriorityFeePerGas`,
+  `eth_feeHistory`) are now documented in `tezos/provider.ts`: a tz1-source
+  transaction is paid for as an L1 NAC operation in mutez, not in EVM gas, so
+  the fixed values keep a dApp's `gasLimit × gasPrice` cost math well-defined
+  (and zero) rather than reflecting a real gas market. No behaviour change.
+
+### Security
+- The legacy Temple/Beacon proof-of-concept extension
+  (`extension/src/background.ts`) now validates the message sender: it accepts
+  messages only from the extension's own contexts, and a page's content script
+  may read or mutate the stored session for its own web origin only (the popup,
+  as trusted first-party UI, may act on any). Previously any page's content
+  script could read or tamper with the whole session map. This code is a
+  superseded POC and not part of the shipped wallet.
+
+### Compatibility
+- Additive. The new `RelayerProvider` argument is optional (omit for the prior
+  in-memory-only behaviour); existing consumers build unchanged. `GatewayCall`
+  gains an optional `methodSig` field.
+
 ## [0.6.1] — 2026-06-30
 
 ### Added
