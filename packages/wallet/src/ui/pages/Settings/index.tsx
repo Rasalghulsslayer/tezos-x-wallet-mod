@@ -133,7 +133,7 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
         <LinkRow icon="lock" t="Lock wallet" onClick={lock} />
 
         <div className="tx-section-head"><span className="t">About</span></div>
-        <LinkRow icon="info" t="Version" sub="Wallet v0.11.3 · Relayer v0.5.5" />
+        <LinkRow icon="info" t="Version" sub={`Wallet v${__WALLET_VERSION__} · Core v${__CORE_VERSION__}`} />
         <LinkRow icon="info" t="Network" sub="Tezos X Previewnet" />
 
         <div style={{ height: 16 }} />

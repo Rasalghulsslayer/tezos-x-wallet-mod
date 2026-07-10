@@ -102,6 +102,22 @@ export function CreateTezos({ onDone }: { onDone: () => void }) {
             <div style={{ fontSize: 13, color: 'var(--tx-fg-muted)', marginBottom: 14 }}>
               Write these {words.length} words down in order. Keep them offline.
             </div>
+            <div
+              className="tx-note"
+              style={{
+                display: 'flex', gap: 8, alignItems: 'flex-start',
+                fontSize: 12, color: 'var(--tx-fg-muted)',
+                background: 'var(--tx-surface-2)', borderRadius: 'var(--tx-r-md)',
+                padding: '10px 12px', marginBottom: 14,
+              }}
+            >
+              <Icon name="info" size={14} color="var(--tx-fg-subtle)" />
+              <span>
+                This phrase restores every account you create in this wallet. A Tezos
+                secret key or EVM private key you import isn't derived from it — back
+                those up separately.
+              </span>
+            </div>
             <div style={{ position: 'relative' }}>
               <div className={`tx-seed-grid ${revealed ? '' : 'blurred'}`}>
                 {words.map((w, i) => (

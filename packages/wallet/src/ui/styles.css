@@ -436,15 +436,13 @@ html, body {
 }
 @keyframes tx-toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
-/* QR */
+/* QR — a white quiet-zone frame around the real encoded SVG (react-qr-code). */
 .tx-qr {
   width: 180px; height: 180px;
   border-radius: var(--tx-r-lg);
   background: #FFFFFF; padding: 10px;
-  display: grid; grid-template-columns: repeat(21, 1fr); grid-template-rows: repeat(21, 1fr); gap: 0;
+  display: flex; align-items: center; justify-content: center;
 }
-.tx-qr .cell { background: #0B0B12; }
-.tx-qr .cell.off { background: transparent; }
 
 /* Section head */
 .tx-section-head {

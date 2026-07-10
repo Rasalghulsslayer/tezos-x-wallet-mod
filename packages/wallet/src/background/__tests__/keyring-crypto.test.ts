@@ -1,13 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import { Keyring } from '@tezosx/wallet-core/keyring';
+import { Keyring, UnlockThrottledError } from '@tezosx/wallet-core/keyring';
 import { WebCryptoPort } from '../../adapters/crypto/web-crypto-port';
 import type { VaultStore, EncryptedVault } from '@tezosx/wallet-core/ports/vault-store';
+import type { UnlockGuardStore, UnlockGuardState } from '@tezosx/wallet-core/ports/unlock-guard-store';
 
 class MemoryVaultStore implements VaultStore {
   vault: EncryptedVault | undefined;
   async load() { return this.vault; }
   async save(v: EncryptedVault) { this.vault = v; }
   async clear() { this.vault = undefined; }
+}
+
+class MemoryUnlockGuard implements UnlockGuardStore {
+  state: UnlockGuardState | undefined;
+  async load() { return this.state; }
+  async save(s: UnlockGuardState) { this.state = s; }
+  async clear() { this.state = undefined; }
 }
 
 const PASSWORD = 'correct-horse-battery';
@@ -74,6 +82,34 @@ describe('keyring — vault crypto', () => {
     // pinned — re-salting would require retaining the password to re-derive.
     expect(second.iv).not.toBe(first.iv);
     expect(second.salt).toBe(first.salt);
+  });
+
+  it('throttles unlock after repeated wrong passwords, then clears on success (KEY-2)', async () => {
+    const store = new MemoryVaultStore();
+    const guard = new MemoryUnlockGuard();
+    const k = new Keyring(store, new WebCryptoPort(), guard);
+    await k.create(PASSWORD);
+    k.lock();
+
+    // The first few wrong attempts are only counted (no lockout yet).
+    for (let i = 0; i < 5; i++) {
+      await expect(k.unlock('wrong')).rejects.toThrow(/Incorrect password/);
+    }
+    expect(guard.state?.failedAttempts).toBe(5);
+    expect(guard.state?.lockoutUntil ?? 0).toBe(0);
+
+    // The 6th wrong attempt arms a lockout; the next attempt is refused
+    // outright (throttled) rather than reaching the KDF.
+    await expect(k.unlock('wrong')).rejects.toThrow(/Incorrect password/);
+    expect(guard.state!.lockoutUntil).toBeGreaterThan(Date.now());
+    await expect(k.unlock(PASSWORD)).rejects.toThrow(UnlockThrottledError);
+
+    // Clear the window (simulate it elapsing) → the right password unlocks and
+    // resets the guard.
+    guard.state = { failedAttempts: 6, lockoutUntil: 0 };
+    const { accountId } = await k.unlock(PASSWORD);
+    expect(accountId).toBeTruthy();
+    expect(guard.state).toBeUndefined();
   });
 
   it('lock zeroizes the retained vault key', async () => {

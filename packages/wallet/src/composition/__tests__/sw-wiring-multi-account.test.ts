@@ -106,24 +106,24 @@ describe('sw-wiring multi-account dispatch', () => {
     expect(h.broadcasts).toHaveLength(0);
   });
 
-  it('SET_ACTIVE_ACCOUNT broadcasts accountsChanged with the new alias', async () => {
+  it('SET_ACTIVE_ACCOUNT does NOT broadcast accountsChanged (per-origin scoping — SEC-1)', async () => {
+    // Switching the active account for the user's own Send/Receive must not
+    // tell any connected dApp: each origin stays bound to the account it
+    // connected with. Broadcasting the new active alias to all origins was the
+    // SEC-1 leak.
     const firstId = h.keyring.getUnlocked()!.account.id;
     const add     = await send(h.deps, { type: 'ADD_ACCOUNT', kind: 'evm', source: { source: 'fresh' } });
     if (!add.ok) throw new Error('add failed');
     const secondId = (add.data as { accountId: string }).accountId;
 
+    h.broadcasts.length = 0;
     await send(h.deps, { type: 'SET_ACTIVE_ACCOUNT', accountId: secondId });
-
     expect(h.keyring.getUnlocked()!.account.id).toBe(secondId);
-    const broadcast = h.broadcasts.find(b => b.type === 'PROVIDER_EVENT' && b.event === 'accountsChanged');
-    expect(broadcast).toBeDefined();
-    if (broadcast?.type === 'PROVIDER_EVENT' && broadcast.event === 'accountsChanged') {
-      expect(broadcast.data).toEqual([(h.keyring.getUnlocked()!.account as { address: string }).address]);
-    }
-    // Switching back also broadcasts.
+    expect(h.broadcasts.some(b => b.type === 'PROVIDER_EVENT' && b.event === 'accountsChanged')).toBe(false);
+
     h.broadcasts.length = 0;
     await send(h.deps, { type: 'SET_ACTIVE_ACCOUNT', accountId: firstId });
-    expect(h.broadcasts.some(b => b.type === 'PROVIDER_EVENT' && b.event === 'accountsChanged')).toBe(true);
+    expect(h.broadcasts.some(b => b.type === 'PROVIDER_EVENT' && b.event === 'accountsChanged')).toBe(false);
   });
 
   it('SET_ACTIVE_ACCOUNT to the same id is a no-op (no broadcast)', async () => {
@@ -132,7 +132,7 @@ describe('sw-wiring multi-account dispatch', () => {
     expect(h.broadcasts).toHaveLength(0);
   });
 
-  it('REMOVE_ACCOUNT of a non-active account does NOT broadcast', async () => {
+  it('REMOVE_ACCOUNT of a non-active account with no bound session does NOT broadcast', async () => {
     const firstId = h.keyring.getUnlocked()!.account.id;
     const add     = await send(h.deps, { type: 'ADD_ACCOUNT', kind: 'evm', source: { source: 'fresh' } });
     if (!add.ok) throw new Error('add failed');
@@ -144,7 +144,7 @@ describe('sw-wiring multi-account dispatch', () => {
     expect(h.broadcasts).toHaveLength(0);
   });
 
-  it('REMOVE_ACCOUNT of the active account broadcasts the auto-switched alias', async () => {
+  it('REMOVE_ACCOUNT of the active account does NOT broadcast a global alias', async () => {
     const firstId = h.keyring.getUnlocked()!.account.id;
     const add     = await send(h.deps, { type: 'ADD_ACCOUNT', kind: 'evm', source: { source: 'fresh' } });
     if (!add.ok) throw new Error('add failed');
@@ -153,8 +153,34 @@ describe('sw-wiring multi-account dispatch', () => {
     h.broadcasts.length = 0;
     await send(h.deps, { type: 'REMOVE_ACCOUNT', accountId: firstId, password: PASSWORD });
     expect(h.keyring.getUnlocked()!.account.id).toBe(secondId);
-    const broadcast = h.broadcasts.find(b => b.type === 'PROVIDER_EVENT' && b.event === 'accountsChanged');
-    expect(broadcast).toBeDefined();
+    // No sessions were bound to the removed account, so nothing is announced —
+    // and nothing is announced to the (unrelated) surviving account either.
+    expect(h.broadcasts.some(b => b.type === 'PROVIDER_EVENT' && b.event === 'accountsChanged')).toBe(false);
+  });
+
+  it('REMOVE_ACCOUNT disconnects only the removed account\'s origins (accountsChanged [] per origin)', async () => {
+    const firstId = h.keyring.getUnlocked()!.account.id;
+    const add     = await send(h.deps, { type: 'ADD_ACCOUNT', kind: 'evm', source: { source: 'fresh' } });
+    if (!add.ok) throw new Error('add failed');
+    const secondId = (add.data as { accountId: string }).accountId;
+
+    const sessions = h.deps.persistentPorts.sessionStore;
+    await sessions.upsert({ origin: 'https://a.example', accountId: firstId,  tz1Address: '', evmAlias: '0xaaa', chainId: '0x1f440', connectedAt: 1 });
+    await sessions.upsert({ origin: 'https://b.example', accountId: secondId, tz1Address: '', evmAlias: '0xbbb', chainId: '0x1f440', connectedAt: 2 });
+
+    h.broadcasts.length = 0;
+    await send(h.deps, { type: 'REMOVE_ACCOUNT', accountId: firstId, password: PASSWORD });
+
+    // a.example (bound to the removed account) is told []; b.example is untouched.
+    const evts = h.broadcasts.filter(b => b.type === 'PROVIDER_EVENT' && b.event === 'accountsChanged');
+    expect(evts).toHaveLength(1);
+    const [evt] = evts;
+    if (evt.type === 'PROVIDER_EVENT' && evt.event === 'accountsChanged') {
+      expect(evt.origin).toBe('https://a.example');
+      expect(evt.data).toEqual([]);
+    }
+    const remaining = (await sessions.list()).map(s => s.origin);
+    expect(remaining).toEqual(['https://b.example']);
   });
 
   it('LIST_ACCOUNTS returns the same summary list as GET_STATE', async () => {

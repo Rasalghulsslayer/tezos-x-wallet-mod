@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AccountId } from '@tezosx/wallet-core/domain/account';
 import { MAX_LABEL_LENGTH } from '@tezosx/wallet-core/shared/constants';
+import { formatError } from '@tezosx/wallet-core/domain/error';
 import { ModalBackdrop } from './ModalBackdrop';
 
 export function RenameModal({
@@ -31,7 +32,7 @@ export function RenameModal({
       await onSaved(label.trim());
       onClose();
     } catch (e) {
-      setError((e as Error).message);
+      setError(formatError(e).detail);
       setSaving(false);
     }
   };

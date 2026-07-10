@@ -3,7 +3,7 @@ import { preInject } from '../../harness/storage';
 import { unlockProgrammatically } from '../../harness/unlock';
 import { PopupPage } from '../../harness/pages/popup-page';
 
-const DEST_0X      = '0xdEAD000000000000000042000000000000000000';
+const DEST_0X      = '0xdead000000000000000042000000000000000000';
 const SCRIPT_BLOCK = '0x100';
 
 function jsonRpc(result: unknown): { status: number; body: string } {

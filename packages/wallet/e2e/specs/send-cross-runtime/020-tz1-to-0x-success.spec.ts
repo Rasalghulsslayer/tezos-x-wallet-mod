@@ -3,7 +3,7 @@ import { preInject } from '../../harness/storage';
 import { unlockProgrammatically } from '../../harness/unlock';
 import { PopupPage } from '../../harness/pages/popup-page';
 
-const DEST_0X      = '0xdEAD000000000000000042000000000000000000';
+const DEST_0X      = '0xdead000000000000000042000000000000000000';
 const VALUE_WEI    = '0x38d7ea4c68000';                                  // 0.001 XTZ in wei (1e15)
 const SCRIPT_BLOCK = '0x100';
 const FINAL_BLOCK  = '0x101';

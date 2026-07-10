@@ -8,7 +8,69 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ## [Unreleased]
 
+### Security
+- Security-review remediation (extension surface):
+  - **Auto-lock.** The vault now locks after 5 minutes of no user input, and
+    on browser lock / service-worker suspend (`chrome.idle` + `onSuspend`;
+    new `idle` / `alarms` permissions). The mobile app already auto-locked;
+    the extension didn't.
+  - **Unlock throttle** via the core `UnlockGuardStore` (`ChromeUnlockGuardStore`,
+    persisted in `chrome.storage.local`) — an offline attacker with the
+    plaintext-on-disk vault no longer gets unlimited password guesses.
+  - **`accountsChanged` no longer leaks across origins** — switching the active
+    account tells no connected dApp; removing an account notifies only that
+    account's origins.
+  - **Approval popups are capped per origin**, and the reveal / create copy
+    buttons **auto-clear the clipboard after 30 s** so a mnemonic / private key
+    doesn't linger.
+  - **Cross-runtime resolution state persists** (`ChromePendingOpsStore`), so a
+    Send timeline survives a lock or SW eviction mid-resolution.
+  - **The approval header shows the full origin.** An https origin still shows a
+    clean host with a green lock; a non-https or non-standard-port origin now
+    spells out its scheme and port with a danger flag, so `http://victim.com`
+    and `http://victim.com:8443` can't masquerade as `https://victim.com`.
+  - **A signing message with deceptive characters is shown as raw hex.** The
+    decoded `personal_sign` preview refuses text containing bidi
+    overrides/isolates or zero-width characters, which could otherwise render
+    differently from the bytes being signed.
+
+### Fixed
+- **ERC-20 sends from a tz1 account were broken** — the amount was passed as
+  calldata (18-decimal-scaled regardless of the token) instead of a real
+  `transfer(address,uint256)`, so they failed with a misleading dApp-blaming
+  error. They now sign a proper ABI transfer to the token contract, scaled by
+  the token's decimals.
+- **A sub-mutez amount on a native transfer** (tz1→tz1) is now rejected instead
+  of being silently floored to 0.
+- **Insufficient balance blocks the Send** (it was displayed but not enforced).
+- **The Settings version is sourced from the workspace `package.json`** at
+  build time (was a hardcoded, stale "Wallet v0.11.3 · Relayer v0.5.5"; now
+  "Wallet vX · Core vY").
+- **The Receive QR is a real, scannable code** (`react-qr-code`) instead of a
+  decorative PRNG grid that would misdirect a deposit.
+- **A mistyped recipient address is caught.** A mixed-case `0x` address whose
+  EIP-55 checksum is wrong is now treated as invalid in the Send form (the
+  routing shows no destination), instead of being accepted as-is.
+- **The status screen labels the route honestly.** `StatusHero` derives its
+  route caption from the source account kind and whether the transfer crosses
+  runtimes, so an EVM-source same-runtime send no longer reads as a cross-runtime
+  "Michelson → EVM · NAC" transfer.
+- **The Send amount field rejects invalid input** (a second decimal point, a
+  letter) instead of mutating what you typed.
+- **The remove-account and rename modals render parsed errors** through
+  `formatError` rather than a raw `error.message`.
+- **A "What you actually sign" card** now appears on the in-wallet Send review
+  for a cross-runtime transfer — the NAC gateway target, the entrypoint
+  (`call` / `call_evm`), the ERC-20 method when applicable, and the mutez debit —
+  mirroring the disclosure the dApp transaction approval already shows.
+- **The recovery-phrase screen notes what the seed doesn't cover** — a Tezos
+  secret key or EVM private key imported separately isn't derived from the
+  phrase and must be backed up on its own.
+
 ### Changed
+- **The Send resolution poller uses the shared `startPoller` engine** instead of
+  a hand-rolled recursive `setTimeout`, matching the mobile app and the rest of
+  the codebase (cancellation and timeout are handled by the engine).
 - **Runtime naming.** No shipped string presents the two runtimes as layers
   anymore: badges, pills and toggles say "Michelson" / "EVM", routing copy says
   "Same-runtime · Michelson runtime", "Cross-runtime · Michelson → EVM via NAC
