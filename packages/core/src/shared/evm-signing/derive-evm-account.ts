@@ -21,6 +21,11 @@ export function randomEvmPrivateKey(): string {
   return bytesToHex(bytes);
 }
 
+// secp256k1 group order n — a valid private key is in [1, n-1]. 0 and any
+// value ≥ n are not on the curve; noble would throw a raw message, so we
+// check the range explicitly to reject with a clear one.
+const SECP256K1_N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
+
 /** Normalise a user-supplied EVM private key to a 64-hex string (no 0x). */
 export function normaliseEvmPrivateKey(input: string): string {
   const trimmed = input.trim();
@@ -29,6 +34,10 @@ export function normaliseEvmPrivateKey(input: string): string {
     : trimmed;
   if (!/^[0-9a-fA-F]{64}$/.test(noPrefix)) {
     throw new Error('Invalid EVM private key (expected 32-byte hex)');
+  }
+  const value = BigInt('0x' + noPrefix);
+  if (value === 0n || value >= SECP256K1_N) {
+    throw new Error('Invalid EVM private key (out of the secp256k1 range)');
   }
   return noPrefix.toLowerCase();
 }

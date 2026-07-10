@@ -35,7 +35,7 @@ export function buildContainer(secrets: UnlockedSecrets, ports: PersistentPorts)
       createdAt: secrets.createdAt,
     };
     const signer   = new TezosSigner(account, secrets.secretKey);
-    const provider = new RelayerProvider(signer);
+    const provider = new RelayerProvider(signer, ports.pendingOpsStore?.(account.id));
     const tokenList = () => tokenStore.list(account.id);
     return {
       signer,

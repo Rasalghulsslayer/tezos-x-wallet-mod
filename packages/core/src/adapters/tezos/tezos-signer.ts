@@ -29,6 +29,15 @@ import { devLog } from '../../shared/log';
 const FEE_BUFFER = 1.5;
 
 /**
+ * Ceiling on the one-shot fee retry. The retry trusts the `required` value the
+ * node reports in an insufficient_fees rejection; a buggy or hostile RPC could
+ * report an absurd figure and drain the balance in fees. A genuine under-shoot
+ * past the FEE_BUFFER pad is small, so we refuse any `required` beyond this
+ * multiple of the already-padded fee rather than resubmit blindly.
+ */
+const MAX_RETRY_FEE_MULTIPLE = 4;
+
+/**
  * Beacon-style ceilings for NAC `call_evm` operations. Tezlink's run_operation
  * rejects simulation with `tezlink_error` when default gas budgets are too low
  * for the EVM sub-call. Submitting directly with these ceilings (matching the
@@ -101,6 +110,10 @@ export class TezosSigner implements TezosSignerPort {
     } catch (err) {
       const required = extractRequiredFee(err);
       if (required === null || required <= computed) throw err;
+      // Trust the node's `required` only within a bounded multiple of our
+      // padded fee — beyond that we surface the original rejection rather than
+      // pay an unbounded amount.
+      if (required > computed * MAX_RETRY_FEE_MULTIPLE) throw err;
       const op = await submit(required);
       return op.hash;
     }

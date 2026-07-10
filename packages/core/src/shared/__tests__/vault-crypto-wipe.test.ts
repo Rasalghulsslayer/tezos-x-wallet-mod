@@ -76,8 +76,17 @@ describe('vault-crypto zeroization', () => {
     };
 
     await expect(
-      decryptVault({ ciphertext: 'AA==', iv: 'AA==', salt: 'AA==', iterations: 1 }, 'pw', failing),
+      decryptVault({ ciphertext: 'AA==', iv: 'AA==', salt: 'AA==', iterations: PBKDF2_ITERATIONS }, 'pw', failing),
     ).rejects.toThrow('bad decrypt');
     expect(isZeroed(seen.keys[0])).toBe(true);
+  });
+
+  it('rejects an out-of-range iterations count before touching the KDF (KEY-7)', async () => {
+    const { port } = makeSpyPort();
+    // A runaway count would otherwise hang unlock on PBKDF2; non-integer/0 are nonsense.
+    await expect(decryptVault({ ciphertext: 'AA==', iv: 'AA==', salt: 'AA==', iterations: 1_000_000_000 }, 'pw', port))
+      .rejects.toThrow(/out of range/);
+    await expect(decryptVault({ ciphertext: 'AA==', iv: 'AA==', salt: 'AA==', iterations: 0 }, 'pw', port))
+      .rejects.toThrow(/out of range/);
   });
 });

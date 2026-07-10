@@ -15,6 +15,22 @@ import { devLog } from '../../shared/log';
 import { normalizePersonalSignMessage } from '../../shared/evm-signing/index';
 
 const JSON_RPC_INVALID_PARAMS = -32602;
+const EIP1193_UNSUPPORTED_METHOD = 4200;
+
+/**
+ * Signing methods this provider does not implement locally. They must never
+ * reach the remote node — it holds no key and would answer misleadingly — and
+ * `eth_sign` is unguarded blind signing we refuse outright. Rejecting them with
+ * the EIP-1193 unsupported-method code gives the dApp a clear, correct signal.
+ */
+const REJECTED_SIGN_METHODS = new Set([
+  'eth_sign',
+  'eth_signTransaction',
+  'eth_signTypedData',
+  'eth_signTypedData_v1',
+  'eth_signTypedData_v3',
+  'eth_signTypedData_v4',
+]);
 
 function rpcError(code: number, message: string, data?: unknown): ProviderRpcError {
   const err = new Error(message) as ProviderRpcError;
@@ -77,6 +93,9 @@ export class EvmProvider extends EventEmitter implements EIP1193Provider {
       }
 
       default:
+        if (REJECTED_SIGN_METHODS.has(args.method)) {
+          throw rpcError(EIP1193_UNSUPPORTED_METHOD, `${args.method} is not supported`);
+        }
         return this.jsonRpc(args.method, Array.isArray(args.params) ? args.params : []);
     }
   }

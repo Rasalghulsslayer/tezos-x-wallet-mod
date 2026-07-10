@@ -57,6 +57,66 @@ Chrome extension (`@tezosx/wallet`) and the React Native app
   additive on `shared/vault-crypto`.
 
 ### Security
+- Security-review remediation (2026-07-09 pass over the 2026-07-03 audit):
+  - **Unlock throttle/lockout.** The keyring takes an optional
+    `UnlockGuardStore`; after a few wrong passwords it arms an exponential,
+    capped lockout (persisted, so it survives a service-worker restart —
+    the plaintext-on-disk vault is otherwise open to unbounded offline
+    guessing). Cleared on a correct unlock. Throws `UnlockThrottledError`.
+  - **`accountsChanged` is scoped per origin.** Switching the active account
+    no longer broadcasts the new alias to every connected origin (each origin
+    stays bound to the account it connected with); the push carries an
+    optional `origin`, and removing an account notifies only that account's
+    origins with `[]` and drops their sessions.
+  - **Per-origin approval cap.** `ApprovalQueue` refuses more than
+    `MAX_PENDING_PER_ORIGIN` in-flight requests from one origin
+    (`TooManyPendingRequestsError` → JSON-RPC -32005), bounding popup floods.
+  - **Native sub-mutez transfers are rejected, not floored.** The tz1→tz1 and
+    EVM→tz1 paths now use the relayer's `weiToMutezExact`, so a sub-mutez
+    amount errors instead of silently transferring 0.
+  - **ERC-20 from a tz1 account signs a real `transfer(address,uint256)`** to
+    the token contract (value 0), scaled by the token's decimals, instead of
+    the raw amount as calldata.
+  - **Cross-runtime resolution state persists.** The `RelayerProvider` takes an
+    optional per-account `PendingOpsStore` (added to `PersistentPorts`), so a
+    synthetic→real hash mapping survives lock / switch / SW eviction.
+  - **Recipient checksum is enforced.** `detectRuntime` now treats a mixed-case
+    `0x` address whose EIP-55 checksum is wrong as unroutable (a likely typo),
+    while still accepting all-lowercase or all-uppercase input, which carries no
+    checksum information.
+  - **Imported EVM keys are range-checked.** A private key of zero or one at or
+    above the secp256k1 group order is rejected on import rather than deriving a
+    degenerate account.
+  - **Duplicate accounts are refused at import.** The keyring rejects importing a
+    tz1 or `0x` address it already holds, matching the guard the derived-account
+    path already had.
+  - **A transfer to the sender's own address is refused** before signing, on both
+    the Tezos and EVM source paths.
+  - **Vault iteration count is bounded at decrypt.** `deriveVaultKey` rejects a
+    non-positive or absurdly large PBKDF2 iteration count read from a sealed
+    envelope, so a tampered header can't force a denial-of-service stretch.
+  - **The EVM provider refuses signing methods it doesn't implement.**
+    `eth_sign`, `eth_signTransaction`, and the `eth_signTypedData*` family are
+    rejected with the EIP-1193 unsupported-method code instead of being proxied
+    to the remote node (which holds no key); `eth_sign` blind signing is refused
+    outright.
+  - **The Tezos fee retry is capped.** The one-shot resubmit that trusts the
+    node's reported `required` fee now refuses any value beyond a bounded
+    multiple of the already-padded fee, so a hostile or buggy RPC can't drain the
+    balance in fees.
+  - **Decoded signing messages reject deceptive characters.** The best-effort
+    UTF-8 decode used to preview a `personal_sign` payload returns nothing when
+    the text contains bidi overrides/isolates or zero-width characters, so the
+    approval UI falls back to raw hex rather than a string that renders
+    differently from what is signed.
+  - **The cross-runtime approval names the method.** The gateway builder surfaces
+    the resolved ABI signature (e.g. `transfer(address,uint256)`), which the
+    pending transaction now carries so the approval popup shows the method
+    instead of a bare selector.
+  - **Dev logging is gated on `__DEV__`.** The `devLog` flag prefers React
+    Native's `__DEV__` (false in release builds), falling back to
+    `NODE_ENV` for the Vite and Node toolchains, so a Metro/Hermes build with an
+    undefined `NODE_ENV` can no longer leak signed payloads to the device log.
 - Transient secret byte-buffers are zeroized immediately after use: the
   PBKDF2-derived vault key and the decrypted vault plaintext bytes in
   `shared/vault-crypto`, and the private-key / signature buffers in the shared

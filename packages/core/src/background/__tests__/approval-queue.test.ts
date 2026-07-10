@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { ApprovalQueue, DuplicateRequestIdError } from '../approval-queue';
+import { ApprovalQueue, DuplicateRequestIdError, TooManyPendingRequestsError, MAX_PENDING_PER_ORIGIN } from '../approval-queue';
 import type { NotificationPort } from '../../ports/notification-port';
 import type { ApprovalPresenter, ApprovalHandle } from '../../ports/approval-presenter';
 import type { PendingRequest } from '../../shared/messages';
@@ -36,10 +36,10 @@ function recordingNotifications(): { port: NotificationPort; counts: number[] } 
   return { port: { async setPendingCount(n) { counts.push(n); } }, counts };
 }
 
-const req = (requestId: string): PendingRequest => ({
+const req = (requestId: string, origin = 'https://dapp.example'): PendingRequest => ({
   kind:      'connect',
   requestId,
-  origin:    'https://dapp.example',
+  origin,
   accountId: 'acct-1',
   createdAt: 0,
 });
@@ -83,6 +83,28 @@ describe('ApprovalQueue', () => {
     // enqueue is async, so the duplicate guard surfaces as a rejected promise —
     // sw-wiring catches it via `await … catch` and maps it to invalid-params.
     await expect(q.enqueue(req('dup'))).rejects.toThrow(DuplicateRequestIdError);
+  });
+
+  it('caps in-flight requests per origin and leaves other origins unaffected', async () => {
+    const presenter = new FakePresenter();
+    const q = new ApprovalQueue(recordingNotifications().port, presenter);
+
+    // Fill the cap for one origin — all left pending (never resolved).
+    for (let i = 0; i < MAX_PENDING_PER_ORIGIN; i++) void q.enqueue(req(`a${i}`, 'https://flood.example'));
+    expect(presenter.opened).toHaveLength(MAX_PENDING_PER_ORIGIN);
+
+    // The next request from the same origin is rejected without opening a popup.
+    await expect(q.enqueue(req('a-over', 'https://flood.example'))).rejects.toThrow(TooManyPendingRequestsError);
+    expect(presenter.opened).toHaveLength(MAX_PENDING_PER_ORIGIN);
+
+    // A different origin still gets through.
+    void q.enqueue(req('b0', 'https://other.example'));
+    expect(presenter.opened).toContain('b0');
+
+    // Resolving one frees a slot for the flooding origin again.
+    expect(q.resolve('a0', 'reject')).toBe(true);
+    void q.enqueue(req('a-again', 'https://flood.example'));
+    expect(presenter.opened).toContain('a-again');
   });
 
   it('resolve returns false for an unknown request id', () => {

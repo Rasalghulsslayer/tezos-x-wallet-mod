@@ -55,4 +55,23 @@ describe('EVM signing — known-answer vectors (viem reference)', () => {
     const sig = await provider.request({ method: 'personal_sign', params: [HELLO_HEX, ADDR] });
     expect(sig).toBe(SIG_HELLO);
   });
+
+  it('EvmProvider rejects unsupported sign methods with 4200, never reaching the RPC (VAL-7)', async () => {
+    const id = deriveEvmAccount(PK);
+    const account: EvmAccount = {
+      kind:      'evm',
+      id:        'val7',
+      address:   id.address,
+      publicKey: id.publicKey,
+      createdAt: 0,
+    };
+    // An unroutable RPC URL: any method that fell through to the network would
+    // reject with a fetch error, not the 4200 we assert.
+    const provider = new EvmProvider(new EvmSigner(account, PK), 'http://localhost:0');
+    const rejected = ['eth_sign', 'eth_signTransaction', 'eth_signTypedData', 'eth_signTypedData_v4'];
+    for (const method of rejected) {
+      await expect(provider.request({ method, params: [] }))
+        .rejects.toMatchObject({ code: 4200 });
+    }
+  });
 });

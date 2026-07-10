@@ -13,6 +13,20 @@ export class DuplicateRequestIdError extends Error {
   }
 }
 
+/** How many requests one origin may have awaiting approval at once. A
+ *  connected (or even unconnected, via eth_requestAccounts) page that loops
+ *  requests would otherwise open an unbounded stack of popups — desktop DoS
+ *  and approval fatigue that invites an accidental confirm. */
+export const MAX_PENDING_PER_ORIGIN = 3;
+
+/** Thrown when an origin already has MAX_PENDING_PER_ORIGIN requests in flight. */
+export class TooManyPendingRequestsError extends Error {
+  constructor(public readonly origin: string) {
+    super(`Origin ${origin} has too many pending approval requests`);
+    this.name = 'TooManyPendingRequestsError';
+  }
+}
+
 interface Pending {
   request: PendingRequest;
   resolve: (decision: Decision) => void;
@@ -51,6 +65,13 @@ export class ApprovalQueue {
   async enqueue(request: PendingRequest): Promise<Decision> {
     if (this.queue.has(request.requestId)) {
       throw new DuplicateRequestIdError(request.requestId);
+    }
+    let sameOrigin = 0;
+    for (const { request: r } of this.queue.values()) {
+      if (r.origin === request.origin) sameOrigin++;
+    }
+    if (sameOrigin >= MAX_PENDING_PER_ORIGIN) {
+      throw new TooManyPendingRequestsError(request.origin);
     }
 
     let resolveDecision!: (decision: Decision) => void;

@@ -9,7 +9,7 @@
  */
 
 import type { Keyring } from '../background/keyring';
-import { DuplicateRequestIdError, type ApprovalQueue } from '../background/approval-queue';
+import { DuplicateRequestIdError, TooManyPendingRequestsError, type ApprovalQueue } from '../background/approval-queue';
 import type { Container, PersistentPorts } from '../ports/container';
 import type { ContainerCache } from './container-cache';
 import { ensureContainerFor } from './container-builder';
@@ -22,6 +22,7 @@ import type {
   WalletResponse,
 } from '../shared/messages';
 import type { StoredSession } from '../ports/session-store';
+import type { AccountId } from '../domain/account';
 import type { ClassifiedSource } from '../ports/message-source';
 import { AccountNotFoundError } from '../domain/vault';
 
@@ -50,7 +51,7 @@ import { addCustomToken }          from '../use-cases/add-custom-token';
 import { removeCustomToken }       from '../use-cases/remove-custom-token';
 import { listRegisteredTokens }    from '../use-cases/list-registered-tokens';
 import { TEZLINK_EVM_RPC }         from '@tezosx/relayer/constants';
-import { buildTezosToEvmCall, UnknownSelectorError, SubMutezPrecisionError } from '@tezosx/relayer/use-cases/build-tezos-to-evm-call';
+import { buildTezosToEvmCall, UnknownSelectorError, SubMutezPrecisionError, InvalidDestinationError } from '@tezosx/relayer/use-cases/build-tezos-to-evm-call';
 
 export interface SwState {
   container: Container | null;
@@ -72,6 +73,7 @@ const EIP_USER_REJECTED      = 4001;
 const JSON_RPC_METHOD_NOT_FOUND = -32601;
 const JSON_RPC_INVALID_PARAMS   = -32602;
 const JSON_RPC_INTERNAL         = -32603;
+const JSON_RPC_LIMIT_EXCEEDED   = -32005;
 
 export async function dispatch(
   msg:    PopupRequest | ApproveRequest | EthereumRequest,
@@ -240,14 +242,15 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
         const wasActive = unlocked.account.id === msg.accountId;
         await removeAccount({ accountId: msg.accountId, password: msg.password }, { keyring: deps.keyring });
         deps.containerCache.evict(msg.accountId);
+        // A dApp connected with the removed account loses its account: drop
+        // that per-origin session and tell only that origin (accountsChanged
+        // []). Origins bound to other accounts are untouched — an account
+        // operation must not disclose or re-point another origin's account.
+        await disconnectRemovedAccountSessions(msg.accountId, deps);
         if (wasActive) {
           aliasCache.value = null;
           await deps.rebuildContainer();
-          const response = await refreshState();
-          if (deps.state.evmAlias != null) {
-            await broadcastAccountsChanged(deps.state.evmAlias, deps);
-          }
-          return response;
+          return refreshState();
         }
         return refreshState();
       }
@@ -259,11 +262,11 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
         await setActiveAccount({ accountId: msg.accountId }, { keyring: deps.keyring });
         aliasCache.value = null;
         await deps.rebuildContainer();
-        const response = await refreshState();
-        if (deps.state.evmAlias != null) {
-          await broadcastAccountsChanged(deps.state.evmAlias, deps);
-        }
-        return response;
+        // No accountsChanged broadcast: switching the active account (for the
+        // user's own Send/Receive) does not change what any connected dApp
+        // sees — each origin stays bound to the account it connected with.
+        // Broadcasting the new active alias to every origin was the SEC-1 leak.
+        return refreshState();
       }
 
       case 'RENAME_ACCOUNT': {
@@ -435,6 +438,7 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
       // resolved target / entrypoint / selector / mutez value. EVM-source
       // sends skip this (handled natively by EvmProvider).
       let crossRuntime: PendingTransaction['crossRuntime'] | undefined;
+      let methodSig: string | undefined;
       if (unlocked.account.kind === 'tezos') {
         try {
           const gateway = await buildTezosToEvmCall({
@@ -442,15 +446,14 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
             value: tx.value,
             data:  tx.data,
           });
-          const calldata = (tx.data ?? '0x').replace(/^0x/i, '');
+          const calldata    = (tx.data ?? '0x').replace(/^0x/i, '');
           const selectorHex = calldata.length >= 8 ? calldata.slice(0, 8) : '';
-          let decodedSelector: string | null = null;
-          if (gateway.entrypoint === 'call_evm') {
-            // For call_evm, the methodSig string sits in the Pair under args[1].args[0]
-            // — but easier to surface via a follow-up build. For now we expose the raw
-            // 0x<selector> so the popup at least shows what 4 bytes were resolved.
-            decodedSelector = selectorHex !== '' ? `0x${selectorHex}` : null;
-          }
+          // Prefer the human-readable signature the gateway resolved; fall back
+          // to the raw 0x<selector> so the popup shows what 4 bytes were signed.
+          const decodedSelector = gateway.entrypoint === 'call_evm'
+            ? (gateway.methodSig ?? (selectorHex !== '' ? `0x${selectorHex}` : null))
+            : null;
+          methodSig = gateway.methodSig;
           crossRuntime = {
             michelsonTarget: gateway.contractAddr,
             entrypoint:      gateway.entrypoint,
@@ -458,7 +461,7 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
             mutezValue:      gateway.mutezAmount.toString(),
           };
         } catch (err) {
-          if (err instanceof UnknownSelectorError || err instanceof SubMutezPrecisionError) {
+          if (err instanceof UnknownSelectorError || err instanceof SubMutezPrecisionError || err instanceof InvalidDestinationError) {
             return { ok: false, code: JSON_RPC_INVALID_PARAMS, message: err.message };
           }
           throw err;
@@ -473,6 +476,7 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
         to:        tx.to ?? '',
         value:     tx.value ?? '0x0',
         data:      tx.data ?? '0x',
+        methodSig,
         createdAt: Date.now(),
         crossRuntime,
       };
@@ -496,6 +500,11 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
     } catch (err) {
       if (err instanceof DuplicateRequestIdError) {
         return { ok: false, code: JSON_RPC_INVALID_PARAMS, message: 'Duplicate request id' };
+      }
+      if (err instanceof TooManyPendingRequestsError) {
+        // -32005: limit exceeded (EIP-1474). Rejects the flood without opening
+        // yet another popup.
+        return { ok: false, code: JSON_RPC_LIMIT_EXCEEDED, message: 'Too many pending requests from this origin' };
       }
       throw err;
     }
@@ -552,12 +561,31 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
   }
 }
 
-async function broadcastAccountsChanged(alias: string, deps: SwDeps): Promise<void> {
-  await deps.broadcastEvent({ type: 'PROVIDER_EVENT', event: 'accountsChanged', data: [alias] });
+/**
+ * Drop every per-origin session bound to a just-removed account and tell only
+ * those origins their account is gone (accountsChanged []). Sessions bound to
+ * other accounts — and origins that never connected — are left untouched.
+ */
+async function disconnectRemovedAccountSessions(accountId: AccountId, deps: SwDeps): Promise<void> {
+  const sessions = await deps.persistentPorts.sessionStore.list();
+  await Promise.all(
+    sessions
+      .filter((s) => s.accountId === accountId)
+      .map(async (s) => {
+        await deps.persistentPorts.sessionStore.remove(s.origin);
+        await deps.broadcastEvent({ type: 'PROVIDER_EVENT', event: 'accountsChanged', data: [], origin: s.origin });
+      }),
+  );
 }
 
+// Bidi overrides / embeddings / isolates and zero-width characters: invisible
+// or direction-flipping codepoints that let a decoded message read as
+// something other than what is signed. If a payload contains any, we refuse to
+// present it as clean text (the UI shows the raw hex instead).
+const DECEPTIVE_CHARS = /[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/;
+
 /** Best-effort utf-8 decode for a hex-encoded signing payload. Returns
- *  undefined when the bytes don't look like printable text. */
+ *  undefined when the bytes don't look like plain, non-deceptive text. */
 function tryDecodeUtf8(hex: string): string | undefined {
   const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
   if (clean.length === 0 || clean.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(clean)) {
@@ -567,6 +595,7 @@ function tryDecodeUtf8(hex: string): string | undefined {
     const bytes = new Uint8Array(clean.length / 2);
     for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
     const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    if (DECEPTIVE_CHARS.test(text)) return undefined;
     return /^[\x09\x0a\x0d\x20-\x7e -￿]+$/.test(text) ? text : undefined;
   } catch {
     return undefined;

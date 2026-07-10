@@ -129,7 +129,11 @@ export interface EthereumRequest {
 // ── Service Worker → Content script (push events) ─────────────────────────────
 
 export type ContentPush =
-  | { type: 'PROVIDER_EVENT'; event: 'accountsChanged'; data: string[] }
+  // `origin` scopes the event to a single connected origin (each origin only
+  // ever hears about the account bound to its own session — an active-account
+  // switch must not disclose the new account to origins connected with a
+  // different one). Absent = deliver to every connected origin.
+  | { type: 'PROVIDER_EVENT'; event: 'accountsChanged'; data: string[]; origin?: string }
   | { type: 'PROVIDER_EVENT'; event: 'chainChanged';    data: string }
   | { type: 'PROVIDER_EVENT'; event: 'connect';         data: { chainId: string } }
   | { type: 'PROVIDER_EVENT'; event: 'disconnect';      data: { code: number; message: string } }

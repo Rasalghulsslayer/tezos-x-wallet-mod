@@ -8,6 +8,8 @@
  */
 
 import type { CrossRuntimeIntent } from '@tezosx/relayer/types';
+import { weiToMutezExact } from '@tezosx/relayer/use-cases/build-tezos-to-evm-call';
+import { encodeErc20Transfer } from '@tezosx/relayer/evm';
 import { decideRoute } from '../domain/transfer';
 import type { Container } from '../ports/container';
 import type { Asset } from '../domain/asset';
@@ -34,24 +36,40 @@ export async function sendTransfer(
   deps: SendTransferDeps,
 ): Promise<SendTransferResult> {
   const signer = deps.container.signer;
+
+  // Reject a same-address self-send (tz1 → its own tz1, 0x → its own 0x): it
+  // only burns fees. A tz1 → its own EVM alias is allowed (that's alias
+  // forwarding, a real operation).
+  const ownAddress = signer.kind === 'tezos' ? signer.account.tz1 : signer.account.address;
+  if (req.to.trim().toLowerCase() === ownAddress.toLowerCase()) {
+    throw new Error('Cannot send to your own address');
+  }
+
   const route  = decideRoute(signer.account, req.to);
 
   if (signer.kind === 'tezos') {
     if (req.asset.kind === 'xtz' && route.via === 'native') {
-      const mutez  = (BigInt(req.amount) / 10n ** 12n).toString();
+      // Reject sub-mutez precision rather than flooring it away silently — the
+      // same no-silent-loss rule the NAC gateway boundary already enforces.
+      const mutez  = weiToMutezExact(BigInt(req.amount)).toString();
       const opHash = await signer.sendNativeTransfer(req.to, mutez);
       return { runtime: 'l1', hash: opHash };
     }
-    // Cross-runtime XTZ (tz1 → 0x) or ERC-20 → NAC gateway. Returns the
-    // synthetic NAC hash; the popup polls resolveTx to swap it for the
-    // kernel-synthesized real EVM hash before showing "Done".
+    // Cross-runtime → NAC gateway. Returns the synthetic NAC hash; the popup
+    // polls resolveTx to swap it for the kernel-synthesized real EVM hash
+    // before showing "Done".
+    //
+    // XTZ: a bare value transfer to the recipient (value carried, no calldata).
+    // ERC-20: a real `transfer(recipient, amount)` ABI call to the *token
+    // contract* (value 0) — `req.amount` is already in the token's base units.
+    // Encoding the raw amount as calldata (the previous behaviour) signed
+    // gibberish that the gateway rejected as an unknown selector.
+    const tx = req.asset.kind === 'erc20'
+      ? { to: req.asset.address, value: '0x0', data: encodeErc20Transfer(req.to, BigInt(req.amount)) }
+      : { to: req.to, value: req.amount, data: '0x' };
     const synthetic = await deps.container.provider.request({
       method: 'eth_sendTransaction',
-      params: [{
-        to:    req.to,
-        value: req.amount,
-        data:  req.asset.kind === 'xtz' ? '0x' : req.amount,
-      }],
+      params: [tx],
     }) as string;
     const l1OpHash = deps.container.provider.getPendingL1Hash?.(synthetic) ?? undefined;
     return { runtime: 'l2', hash: synthetic, l1OpHash };
@@ -75,7 +93,7 @@ export async function sendTransfer(
     // EVM → tz1 via NAC precompile. The relayer's buildCrossRuntimeTx
     // produces a fully-populated EVM tx; the EvmSigner signs it; the
     // EvmProvider broadcasts via eth_sendRawTransaction.
-    const mutezAmount  = BigInt(req.amount) / 10n ** 12n;
+    const mutezAmount  = weiToMutezExact(BigInt(req.amount));
     const intent: CrossRuntimeIntent = {
       kind:        'transfer',
       destination: req.to,

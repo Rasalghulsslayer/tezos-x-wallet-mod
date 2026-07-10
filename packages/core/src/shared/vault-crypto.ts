@@ -19,6 +19,14 @@ import { wipe } from './wipe';
 // re-encrypted at this count on their next mutation.
 export const PBKDF2_ITERATIONS = 600_000;
 
+// Upper sanity bound on the per-vault `iterations` field read at decrypt time.
+// The GCM tag already binds `iterations` for a genuine vault (a tampered-down
+// count just fails to decrypt), so no production minimum is enforced here — but
+// a hostile/corrupted store must not be able to hang unlock on a runaway
+// PBKDF2, and a non-positive/non-integer count is nonsense. (10M ≫ the 600k
+// production factor, with headroom for future hardening.)
+const MAX_ITERATIONS = 10_000_000;
+
 const SALT_BYTES    = 16;
 const IV_BYTES      = 12;
 const AES_KEY_BYTES = 32;
@@ -132,6 +140,9 @@ export async function deriveVaultKey(
   iterations: number,
   crypto: CryptoPort,
 ): Promise<Uint8Array> {
+  if (!Number.isInteger(iterations) || iterations < 1 || iterations > MAX_ITERATIONS) {
+    throw new Error(`Vault iterations out of range: ${iterations}`);
+  }
   return crypto.pbkdf2Sha256(password, base64ToBytes(saltB64), iterations, AES_KEY_BYTES);
 }
 

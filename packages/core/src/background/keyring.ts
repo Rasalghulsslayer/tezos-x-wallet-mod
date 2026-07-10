@@ -32,6 +32,7 @@ import {
 } from '../domain/vault';
 import type { VaultStore } from '../ports/vault-store';
 import type { CryptoPort } from '../ports/crypto-port';
+import type { UnlockGuardStore } from '../ports/unlock-guard-store';
 import {
   decryptVault,
   decryptVaultWithKey,
@@ -45,6 +46,7 @@ import { constantTimeEqual, wipe } from '../shared/wipe';
 
 // Re-exports for callers that imported from keyring directly.
 export type { AccountSecret, MultiAccountVaultPayload, RevealedSecret } from '../domain/vault';
+export type { UnlockGuardStore, UnlockGuardState } from '../ports/unlock-guard-store';
 export {
   MaxAccountsReachedError,
   CannotRemoveLastAccountError,
@@ -54,6 +56,21 @@ export {
 } from '../domain/vault';
 
 export type VaultPayload = AccountSecret;
+
+// Unlock throttle: no penalty for the first few fat-finger mistakes, then an
+// exponential lockout so an offline attacker can't grind the (plaintext-on-disk)
+// vault. Capped so a legitimate user is never locked out for too long.
+const UNLOCK_FAIL_THRESHOLD  = 5;
+const UNLOCK_BACKOFF_BASE_MS = 5_000;
+const UNLOCK_BACKOFF_CAP_MS  = 5 * 60_000;
+
+/** Thrown when unlock is refused because a lockout window is still active. */
+export class UnlockThrottledError extends Error {
+  constructor(public readonly retryAfterMs: number) {
+    super(`Too many attempts. Try again in ${Math.ceil(retryAfterMs / 1000)}s.`);
+    this.name = 'UnlockThrottledError';
+  }
+}
 
 export interface UnlockedSession {
   account:   Account;
@@ -116,6 +133,8 @@ export class Keyring {
   constructor(
     private readonly vaultStore: VaultStore,
     private readonly crypto: CryptoPort,
+    // Optional: when provided, unlock enforces a persisted failure lockout.
+    private readonly unlockGuard?: UnlockGuardStore,
   ) {}
 
   async hasVault(): Promise<boolean> {
@@ -170,6 +189,7 @@ export class Keyring {
   async unlock(password: string): Promise<{ session: UnlockedSession; accountId: AccountId }> {
     const vault = await this.vaultStore.load();
     if (vault == null) throw new Error('No wallet found');
+    await this.assertNotThrottled();
     let km: VaultKeyMaterial = {
       key:        await deriveVaultKey(password, vault.salt, vault.iterations, this.crypto),
       salt:       vault.salt,
@@ -180,8 +200,10 @@ export class Keyring {
       raw = await decryptVaultWithKey(vault, km.key, this.crypto);
     } catch {
       wipe(km.key);
+      await this.recordUnlockFailure();
       throw new Error('Incorrect password');
     }
+    await this.unlockGuard?.clear();
 
     // The work-factor upgrade must happen here, while the password is still in
     // scope: only the derived key is retained afterwards, so no later mutation
@@ -256,11 +278,6 @@ export class Keyring {
       if (seed == null) throw new NoWalletSeedError();
       const index = nextDerivationIndex(u.payload, 'tezos');
       ({ tz1, publicKey } = await deriveTezosIdentity(seed.mnemonic, index));
-      // Only reachable when the same key was separately imported — surface it
-      // rather than silently double-listing one address.
-      if (u.payload.accounts.some(a => a.kind === 'tezos' && a.tz1 === tz1)) {
-        throw new DuplicateAccountError(tz1);
-      }
       secret = { kind: 'derived', index };
     } else if (src.source === 'fresh') {
       mnemonic = newMnemonic();
@@ -280,6 +297,13 @@ export class Keyring {
       secret = { kind: 'edsk', value: trimmed };
     } else {
       throw new Error('Invalid source for Tezos account');
+    }
+
+    // Reject an address the vault already holds (a re-imported secret, or a
+    // derived index that collides with a separate import) rather than silently
+    // listing the same account twice.
+    if (u.payload.accounts.some(a => a.kind === 'tezos' && a.tz1 === tz1)) {
+      throw new DuplicateAccountError(tz1);
     }
 
     const account = newTezosAccount(this.crypto, tz1, publicKey, label);
@@ -318,6 +342,10 @@ export class Keyring {
     }
 
     const { address, publicKey, privateKey } = deriveEvmAccount(privateKeyHex);
+    // Reject a re-imported key that already exists (fresh keys can't collide).
+    if (u.payload.accounts.some(a => a.kind === 'evm' && a.address === address)) {
+      throw new DuplicateAccountError(address);
+    }
     const account = newEvmAccount(this.crypto, address, publicKey, label);
     await this.persist(addAccountToPayload(u.payload, account, { kind: 'evm-pk', value: privateKey }), u.km);
     return { accountId: account.id, account, privateKey: returnPriv };
@@ -464,6 +492,28 @@ export class Keyring {
   private requireUnlocked(): UnlockedKeyring {
     if (this.unlocked == null) throw new Error('Wallet is locked');
     return this.unlocked;
+  }
+
+  /** Refuse to even derive the key while a lockout window is active. */
+  private async assertNotThrottled(): Promise<void> {
+    if (this.unlockGuard == null) return;
+    const state = await this.unlockGuard.load();
+    if (state == null) return;
+    const remaining = state.lockoutUntil - Date.now();
+    if (remaining > 0) throw new UnlockThrottledError(remaining);
+  }
+
+  /** Bump the failure counter and, past the threshold, arm an exponential
+   *  (capped) lockout window. */
+  private async recordUnlockFailure(): Promise<void> {
+    if (this.unlockGuard == null) return;
+    const prev = (await this.unlockGuard.load())?.failedAttempts ?? 0;
+    const failedAttempts = prev + 1;
+    const over = failedAttempts - UNLOCK_FAIL_THRESHOLD;
+    const lockoutUntil = over > 0
+      ? Date.now() + Math.min(UNLOCK_BACKOFF_CAP_MS, UNLOCK_BACKOFF_BASE_MS * 2 ** (over - 1))
+      : 0;
+    await this.unlockGuard.save({ failedAttempts, lockoutUntil });
   }
 
   private async exportFromDisk(password: string): Promise<RevealedSecret> {

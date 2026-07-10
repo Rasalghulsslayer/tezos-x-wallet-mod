@@ -6,7 +6,7 @@
  * shell — only the contract lives here, so use cases stay platform-neutral.
  */
 
-import type { PendingOpView } from '@tezosx/relayer/tezos';
+import type { PendingOpView, PendingOpsStore } from '@tezosx/relayer/tezos';
 import type { SignerPort } from './signer-port';
 import type { ProviderPort } from './provider-port';
 import type { BalanceFetcher } from './balance-fetcher';
@@ -61,4 +61,8 @@ export interface PersistentPorts {
   sessionStore:  SessionStore;
   tokenStore:    TokenStore;
   notifications: NotificationPort;
+  /** Optional per-account store for cross-runtime resolution state, so a
+   *  tz1 account's pending synthetic→real hash mappings survive lock / switch
+   *  / SW eviction. The host scopes the returned store to the account id. */
+  pendingOpsStore?: (accountId: AccountId) => PendingOpsStore;
 }
