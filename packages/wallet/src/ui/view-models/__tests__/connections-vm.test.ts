@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { filterSessions, describeSessionAccount } from '../connections-vm';
-import type { StoredSession } from '../../../ports/session-store';
-import type { AccountSummary } from '../../../shared/messages';
+import type { StoredSession } from '@tezosx/wallet-core/ports/session-store';
+import type { AccountSummary } from '@tezosx/wallet-core/shared/messages';
 
 const session = (origin: string, accountId: string | undefined): StoredSession => ({
   origin,

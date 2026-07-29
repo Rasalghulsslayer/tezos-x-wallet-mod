@@ -1,4 +1,4 @@
-import type { ActivityItem } from '@/domain/activity';
+import type { ActivityItem } from '@tezosx/wallet-core/domain/activity';
 
 export type DayGroup = 'Today' | 'Yesterday' | 'Earlier';
 export const DAY_ORDER: readonly DayGroup[] = ['Today', 'Yesterday', 'Earlier'];

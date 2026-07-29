@@ -51,8 +51,10 @@ export default function Home() {
             evmAlias={relayer.evmAlias}
             activeInfo={relayer.activeInfo}
             providers={relayer.providers}
+            wcPairingUri={relayer.wcPairingUri}
             onConnect={relayer.connect}
             onDisconnect={relayer.disconnect}
+            onDismissWcPairing={relayer.dismissWcPairing}
           />
           <NetworkPanel
             chainId={relayer.chainId}

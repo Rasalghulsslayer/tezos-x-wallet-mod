@@ -27,6 +27,15 @@ export default [
     rules: sharedRules,
   },
   {
+    files: ['packages/core/src/**/*.ts'],
+    languageOptions: {
+      parser: tsparser,
+      parserOptions: { project: './packages/core/tsconfig.json' },
+    },
+    plugins: { '@typescript-eslint': tseslint },
+    rules: sharedRules,
+  },
+  {
     files: ['packages/relayer/extension/src/**/*.{ts,tsx}'],
     languageOptions: {
       parser: tsparser,

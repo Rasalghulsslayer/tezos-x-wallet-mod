@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Tezos X Playground
 
-## Getting Started
+A Next.js dApp for manually testing the Tezos X wallets against previewnet:
+connect a wallet, check chain id and balance, drive the Counter contract, and
+send native transfers.
 
-First, run the development server:
+## Run
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev            # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Connecting a wallet
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Chrome extension** (`@tezosx/wallet`): discovered via EIP-6963 / injected
+  `window.ethereum` — it appears in the wallet list automatically.
+- **Mobile wallet** (`@tezosx/wallet-mobile`): connects over WalletConnect v2.
+  Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_WC_PROJECT_ID`
+  (restart `next dev` after changing it — the value is inlined at build time).
+  Then pick "Tezos X Mobile (WalletConnect)" in the wallet list and scan the QR
+  from the mobile app (Connections → scan), or copy the `wc:` URI and paste it
+  into the app's connect sheet. The wallet must be unlocked before pairing.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Network
 
-## Learn More
+Everything targets Tezos X previewnet: EVM chain id `0x1f440` (128064), RPC
+`https://evm.previewnet.tezosx.nomadic-labs.com`. The Counter contract lives at
+`0x525982C267F4B93cCB075B9323B069A993a9DEd7`.
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Note: a transaction sent from a Tezos (tz1) account routes cross-runtime
+through the NAC gateway, and the hash returned to the dApp is a synthetic one
+the public RPC never indexes. Verify outcomes by re-reading state (the counter
+value, balances) rather than by looking the hash up in an explorer; allow
+~15-40 s for the cross-runtime path to land.

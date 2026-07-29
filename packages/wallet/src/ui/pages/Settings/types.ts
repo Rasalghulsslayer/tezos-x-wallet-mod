@@ -1,4 +1,4 @@
-import type { AccountId } from '@/domain/account';
+import type { AccountId } from '@tezosx/wallet-core/domain/account';
 
 export type Secret =
   | { kind: 'mnemonic'; value: string }

@@ -1,4 +1,4 @@
-import type { AccountId } from '../../domain/account';
+import type { AccountId } from '@tezosx/wallet-core/domain/account';
 import { Identicon } from './Identicon';
 import { Icon } from './Icon';
 import type { AccountRowVM } from '../view-models/account-switcher-vm';

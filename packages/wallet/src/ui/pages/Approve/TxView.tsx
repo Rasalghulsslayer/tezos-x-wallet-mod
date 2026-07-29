@@ -1,12 +1,10 @@
-import { useMemo } from 'react';
-import type { PendingRequest } from '@/shared/messages';
+import type { PendingRequest } from '@tezosx/wallet-core/shared/messages';
 import { Button } from '../../tx/Button';
 import { Line } from '../../tx/Line';
 import { truncAddr } from '../../tx/utils';
 import { ApprovalHeader } from './ApprovalHeader';
 import { ModerateRisk } from './ModerateRisk';
 import { PinnedChip } from './PinnedChip';
-import { hostnameOf } from './helpers';
 import type { AccountContext } from './types';
 
 export function TxView({
@@ -16,12 +14,11 @@ export function TxView({
   respond: (d: 'approve' | 'reject') => void;
   ctx:     AccountContext | null;
 }) {
-  const hostname = useMemo(() => hostnameOf(pending.origin), [pending.origin]);
   const cross    = pending.crossRuntime;
 
   return (
     <div className="tx-approval">
-      <ApprovalHeader hostname={hostname} subtitle="Transaction request" accent="purple" />
+      <ApprovalHeader origin={pending.origin} subtitle="Transaction request" accent="purple" />
 
       <div className="tx-page-scroll" style={{ padding: 16 }}>
         <PinnedChip ctx={ctx} />
@@ -60,8 +57,8 @@ export function TxView({
               <Line label="Debit (mutez)"   value={cross.mutezValue} />
             </div>
             <div className="tx-cross-note">
-              Your tz1 signs an L1 operation that the kernel forwards to the EVM
-              runtime — cross-runtime via NAC gateway.
+              Your tz1 signs a Michelson-runtime operation that the kernel forwards
+              to the EVM runtime — cross-runtime via NAC gateway.
             </div>
           </>
         )}

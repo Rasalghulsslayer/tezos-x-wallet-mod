@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { accountSwitcherVM } from '../account-switcher-vm';
-import type { VaultStateUnlocked, AccountSummary } from '../../../shared/messages';
+import type { VaultStateUnlocked, AccountSummary } from '@tezosx/wallet-core/shared/messages';
 
 const tezosSummary = (id: string, createdAt: number, label?: string): AccountSummary => ({
   id, kind: 'tezos', label,

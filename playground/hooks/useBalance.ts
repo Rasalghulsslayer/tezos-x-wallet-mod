@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { TZKT_API_BASE } from '@/lib/network';
+import { TEZLINK_EVM_RPC, TZKT_API_BASE } from '@/lib/network';
 
 const REFRESH_MS = 8000;
 const MUTEZ_TO_WEI_FACTOR = 1_000_000_000_000n;
@@ -17,14 +17,24 @@ async function fetchTz1Balance(tz1: string): Promise<bigint | null> {
   }
 }
 
+// Direct JSON-RPC read: a public balance query needs no wallet, and going
+// through an injected provider would break for wallets connected over
+// WalletConnect (no window.ethereum).
 async function fetchEvmBalance(address: string): Promise<bigint | null> {
-  if (typeof window === 'undefined' || !window.ethereum) return null;
   try {
-    const hex = await window.ethereum.request({
-      method: 'eth_getBalance',
-      params: [address, 'latest'],
-    }) as string;
-    return BigInt(hex);
+    const res = await fetch(TEZLINK_EVM_RPC, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'eth_getBalance',
+        params: [address, 'latest'],
+      }),
+    });
+    const json = await res.json() as { result?: string };
+    if (!json.result) return null;
+    return BigInt(json.result);
   } catch {
     return null;
   }

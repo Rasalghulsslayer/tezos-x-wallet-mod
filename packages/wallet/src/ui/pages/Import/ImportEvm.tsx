@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { normaliseEvmPrivateKey } from '@/shared/evm-signing';
+import { normaliseEvmPrivateKey } from '@tezosx/wallet-core/shared/evm-signing';
 import { sendPopupRequest } from '@/shared/messaging';
 import { Button } from '../../tx/Button';
 import { TopBar } from '../../tx/TopBar';

@@ -34,12 +34,46 @@ async function persist(): Promise<void> {
 
 // ── Message handler ───────────────────────────────────────────────────────────
 
+/**
+ * The web origin a message came from, or null for the extension's own popup.
+ * A content-script message carries a tab and the page URL; a message from an
+ * extension page (the popup) has no tab and is treated as trusted first-party
+ * UI. Returns undefined when a content-script sender can't be resolved to an
+ * origin, which the caller treats as untrusted.
+ */
+function senderOrigin(
+  sender: chrome.runtime.MessageSender,
+): string | null | undefined {
+  if (sender.tab == null) return null;
+  try {
+    return new URL(sender.url ?? sender.tab.url ?? '').origin;
+  } catch {
+    return undefined;
+  }
+}
+
 chrome.runtime.onMessage.addListener(
   (
     msg: BackgroundRequest,
-    _sender: chrome.runtime.MessageSender,
+    sender: chrome.runtime.MessageSender,
     sendResponse: (r: BackgroundResponse) => void,
   ): boolean => {
+    // Only accept messages from this extension's own contexts (content scripts
+    // and the popup); anything else — another extension, an unresolved sender —
+    // is refused with no response.
+    if (sender.id !== chrome.runtime.id) return false;
+    const fromOrigin = senderOrigin(sender);
+    if (fromOrigin === undefined) return false;
+
+    // A page's content script may only read or mutate the session for its own
+    // origin. The popup (fromOrigin === null) is trusted UI and may act on any.
+    if (
+      fromOrigin !== null &&
+      (msg.type === 'SESSION_UPDATE' || msg.type === 'DISCONNECT') &&
+      msg.origin !== fromOrigin
+    ) {
+      return false;
+    }
 
     void ready.then(async () => {
       switch (msg.type) {
@@ -55,7 +89,14 @@ chrome.runtime.onMessage.addListener(
           break;
 
         case 'GET_SESSIONS':
-          sendResponse({ type: 'SESSIONS', sessions: Array.from(sessions.values()) });
+          // A content script sees only its own origin's session; the popup
+          // sees the full list.
+          sendResponse({
+            type: 'SESSIONS',
+            sessions: fromOrigin === null
+              ? Array.from(sessions.values())
+              : Array.from(sessions.values()).filter((s) => s.origin === fromOrigin),
+          });
           break;
 
         case 'DISCONNECT': {

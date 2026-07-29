@@ -6,7 +6,7 @@
  * Outbound to page:       TEZOSX_WALLET_RESPONSE, TEZOSX_WALLET_EVENT
  */
 
-import type { EthereumRequest, ContentPush, WalletResponse } from '../shared/messages';
+import type { EthereumRequest, ContentPush, WalletResponse } from '@tezosx/wallet-core/shared/messages';
 
 // ── Page → SW ─────────────────────────────────────────────────────────────────
 

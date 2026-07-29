@@ -4,7 +4,7 @@ import { CopyAddr } from './CopyAddr';
 import { Badge } from './Badge';
 import { truncAddr } from './utils';
 import { toast } from './Toast';
-import type { AccountCardVM } from '../view-models/account-card-vm';
+import type { AccountCardVM } from '@tezosx/wallet-core/view-models/account-card-vm';
 
 export type AccountVariant = 'split' | 'unified' | 'subtle' | 'toggle' | 'vm';
 
@@ -46,7 +46,7 @@ export function AccountCard({
           </div>
           <div className="addr-row">
             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="tx-badge cyan">L2</span>
+              <span className="tx-badge cyan">EVM</span>
               <CopyAddr addr={vm.primary.address} len={addrLen} small />
             </span>
             <Icon name="copy" size={13} color="var(--tx-fg-subtle)" />
@@ -76,7 +76,7 @@ export function AccountCard({
         </div>
         <div className="addr-row">
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span className="tx-badge purple">L1</span>
+            <span className="tx-badge purple">Michelson</span>
             <CopyAddr addr={tz1} len={addrLen} small />
           </span>
           <Icon name="copy" size={13} color="var(--tx-fg-subtle)" />
@@ -84,7 +84,7 @@ export function AccountCard({
         <div className="spine" />
         <div className="addr-row">
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span className="tx-badge cyan">L2</span>
+            <span className="tx-badge cyan">EVM</span>
             <CopyAddr addr={eth} len={addrLen} small />
           </span>
           <Icon name="copy" size={13} color="var(--tx-fg-subtle)" />
@@ -106,8 +106,8 @@ export function AccountCard({
             </div>
           </div>
           <div className="tx-runtime-toggle">
-            <button className={`l1 ${runtime === 'l1' ? 'on' : ''}`} onClick={() => onRuntime('l1')}>L1</button>
-            <button className={`l2 ${runtime === 'l2' ? 'on' : ''}`} onClick={() => onRuntime('l2')}>L2</button>
+            <button className={`l1 ${runtime === 'l1' ? 'on' : ''}`} onClick={() => onRuntime('l1')}>Michelson</button>
+            <button className={`l2 ${runtime === 'l2' ? 'on' : ''}`} onClick={() => onRuntime('l2')}>EVM</button>
           </div>
         </div>
         <CopyAddr addr={addr} len={addrLen} />
@@ -136,7 +136,7 @@ export function AccountCard({
   return (
     <div className="tx-account-card">
       <div className="tx-account-side l1" onClick={copy(tz1, 'tz1')}>
-        <div className="label"><span className="dot" />Michelson</div>
+        <div className="label"><span className="dot" />Michelson runtime</div>
         <div className="addr">
           {truncAddr(tz1, addrLen)}
           <Icon name="copy" size={11} color="var(--tx-fg-subtle)" />

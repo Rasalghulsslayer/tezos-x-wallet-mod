@@ -1,12 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import { Keyring } from '../keyring';
-import type { VaultStore, EncryptedVault } from '../../ports/vault-store';
+import { Keyring, UnlockThrottledError } from '@tezosx/wallet-core/keyring';
+import { WebCryptoPort } from '../../adapters/crypto/web-crypto-port';
+import type { VaultStore, EncryptedVault } from '@tezosx/wallet-core/ports/vault-store';
+import type { UnlockGuardStore, UnlockGuardState } from '@tezosx/wallet-core/ports/unlock-guard-store';
 
 class MemoryVaultStore implements VaultStore {
   vault: EncryptedVault | undefined;
   async load() { return this.vault; }
   async save(v: EncryptedVault) { this.vault = v; }
   async clear() { this.vault = undefined; }
+}
+
+class MemoryUnlockGuard implements UnlockGuardStore {
+  state: UnlockGuardState | undefined;
+  async load() { return this.state; }
+  async save(s: UnlockGuardState) { this.state = s; }
+  async clear() { this.state = undefined; }
 }
 
 const PASSWORD = 'correct-horse-battery';
@@ -34,7 +43,7 @@ async function forgeVault(payload: unknown, password: string): Promise<Encrypted
 describe('keyring — vault crypto', () => {
   it('unlock rejects a wrong password and accepts the right one', async () => {
     const store = new MemoryVaultStore();
-    const k = new Keyring(store);
+    const k = new Keyring(store, new WebCryptoPort());
     await k.create(PASSWORD);
     k.lock();
 
@@ -45,7 +54,7 @@ describe('keyring — vault crypto', () => {
 
   it('rejects a tampered ciphertext (AES-GCM authentication)', async () => {
     const store = new MemoryVaultStore();
-    const k = new Keyring(store);
+    const k = new Keyring(store, new WebCryptoPort());
     await k.create(PASSWORD);
     k.lock();
 
@@ -57,9 +66,9 @@ describe('keyring — vault crypto', () => {
     await expect(k.unlock(PASSWORD)).rejects.toThrow(/Incorrect password/);
   });
 
-  it('uses a fresh random salt and IV on every save', async () => {
+  it('re-seals with a fresh IV while pinning the salt of the retained key', async () => {
     const store = new MemoryVaultStore();
-    const k = new Keyring(store);
+    const k = new Keyring(store, new WebCryptoPort());
     await k.create(PASSWORD);
     const first = store.vault!;
     // Hardened to the OWASP/MetaMask floor (#77). Old 200k vaults still unlock
@@ -68,20 +77,64 @@ describe('keyring — vault crypto', () => {
 
     await k.renameAccount(k.getUnlocked()!.account.id, 'Renamed'); // forces a re-encrypt
     const second = store.vault!;
-    expect(second.salt).not.toBe(first.salt);
+    // Mutations re-seal with the key derived at unlock: GCM demands a fresh
+    // IV per encryption, while the salt (which only defends the KDF) stays
+    // pinned — re-salting would require retaining the password to re-derive.
     expect(second.iv).not.toBe(first.iv);
+    expect(second.salt).toBe(first.salt);
   });
 
-  it('rejects a vault whose decrypted payload is not version 2 (parseV2 guard)', async () => {
+  it('throttles unlock after repeated wrong passwords, then clears on success (KEY-2)', async () => {
     const store = new MemoryVaultStore();
-    const k = new Keyring(store);
+    const guard = new MemoryUnlockGuard();
+    const k = new Keyring(store, new WebCryptoPort(), guard);
+    await k.create(PASSWORD);
+    k.lock();
+
+    // The first few wrong attempts are only counted (no lockout yet).
+    for (let i = 0; i < 5; i++) {
+      await expect(k.unlock('wrong')).rejects.toThrow(/Incorrect password/);
+    }
+    expect(guard.state?.failedAttempts).toBe(5);
+    expect(guard.state?.lockoutUntil ?? 0).toBe(0);
+
+    // The 6th wrong attempt arms a lockout; the next attempt is refused
+    // outright (throttled) rather than reaching the KDF.
+    await expect(k.unlock('wrong')).rejects.toThrow(/Incorrect password/);
+    expect(guard.state!.lockoutUntil).toBeGreaterThan(Date.now());
+    await expect(k.unlock(PASSWORD)).rejects.toThrow(UnlockThrottledError);
+
+    // Clear the window (simulate it elapsing) → the right password unlocks and
+    // resets the guard.
+    guard.state = { failedAttempts: 6, lockoutUntil: 0 };
+    const { accountId } = await k.unlock(PASSWORD);
+    expect(accountId).toBeTruthy();
+    expect(guard.state).toBeUndefined();
+  });
+
+  it('lock zeroizes the retained vault key', async () => {
+    const store = new MemoryVaultStore();
+    const k = new Keyring(store, new WebCryptoPort());
+    await k.create(PASSWORD);
+    const key = k.getUnlocked()!.km.key;
+    expect(key.some((b) => b !== 0)).toBe(true);
+
+    k.lock();
+    expect(key.every((b) => b === 0)).toBe(true);
+  });
+
+  it('rejects vault payload versions it does not know (1 and 4)', async () => {
+    const store = new MemoryVaultStore();
+    const k = new Keyring(store, new WebCryptoPort());
     store.vault = await forgeVault({ version: 1, accounts: [] }, PASSWORD);
+    await expect(k.unlock(PASSWORD)).rejects.toThrow(/Vault format unsupported/);
+    store.vault = await forgeVault({ version: 4, accounts: [] }, PASSWORD);
     await expect(k.unlock(PASSWORD)).rejects.toThrow(/Vault format unsupported/);
   });
 
-  it('rejects a v2 vault whose accounts field is not an array (parseV2 guard)', async () => {
+  it('rejects a vault whose accounts field is not an array (parse guard)', async () => {
     const store = new MemoryVaultStore();
-    const k = new Keyring(store);
+    const k = new Keyring(store, new WebCryptoPort());
     store.vault = await forgeVault({ version: 2, accounts: 'nope' }, PASSWORD);
     await expect(k.unlock(PASSWORD)).rejects.toThrow(/Vault format unsupported/);
   });

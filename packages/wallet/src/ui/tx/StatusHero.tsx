@@ -1,17 +1,19 @@
 import { useState } from 'react';
-import type { TxStatus } from '@/domain/tx-status';
-import type { Asset } from '@/domain/asset';
-import { TEZOS_L1_FINALITY_BLOCKS } from '@/shared/constants';
+import type { TxStatus } from '@tezosx/wallet-core/domain/tx-status';
+import type { Asset } from '@tezosx/wallet-core/domain/asset';
+import { TEZOS_L1_FINALITY_BLOCKS } from '@tezosx/wallet-core/shared/constants';
 
 interface Props {
-  status:  TxStatus;
-  runtime: 'l1' | 'l2';
-  amount:  string;
-  asset:   Asset;
-  to:      string;
+  status:     TxStatus;
+  runtime:    'l1' | 'l2';
+  sourceKind: 'tezos' | 'evm';
+  cross:      boolean;
+  amount:     string;
+  asset:      Asset;
+  to:         string;
 }
 
-export function StatusHero({ status, runtime, amount, asset, to }: Props) {
+export function StatusHero({ status, runtime, sourceKind, cross, amount, asset, to }: Props) {
   const variant = visualVariant(status);
   return (
     <div className="tx-status-hero">
@@ -21,11 +23,22 @@ export function StatusHero({ status, runtime, amount, asset, to }: Props) {
         <div className="tx-status-hero-amt">
           <span className="num">{amount}</span> {asset.symbol} → {to}
         </div>
-        <div className="tx-status-hero-route">{routeFor(status, runtime)}</div>
+        <div className="tx-status-hero-route">{routeFor(status, sourceKind, cross)}</div>
       </div>
       <EtaChip status={status} runtime={runtime} />
     </div>
   );
+}
+
+/**
+ * Compact label for the actual transfer path. The destination runtime alone is
+ * ambiguous — an EVM-source same-runtime send lands on L2 without touching the
+ * NAC gateway — so the route is derived from the source account kind and
+ * whether it crosses runtimes, matching the four cases of the Send review lane.
+ */
+function routeLabel(sourceKind: 'tezos' | 'evm', cross: boolean): string {
+  if (sourceKind === 'tezos') return cross ? 'Michelson → EVM · NAC' : 'Michelson native';
+  return cross ? 'EVM → Michelson · NAC' : 'Tezos X EVM native';
 }
 
 type Variant = 'broadcasting' | 'included' | 'finalized' | 'failed';
@@ -50,13 +63,13 @@ function titleFor(status: TxStatus): string {
   }
 }
 
-function routeFor(status: TxStatus, runtime: 'l1' | 'l2'): string {
-  const runtimeLabel = runtime === 'l1' ? 'L1 native' : 'L1 → L2 · NAC';
-  if (status.stage === 'broadcasting') return `${runtimeLabel} · Tezos X Previewnet`;
+function routeFor(status: TxStatus, sourceKind: 'tezos' | 'evm', cross: boolean): string {
+  const label = routeLabel(sourceKind, cross);
+  if (status.stage === 'broadcasting') return `${label} · Tezos X Previewnet`;
   if (status.stage === 'included')     return `Block #${status.blockLevel.toLocaleString()}`;
-  if (status.stage === 'finalized')    return `Finalized · ${runtimeLabel}`;
-  if (status.stage === 'failed')       return `${runtimeLabel} · ${status.reason}`;
-  return `${runtimeLabel} · status unavailable`;
+  if (status.stage === 'finalized')    return `Finalized · ${label}`;
+  if (status.stage === 'failed')       return `${label} · ${status.reason}`;
+  return `${label} · status unavailable`;
 }
 
 function glyphFor(variant: Variant) {
@@ -115,7 +128,7 @@ function EtaChip({ status, runtime }: { status: TxStatus; runtime: 'l1' | 'l2' }
   const text =
     status.stage === 'finalized' ? finalizedText(status, runtime, startedAt)
     : status.stage === 'included' ? (runtime === 'l2'
-        ? `Finalizing · waiting on L1 inclusion`
+        ? `Finalizing · anchoring on Tezos L1`
         : `Finalizing · 1 / ${TEZOS_L1_FINALITY_BLOCKS} attestations`)
     : 'Usually included in ~10 s';
 
@@ -145,7 +158,7 @@ function finalizedText(
   if (runtime === 'l2') {
     // L2 finality = inclusion in a finalised L1 block. The "X confirmations"
     // framing of Ethereum mainnet doesn't apply on Tezos X.
-    return `Final on L1 · ${formatElapsed(startedAt)} total`;
+    return `Anchored on Tezos L1 · ${formatElapsed(startedAt)} total`;
   }
   const n = status.confirmations ?? TEZOS_L1_FINALITY_BLOCKS;
   return `${n} attestation${n === 1 ? '' : 's'} · ${formatElapsed(startedAt)} total`;

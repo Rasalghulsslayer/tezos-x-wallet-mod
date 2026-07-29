@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Loader2, Wallet, LogOut, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { WcPairing } from '@/components/WcPairing';
 import { formatAddress } from '@/lib/format';
 import { toast } from 'sonner';
 
@@ -13,8 +14,10 @@ interface ConnectPanelProps {
   evmAlias:     string | null;
   activeInfo:   Eip6963ProviderInfo | null;
   providers:    Eip6963ProviderDetail[];
+  wcPairingUri: string | null;
   onConnect:    (p?: Eip6963ProviderDetail) => void;
   onDisconnect: () => void;
+  onDismissWcPairing: () => void;
 }
 
 function CopyRow({ label, value, color }: { label: string; value: string; color: string }) {
@@ -83,7 +86,8 @@ function ConnectSkeleton() {
 }
 
 export function ConnectPanel({
-  isConnected, isConnecting, tz1Address, evmAlias, activeInfo, providers, onConnect, onDisconnect,
+  isConnected, isConnecting, tz1Address, evmAlias, activeInfo, providers,
+  wcPairingUri, onConnect, onDisconnect, onDismissWcPairing,
 }: ConnectPanelProps) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
@@ -122,6 +126,10 @@ export function ConnectPanel({
                 />
               ))}
             </div>
+          )}
+
+          {wcPairingUri != null && mounted && (
+            <WcPairing uri={wcPairingUri} onDismiss={onDismissWcPairing} />
           )}
 
           {isConnecting && mounted && (

@@ -2,9 +2,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { Keyring } from '../../src/background/keyring';
-import { newMnemonic, deriveTezosIdentity } from '../../src/shared/seed';
-import type { EncryptedVault, VaultStore } from '../../src/ports/vault-store';
+import { Keyring } from '@tezosx/wallet-core/keyring';
+import { newMnemonic, deriveTezosIdentity } from '@tezosx/wallet-core/shared/seed';
+import type { EncryptedVault, VaultStore } from '@tezosx/wallet-core/ports/vault-store';
+import { WebCryptoPort } from '../../src/adapters/crypto/web-crypto-port';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = dirname(__filename);
@@ -12,7 +13,10 @@ const __dirname  = dirname(__filename);
 const WALLET_ROOT  = resolve(__dirname, '../..');
 const FIXTURES_DIR = resolve(WALLET_ROOT, 'e2e/fixtures/vault');
 const SEED_PATH    = resolve(FIXTURES_DIR, 'seed.json');
-const VAULT_PATH   = resolve(FIXTURES_DIR, 'vault-v2.encrypted.json');
+// The committed vault-v2.encrypted.json stays frozen: the unlock spec opening
+// it proves the v2 → v3 upgrade-on-read end-to-end in a real extension. This
+// script emits the current payload version under its own name.
+const VAULT_PATH   = resolve(FIXTURES_DIR, 'vault-v3.encrypted.json');
 
 const TEST_PASSWORD = 'test-password-only-for-e2e';
 const SEED_WARNING  = 'Test-only material. Never load this seed on mainnet or fund it with real value.';
@@ -71,7 +75,7 @@ async function main(): Promise<void> {
 
   const seed    = await loadOrGenerateSeed();
   const store   = new InMemoryVaultStore();
-  const keyring = new Keyring(store);
+  const keyring = new Keyring(store, new WebCryptoPort());
   await keyring.importFromMnemonic(seed.mnemonic, seed.password);
 
   const vault = await store.load();

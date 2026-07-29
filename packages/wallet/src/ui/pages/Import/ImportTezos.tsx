@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { isValidEdsk, isValidMnemonic } from '@/domain/validation';
+import { isValidEdsk, isValidMnemonic } from '@tezosx/wallet-core/domain/validation';
 import { sendPopupRequest } from '@/shared/messaging';
 import { Button } from '../../tx/Button';
 import { TopBar } from '../../tx/TopBar';

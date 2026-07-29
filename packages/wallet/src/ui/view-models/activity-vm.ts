@@ -7,8 +7,8 @@
  * than a pre-rendered title string.
  */
 
-import { formatTokenAmount, shortAddr } from '../../shared/format';
-import type { ActivityItem } from '../../domain/activity';
+import { formatTokenAmount, shortAddr } from '@tezosx/wallet-core/shared/format';
+import type { ActivityItem } from '@tezosx/wallet-core/domain/activity';
 
 export type RuntimeBadge = 'l1' | 'l2' | 'cross';
 

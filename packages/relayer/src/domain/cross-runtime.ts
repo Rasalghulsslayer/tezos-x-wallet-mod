@@ -14,6 +14,12 @@ export interface GatewayCall {
   entrypoint:   'call' | 'call_evm';
   michelineArg: MichelsonV1Expression;
   mutezAmount:  bigint;
+  /**
+   * Human-readable ABI signature resolved from the 4-byte selector (e.g.
+   * "transfer(address,uint256)"). Present only for `call_evm`; a bare native
+   * transfer on the `call` entrypoint has no method and leaves this undefined.
+   */
+  methodSig?:   string;
 }
 
 export interface PrecompileCall {
@@ -33,4 +39,21 @@ export interface PendingOpView {
   to:            string;
   fromBlock:     string;
   broadcastedAt: number;
+}
+
+/**
+ * A broadcast tz1→0x gateway op, tracked until its synthetic hash resolves to
+ * the kernel-synthesized real EVM hash. Held per synthetic hash by the
+ * RelayerProvider and persisted (see PendingOpsStore) so resolution survives a
+ * lock / account switch / MV3 service-worker eviction. Non-secret: opHashes and
+ * a destination/value, nothing that could move funds.
+ */
+export interface PendingOp {
+  l1OpHash:      string;
+  from:          string;    // EVM alias of the sender (informational)
+  to:            string;    // destination — matched against the synthesized tx's `to`
+  value:         string;    // 0x-prefixed wei requested — matched against the tx's `value`
+  fromBlock:     string;    // 0x-prefixed hex: EVM block number at send time
+  broadcastedAt: number;    // Date.now() at submission, exposed via listPendingOps
+  realHash?:     string;    // cached real EVM tx hash once resolved
 }

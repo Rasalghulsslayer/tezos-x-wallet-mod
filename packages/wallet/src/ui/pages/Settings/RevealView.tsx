@@ -1,6 +1,6 @@
-import type { AccountSummary } from '@/shared/messages';
-import { formatError } from '@/domain/error';
-import { shortAddr } from '@/shared/format';
+import type { AccountSummary } from '@tezosx/wallet-core/shared/messages';
+import { formatError } from '@tezosx/wallet-core/domain/error';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
 import { Button } from '../../tx/Button';
 import { Icon } from '../../tx/Icon';
 import { ErrorInline } from '../../tx/ErrorInline';

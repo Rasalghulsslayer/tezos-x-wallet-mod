@@ -6,11 +6,11 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { VaultState } from '@/shared/messages';
-import type { RegisteredToken } from '@/domain/token';
+import type { VaultState } from '@tezosx/wallet-core/shared/messages';
+import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
 import { sendPopupRequest } from '@/shared/messaging';
-import { shortAddr } from '@/shared/format';
-import { formatError } from '@/domain/error';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
+import { formatError } from '@tezosx/wallet-core/domain/error';
 import { TopBar } from '../tx/TopBar';
 import { Button } from '../tx/Button';
 import { Icon } from '../tx/Icon';

@@ -19,17 +19,19 @@
     "pretest:e2e": "npm run build"
   },
   "dependencies": {
+    "@noble/ciphers": "1.2.1",
     "@noble/curves": "2.2.0",
     "@noble/hashes": "2.2.0",
-    "@scure/bip32": "^2.2.0",
     "@scure/bip39": "^2.2.0",
     "@taquito/rpc": "^24.3.0",
     "@taquito/signer": "^24.3.0",
     "@taquito/taquito": "^24.3.0",
     "@tezosx/relayer": "^0.6.0",
+    "@tezosx/wallet-core": "^0.3.0",
     "buffer": "^6.0.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "react-qr-code": "^2.2.0",
     "react-router-dom": "^7.14.2"
   },
   "devDependencies": {

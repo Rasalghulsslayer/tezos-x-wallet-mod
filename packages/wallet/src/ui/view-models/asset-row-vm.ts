@@ -4,8 +4,8 @@
  * Pure — no I/O.
  */
 
-import type { Asset } from '../../domain/asset';
-import { formatTokenAmount } from '../../shared/format';
+import type { Asset } from '@tezosx/wallet-core/domain/asset';
+import { formatTokenAmount } from '@tezosx/wallet-core/shared/format';
 
 export interface AssetRowVM {
   /** Stable React key. For XTZ: 'xtz:l1' / 'xtz:l2'; for ERC-20: 'erc20:<lowercased-address>'. */

@@ -7,9 +7,9 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import type { PendingRequest, VaultState } from '@/shared/messages';
+import type { PendingRequest, VaultState } from '@tezosx/wallet-core/shared/messages';
 import { sendApproveRequest, sendPopupRequest } from '@/shared/messaging';
-import { formatError, makeError } from '@/domain/error';
+import { formatError, makeError } from '@tezosx/wallet-core/domain/error';
 import { Button } from '../../tx/Button';
 import { Icon } from '../../tx/Icon';
 import { ErrorCard } from '../../tx/ErrorCard';

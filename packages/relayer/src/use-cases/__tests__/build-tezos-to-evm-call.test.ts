@@ -3,6 +3,7 @@ import {
   buildTezosToEvmCall,
   SubMutezPrecisionError,
   UnknownSelectorError,
+  InvalidDestinationError,
 } from '../build-tezos-to-evm-call';
 import { NAC_CONTRACT } from '../../shared/constants';
 
@@ -13,6 +14,17 @@ const TO = '0xdEAD000000000000000042000000000000000000';
 afterEach(() => vi.restoreAllMocks());
 
 describe('buildTezosToEvmCall — wei→mutez conversion & entrypoint routing', () => {
+  it('rejects a non-address destination before signing (audit VAL-4)', async () => {
+    // A dApp-supplied `to` that is not a canonical 0x address must never reach
+    // the signed Micheline (where display truncation would mask it).
+    await expect(buildTezosToEvmCall({ to: 'http://evil/../drain' }))
+      .rejects.toBeInstanceOf(InvalidDestinationError);
+    await expect(buildTezosToEvmCall({ to: '0x1234' }))
+      .rejects.toBeInstanceOf(InvalidDestinationError);
+    await expect(buildTezosToEvmCall({ to: `${TO} ` }))   // trailing space
+      .rejects.toBeInstanceOf(InvalidDestinationError);
+  });
+
   it('bare transfer with an exact-mutez value → generic `call` entrypoint (HTTP %call), divided mutez', async () => {
     // 0x38d7ea4c68000 = 1e15 wei = exactly 1000 mutez (1e15 / 1e12).
     const call = await buildTezosToEvmCall({ to: TO, value: '0x38d7ea4c68000' });
@@ -68,6 +80,14 @@ describe('buildTezosToEvmCall — wei→mutez conversion & entrypoint routing', 
     expect(call.entrypoint).toBe('call_evm');
     // The human-readable signature is embedded verbatim in the signed Micheline.
     expect(JSON.stringify(call.michelineArg)).toContain('transfer(address,uint256)');
+    // …and surfaced as a field so the approval UI can name the method (VAL-5).
+    expect(call.methodSig).toBe('transfer(address,uint256)');
+  });
+
+  it('bare transfer leaves methodSig undefined (no ABI method on the `call` path) (VAL-5)', async () => {
+    const call = await buildTezosToEvmCall({ to: TO, value: '0x38d7ea4c68000' });
+    expect(call.entrypoint).toBe('call');
+    expect(call.methodSig).toBeUndefined();
   });
 
   it('unknown selector → UnknownSelectorError (allow-list gate)', async () => {

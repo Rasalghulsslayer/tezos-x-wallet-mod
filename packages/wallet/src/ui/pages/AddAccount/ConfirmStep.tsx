@@ -1,6 +1,6 @@
-import { MAX_LABEL_LENGTH } from '@/shared/constants';
-import { formatError } from '@/domain/error';
-import { shortAddr } from '@/shared/format';
+import { MAX_LABEL_LENGTH } from '@tezosx/wallet-core/shared/constants';
+import { formatError } from '@tezosx/wallet-core/domain/error';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
 import { Identicon } from '../../tx/Identicon';
 import { Icon } from '../../tx/Icon';
 import { EVM_LABEL_CHIPS, TEZOS_LABEL_CHIPS, type Pick, type Preview } from './types';
@@ -59,12 +59,12 @@ export function ConfirmStep({
             {isTezos && preview?.primary != null && (
               <>
                 <div className="ah-addr">
-                  <span className="badge l1">L1</span>
+                  <span className="badge l1">Michelson</span>
                   <span className="v">{shortAddr(preview.primary, 8, 6)}</span>
                 </div>
                 {preview.secondary != null && (
                   <div className="ah-addr">
-                    <span className="badge l2">L2</span>
+                    <span className="badge l2">EVM</span>
                     <span className="v">{shortAddr(preview.secondary, 8, 6)}</span>
                   </div>
                 )}
@@ -72,7 +72,7 @@ export function ConfirmStep({
             )}
             {!isTezos && preview?.primary != null && (
               <div className="ah-addr">
-                <span className="badge l2">L2</span>
+                <span className="badge l2">EVM</span>
                 <span className="v">{shortAddr(preview.primary, 8, 6)}</span>
               </div>
             )}

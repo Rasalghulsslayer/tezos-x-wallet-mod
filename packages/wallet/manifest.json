@@ -4,7 +4,7 @@
   "version": "0.12.0",
   "description": "Standalone Tezos wallet with built-in TezosX relayer for Tezos X EVM dApps",
 
-  "permissions": ["storage", "tabs", "sidePanel"],
+  "permissions": ["storage", "tabs", "sidePanel", "idle", "alarms"],
 
   "side_panel": {
     "default_path": "popup.html?mode=side"

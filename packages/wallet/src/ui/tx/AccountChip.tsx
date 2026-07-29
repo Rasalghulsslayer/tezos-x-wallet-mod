@@ -6,8 +6,8 @@
  */
 
 import { Identicon } from './Identicon';
-import { shortAddr } from '../../shared/format';
-import type { AccountSummary } from '../../shared/messages';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
+import type { AccountSummary } from '@tezosx/wallet-core/shared/messages';
 
 export function AccountChip({
   account,

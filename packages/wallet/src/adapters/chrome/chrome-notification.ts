@@ -4,8 +4,8 @@
  * Failures are logged and swallowed — the toolbar badge is never critical.
  */
 
-import type { NotificationPort } from '../../ports/notification-port';
-import { BADGE_BG_COLOR } from '../../shared/constants';
+import type { NotificationPort } from '@tezosx/wallet-core/ports/notification-port';
+import { BADGE_BG_COLOR } from '@tezosx/wallet-core/shared/constants';
 
 export class ChromeNotificationPort implements NotificationPort {
   async setPendingCount(count: number): Promise<void> {

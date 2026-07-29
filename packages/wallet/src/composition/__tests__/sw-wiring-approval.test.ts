@@ -1,14 +1,17 @@
-import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { Keyring } from '../../background/keyring';
-import { ApprovalQueue } from '../../background/approval-queue';
-import { ContainerCache } from '../container-cache';
-import { dispatch, type SwDeps } from '../sw-wiring';
-import type { ContentPush } from '../../shared/messages';
-import type { VaultStore, EncryptedVault } from '../../ports/vault-store';
-import type { SessionStore, StoredSession } from '../../ports/session-store';
-import type { TokenStore } from '../../ports/token-store';
-import type { NotificationPort } from '../../ports/notification-port';
-import type { RegisteredToken } from '../../domain/token';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { Keyring } from '@tezosx/wallet-core/keyring';
+import { WebCryptoPort } from '../../adapters/crypto/web-crypto-port';
+import { ApprovalQueue } from '@tezosx/wallet-core/approval-queue';
+import { ContainerCache } from '@tezosx/wallet-core/composition/container-cache';
+import { dispatch, type SwDeps } from '@tezosx/wallet-core/composition/sw-wiring';
+import type { ContentPush } from '@tezosx/wallet-core/shared/messages';
+import type { VaultStore, EncryptedVault } from '@tezosx/wallet-core/ports/vault-store';
+import type { SessionStore, StoredSession } from '@tezosx/wallet-core/ports/session-store';
+import type { TokenStore } from '@tezosx/wallet-core/ports/token-store';
+import type { NotificationPort } from '@tezosx/wallet-core/ports/notification-port';
+import type { ClassifiedSource } from '@tezosx/wallet-core/ports/message-source';
+import type { ApprovalPresenter } from '@tezosx/wallet-core/ports/approval-presenter';
+import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
 
 class MemoryVault implements VaultStore {
   private v: EncryptedVault | undefined;
@@ -34,16 +37,19 @@ class MemoryTokens implements TokenStore {
 }
 
 const stubNotifications: NotificationPort = { async setPendingCount() {} };
+// dispatch is chrome-free and the queue takes an injected presenter, so this
+// suite no longer needs a chrome stub. The presenter is a no-op: tests resolve
+// pending requests directly via approvalQueue.resolve.
+const stubPresenter: ApprovalPresenter = { async open() { return undefined; }, close() {} };
 const PASSWORD    = 'correct-horse-battery';
-const OWN_EXT_ID  = 'test-ext-id';
 
 async function setupHarness() {
-  const keyring = new Keyring(new MemoryVault());
+  const keyring = new Keyring(new MemoryVault(), new WebCryptoPort());
   await keyring.create(PASSWORD);
   const broadcasts: ContentPush[] = [];
   const deps: SwDeps = {
     keyring,
-    approvalQueue:   new ApprovalQueue(stubNotifications),
+    approvalQueue:   new ApprovalQueue(stubNotifications, stubPresenter),
     persistentPorts: { vaultStore: new MemoryVault(), sessionStore: new MemorySessions(), tokenStore: new MemoryTokens(), notifications: stubNotifications },
     state:           { container: null, evmAlias: null },
     containerCache:  new ContainerCache(),
@@ -53,30 +59,26 @@ async function setupHarness() {
   return { keyring, deps, broadcasts };
 }
 
-const senderWithId = (id: string) => ({ id } as chrome.runtime.MessageSender);
-// Since #75, dispatch validates senders by shape: privileged popup/approve
-// commands must come from an extension-page URL, dApp traffic from a tab.
-const extensionPageSender = { url: `chrome-extension://${OWN_EXT_ID}/approve.html` } as chrome.runtime.MessageSender;
-const contentSender       = { tab: { id: 1 } as chrome.tabs.Tab } as chrome.runtime.MessageSender;
+// dispatch() takes a transport-neutral ClassifiedSource — the host classifies the
+// raw chrome sender first (see adapters/chrome/chrome-message-source). Since #75,
+// privileged approve commands are allowed only from the trusted-ui channel; dApp
+// traffic from the dapp channel. An unrecognized sender classifies as null.
+/** The wallet's own trusted UI surface (the approve page). */
+const extensionPageSender: ClassifiedSource = { channel: 'trusted-ui' };
+/** The content bridge relaying dApp traffic from a tab. */
+const contentSender: ClassifiedSource = { channel: 'dapp', verifiedOrigin: undefined };
 
 describe('sw-wiring — approval gating', () => {
   let h: Awaited<ReturnType<typeof setupHarness>>;
 
   beforeEach(async () => {
-    // The sender-id guard reads chrome.runtime.id; the enqueue path opens a
-    // chrome.windows popup. Stub the minimum the SW touches in these branches.
-    vi.stubGlobal('chrome', {
-      runtime: { id: OWN_EXT_ID, getURL: (p: string) => `chrome-extension://${OWN_EXT_ID}/${p}` },
-      windows: { create: async () => ({ id: 1 }), remove: async () => {} },
-    });
     h = await setupHarness();
   });
-  afterEach(() => vi.unstubAllGlobals());
 
   it('rejects RESOLVE_PENDING from a foreign sender (4100 Forbidden sender)', async () => {
     const res = await dispatch(
       { type: 'RESOLVE_PENDING', requestId: 'whatever', decision: 'approve' },
-      senderWithId('malicious-extension'),
+      null, // unrecognized/foreign sender: the classifier attests nothing
       h.deps,
     );
     expect(res.ok).toBe(false);
@@ -88,7 +90,7 @@ describe('sw-wiring — approval gating', () => {
   it('rejects GET_PENDING from a foreign sender (4100)', async () => {
     const res = await dispatch(
       { type: 'GET_PENDING', requestId: 'whatever' },
-      senderWithId('malicious-extension'),
+      null, // unrecognized/foreign sender: the classifier attests nothing
       h.deps,
     );
     expect(res.ok).toBe(false);

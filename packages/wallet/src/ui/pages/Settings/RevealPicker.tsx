@@ -1,6 +1,6 @@
-import type { AccountSummary } from '@/shared/messages';
-import type { AccountId } from '@/domain/account';
-import { shortAddr } from '@/shared/format';
+import type { AccountSummary } from '@tezosx/wallet-core/shared/messages';
+import type { AccountId } from '@tezosx/wallet-core/domain/account';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
 import { Identicon } from '../../tx/Identicon';
 import { Button } from '../../tx/Button';
 

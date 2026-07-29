@@ -14,7 +14,7 @@ export function PickCard({
   onClick:   () => void;
   disabled?: boolean;
 }) {
-  const chainBadge = kind === 'tezos' ? 'L1' : 'L2';
+  const chainBadge = kind === 'tezos' ? 'Michelson' : 'EVM';
   return (
     <button
       type="button"

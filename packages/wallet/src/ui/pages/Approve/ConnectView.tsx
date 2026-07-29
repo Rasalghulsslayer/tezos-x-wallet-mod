@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
-import type { PendingRequest } from '@/shared/messages';
+import type { PendingRequest } from '@tezosx/wallet-core/shared/messages';
 import { Button } from '../../tx/Button';
 import { Icon } from '../../tx/Icon';
 import { Line } from '../../tx/Line';
 import { ApprovalHeader } from './ApprovalHeader';
 import { PinnedChip } from './PinnedChip';
-import { hostnameOf } from './helpers';
+import { originDisplay } from './helpers';
 import type { AccountContext } from './types';
 
 export function ConnectView({
@@ -15,11 +15,11 @@ export function ConnectView({
   respond: (d: 'approve' | 'reject') => void;
   ctx:     AccountContext | null;
 }) {
-  const hostname = useMemo(() => hostnameOf(pending.origin), [pending.origin]);
+  const hostname = useMemo(() => originDisplay(pending.origin).title, [pending.origin]);
 
   return (
     <div className="tx-approval">
-      <ApprovalHeader hostname={hostname} subtitle="Connection request" accent="cyan" />
+      <ApprovalHeader origin={pending.origin} subtitle="Connection request" accent="cyan" />
 
       <div className="tx-page-scroll" style={{ padding: 16 }}>
         <PinnedChip ctx={ctx} />
@@ -40,7 +40,7 @@ export function ConnectView({
         </div>
 
         <div className="tx-card" style={{ padding: 0 }}>
-          <Line label="Origin" value={hostname} />
+          <Line label="Origin" value={pending.origin} />
           <div className="tx-divider" />
           <Line label="Will receive" value="Your 0x address" />
           <div className="tx-divider" />

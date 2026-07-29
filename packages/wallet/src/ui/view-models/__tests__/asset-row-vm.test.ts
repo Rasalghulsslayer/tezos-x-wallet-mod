@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { assetRowVM } from '../asset-row-vm';
-import { XTZ_L1_ASSET, XTZ_L2_ASSET, type Erc20Asset } from '../../../domain/asset';
+import { XTZ_L1_ASSET, XTZ_L2_ASSET, type Erc20Asset } from '@tezosx/wallet-core/domain/asset';
 
 const TOKEN_18: Erc20Asset = {
   kind: 'erc20', address: '0xabc0000000000000000000000000000000000000',

@@ -1,11 +1,9 @@
-import { useMemo } from 'react';
-import type { PendingRequest } from '@/shared/messages';
+import type { PendingRequest } from '@tezosx/wallet-core/shared/messages';
 import { Button } from '../../tx/Button';
 import { truncAddr } from '../../tx/utils';
 import { ApprovalHeader } from './ApprovalHeader';
 import { ModerateRisk } from './ModerateRisk';
 import { PinnedChip } from './PinnedChip';
-import { hostnameOf } from './helpers';
 import type { AccountContext } from './types';
 
 export function SignatureView({
@@ -15,12 +13,11 @@ export function SignatureView({
   respond: (d: 'approve' | 'reject') => void;
   ctx:     AccountContext | null;
 }) {
-  const hostname = useMemo(() => hostnameOf(pending.origin), [pending.origin]);
   const decoded  = pending.decoded;
 
   return (
     <div className="tx-approval">
-      <ApprovalHeader hostname={hostname} subtitle="Signature request" accent="cyan" />
+      <ApprovalHeader origin={pending.origin} subtitle="Signature request" accent="cyan" />
 
       <div className="tx-page-scroll" style={{ padding: 16 }}>
         <PinnedChip ctx={ctx} />

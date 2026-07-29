@@ -1,4 +1,4 @@
-import type { PopupRequest, ApproveRequest, WalletResponse } from './messages';
+import type { PopupRequest, ApproveRequest, WalletResponse } from '@tezosx/wallet-core/shared/messages';
 
 /** EIP-1193 unauthorised code — the SW returns this when the keyring has no
  *  unlocked entry, typically because the SW restarted (MV3 lifecycle) and lost

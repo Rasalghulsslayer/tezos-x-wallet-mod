@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { ActivityItem } from '@/domain/activity';
+import type { ActivityItem } from '@tezosx/wallet-core/domain/activity';
 import { activityRowVM } from '../../view-models/activity-vm';
 import { ActivityRow } from '../../tx/ActivityRow';
 import { groupByDay, DAY_ORDER } from './helpers';

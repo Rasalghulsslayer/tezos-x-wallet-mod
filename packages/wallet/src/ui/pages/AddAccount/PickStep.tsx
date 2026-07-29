@@ -1,4 +1,4 @@
-import { MAX_ACCOUNTS_PER_VAULT } from '@/shared/constants';
+import { MAX_ACCOUNTS_PER_VAULT } from '@tezosx/wallet-core/shared/constants';
 import { Icon } from '../../tx/Icon';
 import { PickCard } from './PickCard';
 import type { Pick } from './types';

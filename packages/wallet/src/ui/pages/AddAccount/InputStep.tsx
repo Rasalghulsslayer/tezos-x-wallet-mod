@@ -1,4 +1,4 @@
-import type { AccountSummary } from '@/shared/messages';
+import type { AccountSummary } from '@tezosx/wallet-core/shared/messages';
 import { CreatePane } from './CreatePane';
 import { ImportPane } from './ImportPane';
 import { stageHeadline } from './helpers';

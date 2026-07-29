@@ -2,9 +2,9 @@
  * Pure projection helpers for the Connections page. No I/O.
  */
 
-import type { StoredSession } from '../../ports/session-store';
-import type { AccountSummary } from '../../shared/messages';
-import { shortAddr } from '../../shared/format';
+import type { StoredSession } from '@tezosx/wallet-core/ports/session-store';
+import type { AccountSummary } from '@tezosx/wallet-core/shared/messages';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
 
 export type ConnectionsFilter = 'all' | 'active';
 

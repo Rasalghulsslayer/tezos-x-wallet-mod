@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Icon } from '../../tx/Icon';
+import { copySecretWithAutoClear } from '@/shared/clipboard';
 import type { Pick } from './types';
 
 export function CreatePane({
@@ -26,7 +27,7 @@ export function CreatePane({
   const valueToCopy = isTezos ? (tzMnemonic ?? '') : (evmPrivkey != null ? '0x' + evmPrivkey : '');
   const copy = () => {
     if (valueToCopy === '') return;
-    void navigator.clipboard.writeText(valueToCopy);
+    copySecretWithAutoClear(valueToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };

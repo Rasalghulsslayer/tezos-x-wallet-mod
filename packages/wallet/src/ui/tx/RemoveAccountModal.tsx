@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AccountSummary } from '../../shared/messages';
-import { shortAddr } from '../../shared/format';
+import type { AccountSummary } from '@tezosx/wallet-core/shared/messages';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
+import { formatError } from '@tezosx/wallet-core/domain/error';
 import { ModalBackdrop } from './ModalBackdrop';
 
 export function RemoveAccountModal({
@@ -29,7 +30,7 @@ export function RemoveAccountModal({
       await onConfirmed(password);
       onClose();
     } catch (e) {
-      setError((e as Error).message);
+      setError(formatError(e).detail);
       setBusy(false);
     }
   };

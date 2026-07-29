@@ -51,6 +51,22 @@ export class UnknownSelectorError extends Error {
   }
 }
 
+const EVM_ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
+
+/**
+ * The destination is embedded verbatim in the signed Micheline (as the
+ * `http://ethereum/<to>` url or the `call_evm` destination string). Reject
+ * anything that is not a canonical 0x address before signing, so a dApp can't
+ * slip an arbitrary string (path segments, spaces) past the truncated
+ * approval display into what the user actually signs.
+ */
+export class InvalidDestinationError extends Error {
+  constructor(public readonly to: string) {
+    super(`Invalid EVM destination address: ${to}`);
+    this.name = 'InvalidDestinationError';
+  }
+}
+
 /**
  * The Tezos runtime denominates value in mutez (10⁻⁶ XTZ). Wei amounts that
  * carry sub-mutez precision (remainder under 10¹² wei) would be silently
@@ -69,7 +85,12 @@ export class SubMutezPrecisionError extends Error {
 
 const WEI_PER_MUTEZ = 1_000_000_000_000n;
 
-function weiToMutezExact(wei: bigint): bigint {
+/**
+ * Convert wei to mutez, rejecting any sub-mutez remainder instead of flooring
+ * it away. Exported so the wallet's native transfer paths (tz1→tz1, EVM→tz1)
+ * enforce the same no-silent-loss rule as this gateway boundary.
+ */
+export function weiToMutezExact(wei: bigint): bigint {
   if (wei === 0n) return 0n;
   const remainder = wei % WEI_PER_MUTEZ;
   if (remainder !== 0n) throw new SubMutezPrecisionError(wei, remainder);
@@ -148,6 +169,7 @@ export async function buildTezosToEvmCall(
   tx: EthTransactionRequest,
   callback: MichelsonV1Expression = { prim: 'None' },
 ): Promise<GatewayCall> {
+  if (!EVM_ADDR_RE.test(tx.to)) throw new InvalidDestinationError(tx.to);
   const calldata = tx.data ?? '0x';
 
   const weiValue    = tx.value != null ? BigInt(tx.value) : 0n;
@@ -176,5 +198,6 @@ export async function buildTezosToEvmCall(
     entrypoint:   'call_evm',
     michelineArg: buildCallArg(tx.to, methodSig, abiParamsHex, callback),
     mutezAmount,
+    methodSig,
   };
 }

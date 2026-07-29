@@ -6,11 +6,11 @@
 
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { VaultState } from '@/shared/messages';
-import type { AccountId } from '@/domain/account';
+import type { VaultState } from '@tezosx/wallet-core/shared/messages';
+import type { AccountId } from '@tezosx/wallet-core/domain/account';
 import { sendPopupRequest } from '@/shared/messaging';
-import { EVM_EXPLORER, TEZOS_EXPLORER } from '@/shared/constants';
-import { accountCardVM } from '../../view-models/account-card-vm';
+import { EVM_EXPLORER, TEZOS_EXPLORER } from '@tezosx/wallet-core/shared/constants';
+import { accountCardVM } from '@tezosx/wallet-core/view-models/account-card-vm';
 import { TopBar } from '../../tx/TopBar';
 import { BottomTabs } from '../../tx/BottomTabs';
 import { AccountCard } from '../../tx/AccountCard';
@@ -133,7 +133,7 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
         <LinkRow icon="lock" t="Lock wallet" onClick={lock} />
 
         <div className="tx-section-head"><span className="t">About</span></div>
-        <LinkRow icon="info" t="Version" sub="Wallet v0.11.3 · Relayer v0.5.5" />
+        <LinkRow icon="info" t="Version" sub={`Wallet v${__WALLET_VERSION__} · Core v${__CORE_VERSION__}`} />
         <LinkRow icon="info" t="Network" sub="Tezos X Previewnet" />
 
         <div style={{ height: 16 }} />

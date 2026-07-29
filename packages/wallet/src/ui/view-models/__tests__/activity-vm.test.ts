@@ -5,9 +5,9 @@ import type {
   ActivityTransferItem,
   ActivityUnknownItem,
   ActivitySignatureItem,
-} from '../../../domain/activity';
+} from '@tezosx/wallet-core/domain/activity';
 
-import { XTZ_L1_ASSET, XTZ_L2_ASSET, type Erc20Asset } from '../../../domain/asset';
+import { XTZ_L1_ASSET, XTZ_L2_ASSET, type Erc20Asset } from '@tezosx/wallet-core/domain/asset';
 
 const baseLinks = { primary: { explorer: 'tzkt' as const, url: 'https://tzkt/op' } };
 

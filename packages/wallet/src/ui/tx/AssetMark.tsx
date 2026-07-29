@@ -4,10 +4,10 @@
  * --tx-surface-3 with --tx-fg-muted. No remote logo fetch (out of scope).
  */
 
-import type { Asset } from '../../domain/asset';
+import type { Asset } from '@tezosx/wallet-core/domain/asset';
 import xtzLogo  from '../../../icons/tezos-logo.svg';
 import usdcLogo from '../../../icons/circle-usdc.png';
-import { USDC_CONTRACT } from '../../shared/constants';
+import { USDC_CONTRACT } from '@tezosx/wallet-core/shared/constants';
 
 const KNOWN_LOGOS: Record<string, string> = {
   [USDC_CONTRACT.toLowerCase()]: usdcLogo,

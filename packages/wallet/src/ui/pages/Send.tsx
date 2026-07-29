@@ -1,26 +1,27 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { ResolveTxResult, SendTxResult, VaultState, VaultStateUnlocked } from '@/shared/messages';
+import type { ResolveTxResult, SendTxResult, VaultState, VaultStateUnlocked } from '@tezosx/wallet-core/shared/messages';
 import { sendPopupRequest } from '@/shared/messaging';
-import { detectRuntime } from '@/domain/validation';
-import type { DestRuntime } from '@/domain/chain';
-import type { RegisteredToken } from '@/domain/token';
+import { detectRuntime } from '@tezosx/wallet-core/domain/validation';
+import type { DestRuntime } from '@tezosx/wallet-core/domain/chain';
+import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
 import {
   fetchL1XtzBalance,
   fetchXtzBalance,
   fetchErc20Balance,
-} from '@/adapters/tezos/tezos-balance-fetcher';
-import { mutezToXtz, weiToXtz, formatTokenAmount } from '@/shared/format';
-import { formatError } from '@/domain/error';
-import { trackTx } from '@/shared/tx-status';
-import { e2eConfig } from '@/shared/e2e';
-import type { TxStatus } from '@/domain/tx-status';
-import { signingSourceAddress } from '../view-models/account-card-vm';
+} from '@tezosx/wallet-core/adapters/tezos/tezos-balance-fetcher';
+import { mutezToXtz, weiToXtz, formatTokenAmount } from '@tezosx/wallet-core/shared/format';
+import { formatError } from '@tezosx/wallet-core/domain/error';
+import { trackTx } from '@tezosx/wallet-core/shared/tx-status';
+import { startPoller } from '@tezosx/wallet-core/shared/poller';
+import { e2eConfig } from '@tezosx/wallet-core/shared/e2e';
+import type { TxStatus } from '@tezosx/wallet-core/domain/tx-status';
+import { signingSourceAddress } from '@tezosx/wallet-core/view-models/account-card-vm';
 import { Button } from '../tx/Button';
 import { Icon } from '../tx/Icon';
 import { TopBar } from '../tx/TopBar';
 import { AssetSelector, type AssetOption } from '../tx/AssetSelector';
-import { XTZ_L1_ASSET, XTZ_L2_ASSET, type Asset, type Erc20Asset } from '@/domain/asset';
+import { XTZ_L1_ASSET, XTZ_L2_ASSET, type Asset, type Erc20Asset } from '@tezosx/wallet-core/domain/asset';
 import { ChainPill } from '../tx/ChainPill';
 import { Line } from '../tx/Line';
 import { RoutingCard } from '../tx/RoutingCard';
@@ -30,7 +31,8 @@ import { ErrorCard } from '../tx/ErrorCard';
 import { StatusTimeline } from '../tx/StatusTimeline';
 import { StatusHero } from '../tx/StatusHero';
 import { StatusMeta } from '../tx/StatusMeta';
-import { TEZOS_EXPLORER, EVM_EXPLORER } from '@/shared/constants';
+import { TEZOS_EXPLORER, EVM_EXPLORER } from '@tezosx/wallet-core/shared/constants';
+import { NAC_CONTRACT } from '@tezosx/relayer/constants';
 import { truncAddr } from '../tx/utils';
 
 type Stage = 'form' | 'review' | 'done';
@@ -56,11 +58,16 @@ const RESOLVE_POLL_MS    = 2_000;
 const RESOLVE_TIMEOUT_MS = 60_000;
 const MAX_FEE_RESERVE_MUTEZ = 10_000n;
 
-function xtzToHexWei(xtz: string): string {
-  const [whole, frac = ''] = xtz.trim().split('.');
-  const padded = (whole + frac.padEnd(18, '0')).slice(0, whole.length + 18);
-  const big = BigInt(padded);
-  return '0x' + big.toString(16);
+/**
+ * Human decimal → 0x-prefixed base-units hex, scaled by `decimals`. XTZ always
+ * uses 18 (the wei convention the relayer then converts ÷10^12 to mutez); an
+ * ERC-20 uses its own token decimals, so the signed `transfer` amount matches
+ * what the user typed rather than being over-scaled to 18.
+ */
+function amountToBaseUnits(human: string, decimals: number): string {
+  const [whole, frac = ''] = human.trim().split('.');
+  const padded = (whole + frac.padEnd(decimals, '0')).slice(0, whole.length + decimals);
+  return '0x' + BigInt(padded || '0').toString(16);
 }
 
 function mutezToBig(xtz: string): bigint {
@@ -81,12 +88,12 @@ function routingLabel(sourceKind: 'tezos' | 'evm', dest: DestRuntime): string {
   if (dest == null) return '—';
   if (sourceKind === 'tezos') {
     return dest === 'l1'
-      ? 'Same-runtime · Tezos L1'
-      : 'Cross-runtime · L1 → L2 via NAC gateway';
+      ? 'Same-runtime · Michelson runtime'
+      : 'Cross-runtime · Michelson → EVM via NAC gateway';
   }
   return dest === 'l2'
-    ? 'Same-runtime · Tezos L2 (EVM)'
-    : 'Cross-runtime · L2 → L1 via NAC precompile';
+    ? 'Same-runtime · Tezos X (EVM)'
+    : 'Cross-runtime · EVM → Michelson via NAC precompile';
 }
 
 export function Send({ state, onDone }: { state: VaultState; onDone: () => void }) {
@@ -152,38 +159,31 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
   useEffect(() => {
     if (pendingResolve == null) return;
 
-    let cancelled = false;
-    const startedAt = Date.now();
     const resolveTimeoutMs = e2eConfig()?.resolveTimeoutMs ?? RESOLVE_TIMEOUT_MS;
-
-    const tick = async () => {
-      if (cancelled) return;
-      try {
+    const handle = startPoller<ResolveTxResult>({
+      intervalMs: RESOLVE_POLL_MS,
+      timeoutMs:  resolveTimeoutMs,
+      fetch: async () => {
         const result = await sendPopupRequest<ResolveTxResult>({
           type: 'RESOLVE_TX',
           syntheticHash: pendingResolve.syntheticHash,
         });
-        if (cancelled) return;
-        if (result.resolved) {
-          setDone((prev) => prev != null ? { ...prev, hash: result.hash, pending: false } : prev);
-          setPendingResolve(null);
-          onDone();
-          return;
-        }
-      } catch { /* keep polling */ }
-
-      if (Date.now() - startedAt >= resolveTimeoutMs) {
+        return result.resolved ? result : null;
+      },
+      isDone: (result) => result.resolved,
+      onUpdate: (result) => {
+        if (!result.resolved) return;
+        setDone((prev) => prev != null ? { ...prev, hash: result.hash, pending: false } : prev);
+        setPendingResolve(null);
+        onDone();
+      },
+      onTimeout: () => {
         setDone((prev) => prev != null ? { ...prev, pending: true } : prev);
         setPendingResolve(null);
         onDone();
-        return;
-      }
-
-      setTimeout(() => { void tick(); }, RESOLVE_POLL_MS);
-    };
-
-    setTimeout(() => { void tick(); }, RESOLVE_POLL_MS);
-    return () => { cancelled = true; };
+      },
+    });
+    return () => handle.stop();
   }, [pendingResolve, onDone]);
 
   useEffect(() => {
@@ -199,19 +199,21 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
   const dest    = detectRuntime(to);
   const isCross = state.kind === 'tezos' ? dest === 'l2' : dest === 'l1';
 
-  // ERC-20 tokens live on L2 only; sending to an L1 destination is invalid.
+  // ERC-20 tokens live on the EVM runtime only; a Michelson-runtime destination is invalid.
   const erc20OnL1 = asset.kind === 'erc20' && dest === 'l1';
-  const valid =
-    dest !== null &&
-    !erc20OnL1 &&
-    (!isEvmSource || asset.kind === 'xtz') &&
-    /^\d+(\.\d+)?$/.test(amount) &&
-    Number(amount) > 0;
 
   const availableStr = balances[assetKey(asset)] ?? '0';
   const insufficient = !balancesLoading
     && parseFloat(amount || '0') > 0
     && parseFloat(amount || '0') > parseFloat(availableStr);
+
+  const valid =
+    dest !== null &&
+    !erc20OnL1 &&
+    (!isEvmSource || asset.kind === 'xtz') &&
+    /^\d+(\.\d+)?$/.test(amount) &&
+    Number(amount) > 0 &&
+    !insufficient;
 
   const handleMax = () => {
     if (balancesLoading) return;
@@ -243,7 +245,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
       const result = await sendPopupRequest<SendTxResult>({
         type:   'SEND_TX',
         to,
-        amount: xtzToHexWei(amount),
+        amount: amountToBaseUnits(amount, asset.kind === 'xtz' ? 18 : asset.decimals),
         asset,
       });
 
@@ -295,6 +297,8 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
           <StatusHero
             status={status}
             runtime={done.runtime}
+            sourceKind={state.kind}
+            cross={isCross}
             amount={parseFloat(amount || '0').toString()}
             asset={asset}
             to={truncAddr(to, 6)}
@@ -339,7 +343,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
     const destChain: 'l1' | 'l2' = dest === 'l2' ? 'l2' : 'l1';
     const reviewCopy = state.kind === 'tezos'
       ? (isCross
-          ? 'Your tz1 signs an L1 op routed to the EVM runtime through the NAC gateway. The receiving 0x address is credited atomically.'
+          ? 'Your tz1 signs a Michelson-runtime op routed to the EVM runtime through the NAC gateway. The receiving 0x address is credited atomically.'
           : 'Make sure the recipient is correct — transfers can\'t be reversed.')
       : (isCross
           ? 'Your 0x signs an EVM transaction that calls the NAC precompile. The kernel forwards the value to the receiving tz1 atomically.'
@@ -376,6 +380,30 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
             <div className="tx-divider" />
             <Line label="Network" value="Tezos X Previewnet" />
           </div>
+
+          {state.kind === 'tezos' && isCross && (
+            <>
+              <div className="tx-kicker" style={{ marginTop: 16, marginBottom: 6 }}>
+                What you actually sign
+              </div>
+              <div className="tx-card tx-cross-card" style={{ padding: 0 }}>
+                <Line label="Michelson target" value={truncAddr(NAC_CONTRACT, 6)} />
+                <div className="tx-divider" />
+                <Line label="Entrypoint" value={asset.kind === 'xtz' ? 'call' : 'call_evm'} />
+                {asset.kind === 'erc20' && (
+                  <>
+                    <div className="tx-divider" />
+                    <Line label="Method" value="transfer(address,uint256)" />
+                  </>
+                )}
+                <div className="tx-divider" />
+                <Line
+                  label="Debit (mutez)"
+                  value={asset.kind === 'xtz' ? mutezToBig(amount).toString() : '0'}
+                />
+              </div>
+            </>
+          )}
 
           {error != null
             ? <ErrorCard error={formatError(error)} />
@@ -447,7 +475,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
             className="tx-amount"
             inputMode="decimal"
             value={amount}
-            onChange={(e) => setAmt(e.target.value.replace(/[^0-9.]/g, ''))}
+            onChange={(e) => { const v = e.target.value; if (v === '' || /^\d*\.?\d*$/.test(v)) setAmt(v); }}
             placeholder="0"
           />
           <AvailableRow

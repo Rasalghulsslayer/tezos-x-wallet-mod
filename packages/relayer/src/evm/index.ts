@@ -4,7 +4,7 @@
  * NAC_RECOMMENDED_GAS constants.
  */
 
-export { encodeNacCall, encodeNacCallMichelson } from '../shared/abi.js';
+export { encodeNacCall, encodeNacCallMichelson, encodeErc20Transfer } from '../shared/abi.js';
 export { buildCrossRuntimeTx, type EvmCrossRuntimeTx } from './builders.js';
 export { trackCrossRuntimeStatus } from '../use-cases/track-cross-runtime-status.js';
 export { buildEvmToTezosCall } from '../use-cases/build-evm-to-tezos-call.js';
