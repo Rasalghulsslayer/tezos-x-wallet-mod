@@ -32,6 +32,10 @@ export const colors = {
   cyanLine:      'rgba(0, 194, 255, 0.35)',
   cyanText:      '#66DBFF',
 
+  // Legible on-dark text for cross-runtime labels — the midpoint of the
+  // purple→cyan sweep the identicon ring draws (text can't take a gradient).
+  crossText:     '#B7D1FF',
+
   success:       '#4CDE94',
   successBg:     'rgba(76, 222, 148, 0.10)',
   danger:        '#FF5D5D',

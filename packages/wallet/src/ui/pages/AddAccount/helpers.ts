@@ -6,7 +6,7 @@ export function stageTitle(stage: Stage, pick: Pick | null): string {
   const op = pick.source === 'fresh' ? 'New' : 'Import';
   const k  = pick.kind === 'tezos' ? 'Tezos' : 'EVM';
   if (stage === 'input')   return `${op} ${k} account`;
-  return pick.source === 'fresh' ? 'Confirm new account' : 'Confirm import';
+  return pick.source === 'import' ? 'Confirm import' : 'Confirm new account';
 }
 
 export function stageHeadline(pick: Pick): string {

@@ -9,7 +9,7 @@ import type { Secret } from './types';
 
 export function RevealView({
   target, pwd, setPwd, secret, shown, setShown, err, loading,
-  onBack, onCancel, onReveal,
+  onBack, onCancel, onReveal, walletSeed = false,
 }: {
   target:   AccountSummary | undefined;
   pwd:      string; setPwd: (s: string) => void;
@@ -19,10 +19,14 @@ export function RevealView({
   onBack?:  () => void;
   onCancel: () => void;
   onReveal: () => void;
+  /** Reveal the wallet-level seed phrase instead of one account's own secret. */
+  walletSeed?: boolean;
 }) {
   const headline = secret == null
-    ? `Reveal ${target?.label?.trim() ? target.label : (target?.kind === 'tezos' ? 'recovery phrase' : 'private key')}`
-    : secret.kind === 'mnemonic' ? 'Recovery phrase'
+    ? (walletSeed
+        ? 'Reveal seed phrase'
+        : `Reveal ${target?.label?.trim() ? target.label : (target?.kind === 'tezos' ? 'recovery phrase' : 'private key')}`)
+    : secret.kind === 'mnemonic' ? (walletSeed ? 'Wallet seed phrase' : 'Recovery phrase')
     : secret.kind === 'edsk'     ? 'Tezos secret key'
     :                              'EVM private key';
 
@@ -41,10 +45,14 @@ export function RevealView({
         )}
         <div style={{ fontSize: 17, fontWeight: 600 }}>{headline}</div>
       </div>
-      {target != null && (
+      {(target != null || walletSeed) && (
         <div style={{ fontSize: 12, color: 'var(--tx-fg-muted)', marginBottom: 16 }}>
-          {secret == null ? 'Enter your password. Never share your secret.' : 'Never share this with anyone.'}
-          {' '}<span style={{ fontFamily: 'var(--tx-font-mono)' }}>{shortAddr(target.primaryAddress)}</span>
+          {walletSeed
+            ? (secret == null
+                ? 'Enter your password. This phrase restores every account derived from it.'
+                : 'This phrase restores every derived account. Never share it with anyone.')
+            : (secret == null ? 'Enter your password. Never share your secret.' : 'Never share this with anyone.')}
+          {target != null && <>{' '}<span style={{ fontFamily: 'var(--tx-font-mono)' }}>{shortAddr(target.primaryAddress)}</span></>}
         </div>
       )}
 

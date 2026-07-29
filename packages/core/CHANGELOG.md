@@ -7,7 +7,7 @@ TypeScript source over the npm-workspace symlink (no build step), by both the
 Chrome extension (`@tezosx/wallet`) and the React Native app
 (`@tezosx/wallet-mobile`).
 
-## [Unreleased]
+## [0.4.0] — 2026-07-12
 
 ### Added
 - HD multi-account derivation from a single seed phrase. The vault payload is
@@ -44,6 +44,9 @@ Chrome extension (`@tezosx/wallet`) and the React Native app
   the optional `getPendingL1Hash`).
 
 ### Changed
+- **Breaking (type):** `UnlockedSession` / `UnlockedKeyring` no longer carry a
+  `secretKey` field (see Security — the unlocked session retains no signing
+  key). Consumers needing signing material use `getSigningKeyFor(accountId)`.
 - **Breaking (type):** an unlocked keyring no longer retains the vault
   password. `UnlockedKeyring.password` is replaced by `UnlockedKeyring.km` —
   the PBKDF2-derived AES key plus the salt / work factor it was derived at.
@@ -117,6 +120,16 @@ Chrome extension (`@tezosx/wallet`) and the React Native app
     Native's `__DEV__` (false in release builds), falling back to
     `NODE_ENV` for the Vite and Node toolchains, so a Metro/Hermes build with an
     undefined `NODE_ENV` can no longer leak signed payloads to the device log.
+  - **The unlocked session no longer retains the active account's signing
+    key.** `UnlockedKeyring.secretKey` was derived at unlock and on every
+    mutation, then never read — every signing path already derives on demand
+    through `getSigningKeyFor` — so it was pure retained key material (and a
+    stale copy after `activateInMemory`). The field is gone; unlock and
+    mutations also skip the wasted derivation. The full retention contract
+    (what stays in memory while unlocked and why: the decrypted `payload`, the
+    derived vault key `km` — raw bytes because the CryptoPort is shared with
+    the mobile OpenSSL port, zeroized on lock; never the password, never a
+    signing key) is now documented on `UnlockedKeyring` itself.
 - Transient secret byte-buffers are zeroized immediately after use: the
   PBKDF2-derived vault key and the decrypted vault plaintext bytes in
   `shared/vault-crypto`, and the private-key / signature buffers in the shared

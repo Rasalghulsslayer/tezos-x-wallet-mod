@@ -1,7 +1,7 @@
 /**
  * Activity — the transaction history for the active account. A dismissible stale
  * band warns when one source is catching up; a direction segmented control
- * (All/Sent/Received) plus a runtime filter Sheet (All/L1/L2/Cross) narrow the
+ * (All/Sent/Received) plus a runtime filter Sheet (All/Michelson/EVM/Cross) narrow the
  * list. Matching items are grouped by day (Today/Yesterday/Earlier) and rendered
  * as ActivityRows; an EmptyState covers both "nothing yet" and "no matches".
  */

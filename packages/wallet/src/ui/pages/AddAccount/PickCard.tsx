@@ -25,7 +25,7 @@ export function PickCard({
     >
       <div className="top">
         <span className="badge">{chainBadge}</span>
-        <span className="op">{source === 'fresh' ? 'Create' : 'Import'}</span>
+        <span className="op">{source === 'fresh' ? 'Create' : source === 'derived' ? 'Derive' : 'Import'}</span>
       </div>
       <div className="ti">{title}</div>
       <div className="sub-line">{subLine}</div>

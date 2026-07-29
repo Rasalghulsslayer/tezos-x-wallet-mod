@@ -47,16 +47,19 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
     setPwd(''); setSec(null); setShown(false); setErr(null);
   };
 
+  const openRevealSeed = () => {
+    setModal({ kind: 'reveal-seed' });
+    setPwd(''); setSec(null); setShown(false); setErr(null);
+  };
+
   const reveal = async () => {
-    if (modal.kind !== 'reveal') return;
+    if (modal.kind !== 'reveal' && modal.kind !== 'reveal-seed') return;
     setErr(null);
     setLd(true);
     try {
-      const payload = await sendPopupRequest<Secret>({
-        type:      'EXPORT_SEED',
-        password:  pwd,
-        accountId: modal.accountId,
-      });
+      const payload = modal.kind === 'reveal-seed'
+        ? { kind: 'mnemonic' as const, value: await sendPopupRequest<string>({ type: 'EXPORT_WALLET_SEED', password: pwd }) }
+        : await sendPopupRequest<Secret>({ type: 'EXPORT_SEED', password: pwd, accountId: modal.accountId });
       setSec(payload);
       setShown(true);
     } catch (e) {
@@ -130,6 +133,14 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
           sub={sortedAccounts.length > 1 ? 'Pick an account, then enter your password' : (isEvm ? 'EVM private key' : 'Recovery phrase or private key')}
           onClick={openReveal}
         />
+        {state.hasSeed === true && (
+          <LinkRow
+            icon="shield"
+            t="Reveal seed phrase"
+            sub="The wallet-level phrase your derived accounts hang off"
+            onClick={openRevealSeed}
+          />
+        )}
         <LinkRow icon="lock" t="Lock wallet" onClick={lock} />
 
         <div className="tx-section-head"><span className="t">About</span></div>
@@ -175,6 +186,19 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
                 shown={shown} setShown={setShown}
                 err={err} loading={loading}
                 onBack={sortedAccounts.length > 1 ? () => setModal({ kind: 'picker' }) : undefined}
+                onCancel={closeModal}
+                onReveal={reveal}
+              />
+            )}
+
+            {modal.kind === 'reveal-seed' && (
+              <RevealView
+                target={undefined}
+                walletSeed
+                pwd={pwd} setPwd={setPwd}
+                secret={secret}
+                shown={shown} setShown={setShown}
+                err={err} loading={loading}
                 onCancel={closeModal}
                 onReveal={reveal}
               />
