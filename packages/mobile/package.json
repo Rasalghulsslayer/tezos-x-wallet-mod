@@ -1,6 +1,6 @@
 {
   "name": "@tezosx/wallet-mobile",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "main": "index.ts",
   "dependencies": {
     "@noble/ciphers": "1.2.1",

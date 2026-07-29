@@ -86,11 +86,16 @@ export function lockWallet(): void {
   // Mobile has one long-lived JS thread — no MV3 service-worker death ever
   // evicts these for us. The cached Containers hold live signers with
   // plaintext key material (and Taquito's InMemorySigner keeps its own
-  // internal copy), so lock must drop them explicitly, exactly as the
-  // extension's LOCK handler does.
+  // internal copy), so lock must drop every reference synchronously, exactly
+  // as the extension's LOCK handler does: the cache, the warm active
+  // container, and the alias caches. Scheduling the drop (a rebuild) instead
+  // would leave a window where a caller can still reach the dead container
+  // after lock returns. JS strings can't be zeroized, so unreachability —
+  // then GC — is the strongest guarantee available here.
   deps.containerCache.clear();
-  evmAliasCache.value = null;
-  void deps.rebuildContainer(); // keyring is now locked → drops the warm container
+  deps.state.container = null;
+  deps.state.evmAlias  = null;
+  evmAliasCache.value  = null;
 }
 
 export interface AddAccountOutcome {

@@ -5,7 +5,14 @@ The Tezos X wallet for iOS/Android (React Native, Expo bare). Format follows
 shared `@tezosx/wallet-core` over the workspace; only platform adapters
 (storage, secure RNG, biometrics) and the UI live here.
 
-## [Unreleased]
+## [0.2.0] — 2026-07-12
+
+> **Versioning note.** Builds before this release carried a `1.x` version
+> inherited from the Expo template, not a maturity statement — this repo
+> reserves `1.0.0` for the first mainnet-ready release. The package is private
+> and never published, so it is re-baselined here onto the `0.x` scale the
+> other packages use: the initial end-to-end build corresponds to `0.1.0`, and
+> this release (previously labelled `1.1.0`) ships as `0.2.0`.
 
 ### Security
 - Security-review remediation (mobile arm):
@@ -33,7 +40,16 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
   signers — including Taquito's internal copy — no longer outlive the lock.
   The extension already did this in its LOCK handler; the mobile shell's
   single long-lived JS thread made the omission persistent rather than
-  transient, since no service-worker death ever evicted the cache.
+  transient, since no service-worker death ever evicted the cache. The lock
+  now also drops the warm active-container reference and the alias caches
+  synchronously in the same call, mirroring the extension's LOCK handler
+  exactly — previously the warm reference was released only by a scheduled
+  rebuild, leaving a brief window after lock during which a caller could still
+  reach the dead container. A test suite pins the contract: once `lockWallet`
+  returns, no composition-level path leads back to a signer. Honest limits:
+  JavaScript strings cannot be zeroized in place, so the guarantee is
+  unreachability (then garbage collection) rather than erasure, and references
+  held by an operation already in flight live until that operation settles.
 - Screens drop secret-bearing state as soon as their flow completes: Unlock
   clears the password on success (not only on error), Create / Import / Add
   account clear the mnemonic, private key and passwords once the vault
