@@ -1,5 +1,5 @@
 export type Kind   = 'tezos' | 'evm';
-export type Source = 'fresh'  | 'import';
+export type Source = 'fresh'  | 'import' | 'derived';
 export type Stage  = 'pick'   | 'input' | 'confirm';
 export type TzMode = 'mnemonic' | 'edsk';
 

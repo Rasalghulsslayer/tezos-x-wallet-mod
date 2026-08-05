@@ -8,4 +8,7 @@ export type Secret =
 export type Modal =
   | { kind: 'closed' }
   | { kind: 'picker' }
-  | { kind: 'reveal'; accountId: AccountId };
+  | { kind: 'reveal'; accountId: AccountId }
+  // The wallet-level seed phrase (what derived accounts hang off) — distinct
+  // from a single account's own signing material.
+  | { kind: 'reveal-seed' };

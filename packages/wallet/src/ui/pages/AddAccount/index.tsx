@@ -133,6 +133,10 @@ export function AddAccount({ state, onChanged }: { state: VaultState; onChanged:
 
   useEffect(() => {
     if (stage !== 'confirm' || pick == null) return;
+    // A derived account's address comes off the wallet seed, which never
+    // leaves the service worker — there is nothing to derive client-side.
+    // ConfirmStep explains the derivation instead of previewing an address.
+    if (pick.source === 'derived') { setPreview(null); return; }
     let cancelled = false;
     void (async () => {
       try {
@@ -168,7 +172,9 @@ export function AddAccount({ state, onChanged }: { state: VaultState; onChanged:
     if (stage === 'pick') { navigate(-1); return; }
     if (armedDiscard)     { setDiscardOpen(true); return; }
     if (stage === 'input')   setStage('pick');
-    else if (stage === 'confirm') setStage('input');
+    // A derived pick never had an input stage — back out of confirm returns
+    // straight to the picker.
+    else if (stage === 'confirm') setStage(pick?.source === 'derived' ? 'pick' : 'input');
   };
 
   const confirmDiscard = () => {
@@ -186,7 +192,9 @@ export function AddAccount({ state, onChanged }: { state: VaultState; onChanged:
   const choosePick = (next: Pick) => {
     setPick(next);
     setLabel('');
-    setStage('input');
+    // A derived account has no secret to reveal or paste — the input stage
+    // would be empty, so it jumps straight to naming/confirm.
+    setStage(next.source === 'derived' ? 'confirm' : 'input');
   };
 
   const goToConfirm = () => setStage('confirm');
@@ -212,7 +220,9 @@ export function AddAccount({ state, onChanged }: { state: VaultState; onChanged:
       // pass it explicitly. 'fresh' would make the keyring mint a different
       // key than the one the user just backed up.
       let src: AddAccountSource;
-      if (isCreate) {
+      if (pick.source === 'derived') {
+        src = { source: 'derived' };
+      } else if (isCreate) {
         if (pick.kind === 'tezos') {
           if (tzMnemonic == null) throw new Error('No mnemonic was generated');
           src = { source: 'mnemonic', mnemonic: tzMnemonic };
@@ -290,7 +300,7 @@ export function AddAccount({ state, onChanged }: { state: VaultState; onChanged:
       />
 
       {stage === 'pick' && (
-        <PickStep capReached={capReached} onChoose={choosePick} />
+        <PickStep capReached={capReached} hasSeed={state.hasSeed === true} onChoose={choosePick} />
       )}
 
       {stage === 'input' && pick != null && (

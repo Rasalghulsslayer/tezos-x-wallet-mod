@@ -5,6 +5,20 @@ The Tezos X wallet for iOS/Android (React Native, Expo bare). Format follows
 shared `@tezosx/wallet-core` over the workspace; only platform adapters
 (storage, secure RNG, biometrics) and the UI live here.
 
+## [Unreleased]
+
+### Changed
+- The activity rows' runtime tag colours now come from the theme (`purpleText`,
+  `cyanText`, and a new `crossText` token — the midpoint of the purple→cyan
+  sweep the identicon ring draws) instead of hex literals local to the
+  component. No behaviour change; the Michelson/EVM tags align on the shades
+  the badges already use.
+
+### Compatibility
+- Workspace dependency ranges follow the shared packages' release cut:
+  `@tezosx/wallet-core` `^0.4.0` and `@tezosx/relayer` `^0.7.0`. No behaviour
+  change — the app was already consuming this code over the workspace link.
+
 ## [0.2.0] — 2026-07-12
 
 > **Versioning note.** Builds before this release carried a `1.x` version

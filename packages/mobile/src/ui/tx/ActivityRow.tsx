@@ -146,9 +146,9 @@ function ActIdent({
 }
 
 const TAG_COLOR: Record<ActivityRowVM['runtime'], { color: string }> = {
-  l1: { color: '#C9BCFF' },
-  l2: { color: '#A4E6FF' },
-  cross: { color: '#B7D1FF' }, // approximates the purple→cyan gradient text
+  l1:    { color: colors.purpleText },
+  l2:    { color: colors.cyanText },
+  cross: { color: colors.crossText },
 };
 
 const styles = StyleSheet.create({

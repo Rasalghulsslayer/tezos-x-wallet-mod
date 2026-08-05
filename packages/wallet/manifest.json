@@ -1,59 +1,65 @@
 {
   "manifest_version": 3,
   "name": "TezosX Wallet",
-  "version": "0.12.0",
+  "version": "0.14.0",
   "description": "Standalone Tezos wallet with built-in TezosX relayer for Tezos X EVM dApps",
-
-  "permissions": ["storage", "tabs", "sidePanel", "idle", "alarms"],
-
+  "permissions": [
+    "storage",
+    "tabs",
+    "sidePanel",
+    "idle",
+    "alarms"
+  ],
   "side_panel": {
     "default_path": "popup.html?mode=side"
   },
-
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; frame-ancestors 'none'"
   },
-
   "host_permissions": [
     "https://evm.previewnet.tezosx.nomadic-labs.com/*",
     "https://michelson.previewnet.tezosx.nomadic-labs.com/*",
     "https://www.4byte.directory/*"
   ],
-
   "background": {
     "service_worker": "src/background/service-worker.ts",
     "type": "module"
   },
-
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["src/content/bridge.ts"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/content/bridge.ts"
+      ],
       "run_at": "document_start",
       "world": "ISOLATED"
     },
     {
-      "matches": ["<all_urls>"],
-      "js": ["src/injected/provider.ts"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/injected/provider.ts"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     }
   ],
-
   "icons": {
-    "16":  "icons/icon16.png",
-    "32":  "icons/icon32.png",
-    "48":  "icons/icon48.png",
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-
   "action": {
     "default_popup": "popup.html",
     "default_title": "TezosX Wallet",
     "default_icon": {
-      "16":  "icons/icon16.png",
-      "32":  "icons/icon32.png",
-      "48":  "icons/icon48.png",
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
   }

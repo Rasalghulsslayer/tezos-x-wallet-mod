@@ -6,14 +6,47 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
-## [Unreleased]
+## [0.14.0] — 2026-07-12
+
+### Added
+- **Derived accounts from the wallet seed phrase.** When the vault holds a
+  wallet seed (any wallet onboarded from a mnemonic), Add account now leads
+  with two "Next account from your seed phrase" cards — Tezos and EVM — that
+  derive the next unused per-curve HD index (`m/44'/1729'/i'/0'` /
+  `m/44'/60'/0'/0/i`) with nothing new to back up. That is the standard
+  add-account behaviour of HD wallets: one phrase, incrementing indices,
+  instead of a separate seed per account. The derived pick skips the
+  reveal/input step entirely (there is no new secret to acknowledge) and goes
+  straight to naming; the previous create cards remain as "New separate seed
+  phrase (advanced)". The picker mirrors the mobile app, which shipped this
+  flow first; the keyring capability itself landed in `@tezosx/wallet-core`
+  0.4.0 (vaults created before the wallet seed simply don't show the derived
+  cards — no migration, they keep opening as before).
+- **"Reveal seed phrase" in Settings.** A password-gated row (shown only when
+  the vault holds a wallet seed) reveals the wallet-level phrase through the
+  existing reveal sheet — auto-clearing clipboard included. Without it, a
+  freshly onboarded vault had no way to view its phrase again in this UI: the
+  per-account reveal intentionally resolves a derived account to its concrete
+  signing key, not to the shared phrase.
+
+## [0.13.0] — 2026-07-12
 
 ### Security
 - Security-review remediation (extension surface):
-  - **Auto-lock.** The vault now locks after 5 minutes of no user input, and
-    on browser lock / service-worker suspend (`chrome.idle` + `onSuspend`;
-    new `idle` / `alarms` permissions). The mobile app already auto-locked;
-    the extension didn't.
+  - **Auto-lock.** The vault now locks after 5 minutes without wallet
+    interaction, mirroring the mobile shell's semantics with MV3 means. Every
+    popup / side-panel message stamps an activity timestamp (persisted in
+    `chrome.storage.session`, so it survives a service-worker restart
+    mid-session) and a periodic `chrome.alarms` tick enforces the deadline —
+    this covers the case system idle detection cannot: a side panel left open
+    while the user stays active elsewhere in the browser. dApp traffic is
+    deliberately not activity, so a polling page can't hold the wallet open.
+    On top of the deadline, the vault locks immediately on system idle /
+    screen lock (`chrome.idle`) and on service-worker suspend (`onSuspend`);
+    new `idle` / `alarms` permissions. The deadline logic lives in a pure,
+    unit-tested module (`background/auto-lock.ts`) behind injected ports —
+    the extension analog of the mobile `lock/auto-lock.ts`. The mobile app
+    already auto-locked; the extension didn't.
   - **Unlock throttle** via the core `UnlockGuardStore` (`ChromeUnlockGuardStore`,
     persisted in `chrome.storage.local`) — an offline attacker with the
     plaintext-on-disk vault no longer gets unlimited password guesses.

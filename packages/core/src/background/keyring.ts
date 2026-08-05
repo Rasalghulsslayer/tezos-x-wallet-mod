@@ -4,7 +4,9 @@
  * the PBKDF2-derived vault key (never the password) so add/remove/setActive/
  * rename can re-seal without re-prompting; the key is zeroized on lock. The
  * password itself only ever exists transiently — inside unlock and the
- * export flows that re-prompt for it.
+ * export flows that re-prompt for it. Per-account signing keys are not
+ * retained either: getSigningKeyFor derives them on demand. See the
+ * UnlockedKeyring doc for the full retention contract.
  */
 
 import {
@@ -73,10 +75,32 @@ export class UnlockThrottledError extends Error {
 }
 
 export interface UnlockedSession {
-  account:   Account;
-  secretKey: string;
+  account: Account;
 }
 
+/**
+ * What stays in memory while the wallet is unlocked — and why.
+ *
+ * The vault password is NOT retained: mutations re-seal with `km`, and the
+ * flows that must prove the user knows the password (reveal, removal)
+ * re-prompt, derive a candidate key, and compare in constant time. Per-account
+ * signing keys are not retained either — the container builder derives them on
+ * demand via getSigningKeyFor.
+ *
+ * `payload` is the decrypted vault payload, so it necessarily holds every
+ * account's stored secret: it is what mutations (add / remove / rename /
+ * switch) edit and re-seal without a password re-prompt. Holding only the
+ * ciphertext instead would not reduce exposure — `km` sits alongside and
+ * decrypts it — and would force a decrypt per mutation.
+ *
+ * `km.key` is raw bytes rather than a non-extractable WebCrypto CryptoKey
+ * because the CryptoPort is shared with the mobile shell, whose OpenSSL-backed
+ * port needs raw key material (the two implementations are proven
+ * byte-compatible by the cross-impl vault tests). Raw bytes can at least be
+ * wiped: lock() zeroizes `km.key`. The payload's secrets are JS strings, which
+ * cannot be overwritten in place — on lock their guarantee is unreachability,
+ * then garbage collection.
+ */
 export interface UnlockedKeyring extends UnlockedSession {
   payload: MultiAccountVaultPayload;
   /** The derived vault key (zeroized on lock) plus the salt / work factor it
@@ -163,27 +187,27 @@ export class Keyring {
     // HD index 0 — the same path the single-account derivation always used, so
     // the address is unchanged. Later "add account" derives the next index
     // from this phrase instead of minting a new one.
-    const { tz1, publicKey, secretKey } = await deriveTezosIdentity(trimmed, 0);
+    const { tz1, publicKey } = await deriveTezosIdentity(trimmed, 0);
     const account: TezosAccount = newTezosAccount(this.crypto, tz1, publicKey);
-    return this.initialiseVault(account, { kind: 'derived', index: 0 }, secretKey, password, { mnemonic: trimmed });
+    return this.initialiseVault(account, { kind: 'derived', index: 0 }, password, { mnemonic: trimmed });
   }
 
   async importFromSecretKey(edsk: string, password: string): Promise<UnlockedKeyring> {
     const trimmed = edsk.trim();
     if (!isValidEdsk(trimmed)) throw new Error('Invalid Tezos secret key (expected edsk…)');
     if (password.length < 8)   throw new Error('Password must be at least 8 characters');
-    const { tz1, publicKey, secretKey } = await deriveTezosIdentityFromSecretKey(trimmed).catch(() => {
+    const { tz1, publicKey } = await deriveTezosIdentityFromSecretKey(trimmed).catch(() => {
       throw new Error('Could not decode the secret key');
     });
     const account: TezosAccount = newTezosAccount(this.crypto, tz1, publicKey);
-    return this.initialiseVault(account, { kind: 'edsk', value: trimmed }, secretKey, password);
+    return this.initialiseVault(account, { kind: 'edsk', value: trimmed }, password);
   }
 
   async importFromEvmPrivkey(privateKeyHex: string, password: string): Promise<UnlockedKeyring> {
     if (password.length < 8) throw new Error('Password must be at least 8 characters');
     const { address, publicKey, privateKey } = deriveEvmAccount(privateKeyHex);
     const account: EvmAccount = newEvmAccount(this.crypto, address, publicKey);
-    return this.initialiseVault(account, { kind: 'evm-pk', value: privateKey }, privateKey, password);
+    return this.initialiseVault(account, { kind: 'evm-pk', value: privateKey }, password);
   }
 
   async unlock(password: string): Promise<{ session: UnlockedSession; accountId: AccountId }> {
@@ -223,10 +247,10 @@ export class Keyring {
     const payload  = parsePayload(raw);
     const activeId = payload.active;
     const account  = payload.accounts.find(a => a.id === activeId);
-    const secret   = payload.secrets[activeId];
-    if (account == null || secret == null) throw new Error('Vault corrupted: active account not found');
-    const secretKey = await deriveSigningKey(account, secret, payload.seed);
-    this.unlocked = { account, secretKey, payload, km };
+    if (account == null || payload.secrets[activeId] == null) {
+      throw new Error('Vault corrupted: active account not found');
+    }
+    this.unlocked = { account, payload, km };
     this.activeDirty = false;
     return { session: this.unlocked, accountId: activeId };
   }
@@ -374,9 +398,9 @@ export class Keyring {
    * is not a secret, so re-sealing the whole vault (a 600k-PBKDF2 encrypt) on
    * every switch is wasted work that stalls a pure-JS runtime (mobile/Hermes has
    * no native crypto). The account/payload swap is synchronous and cheap; the
-   * signing key is re-derived on demand by the container builder
-   * (getSigningKeyFor), so no signing path reads the now-stale
-   * unlocked.secretKey. The pointer reaches disk via a later flushActive() (or
+   * unlocked session holds no signing key — the container builder derives one
+   * on demand via getSigningKeyFor, so nothing here can go stale.
+   * The pointer reaches disk via a later flushActive() (or
    * the next secret-changing persist); a crash before that at worst forgets the
    * selection — the last-persisted active is restored on unlock. The extension
    * keeps setActiveAccount()'s synchronous persist (its Web Crypto makes the
@@ -395,10 +419,10 @@ export class Keyring {
 
   /** Persist a pending active-pointer change (from activateInMemory) to disk.
    *  A no-op when nothing is pending. This is the one costly step (a 600k-PBKDF2
-   *  vault re-encrypt), so callers run it off the interaction path — never on the
-   *  switch itself. The in-memory signing key is left untouched: no signing path
-   *  reads unlocked.secretKey (the container builder re-derives via
-   *  getSigningKeyFor), so it never needs refreshing here. */
+   *  vault re-encrypt), so callers run it off the interaction path — never on
+   *  the switch itself. No signing key lives on the unlocked session (the
+   *  container builder derives one on demand via getSigningKeyFor), so there
+   *  is nothing else to refresh here. */
   async flushActive(): Promise<void> {
     if (!this.activeDirty) return;
     const u = this.requireUnlocked();
@@ -455,11 +479,10 @@ export class Keyring {
   }
 
   private async initialiseVault(
-    account:   Account,
-    secret:    AccountSecret,
-    secretKey: string,
-    password:  string,
-    seed?:     { mnemonic: string },
+    account:  Account,
+    secret:   AccountSecret,
+    password: string,
+    seed?:    { mnemonic: string },
   ): Promise<UnlockedKeyring> {
     const payload: MultiAccountVaultPayload = {
       version:  3,
@@ -475,17 +498,17 @@ export class Keyring {
       iterations: PBKDF2_ITERATIONS,
     };
     await this.vaultStore.save(await encryptVaultWithKey(JSON.stringify(payload), km, this.crypto));
-    this.unlocked = { account, secretKey, payload, km };
+    this.unlocked = { account, payload, km };
     return this.unlocked;
   }
 
   private async persist(newPayload: MultiAccountVaultPayload, km: VaultKeyMaterial): Promise<void> {
     await this.vaultStore.save(await encryptVaultWithKey(JSON.stringify(newPayload), km, this.crypto));
     const active = newPayload.accounts.find(a => a.id === newPayload.active);
-    const secret = newPayload.secrets[newPayload.active];
-    if (active == null || secret == null) throw new Error('Vault corrupted after mutation');
-    const secretKey = await deriveSigningKey(active, secret, newPayload.seed);
-    this.unlocked = { account: active, secretKey, payload: newPayload, km };
+    if (active == null || newPayload.secrets[newPayload.active] == null) {
+      throw new Error('Vault corrupted after mutation');
+    }
+    this.unlocked = { account: active, payload: newPayload, km };
     this.activeDirty = false;
   }
 

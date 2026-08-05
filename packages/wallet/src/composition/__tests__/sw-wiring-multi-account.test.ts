@@ -235,6 +235,41 @@ describe('sw-wiring multi-account dispatch', () => {
     const bad = await send(h.deps, { type: 'EXPORT_WALLET_SEED', password: 'wrong-password' });
     expect(bad.ok).toBe(false);
   });
+
+  it('ADD_ACCOUNT {source: derived} walks the per-curve HD index — nothing new to back up', async () => {
+    const firstId = h.keyring.getUnlocked()!.account.id;
+
+    const addDerived = async (kind: 'tezos' | 'evm') => {
+      const res = await send(h.deps, { type: 'ADD_ACCOUNT', kind, source: { source: 'derived' } });
+      if (!res.ok) throw new Error(`derived ${kind} add failed: ${res.message}`);
+      return res.data as { accountId: string; secret?: string };
+    };
+
+    const tzA = await addDerived('tezos');
+    const tzB = await addDerived('tezos');
+    const evm = await addDerived('evm');
+
+    // No secret comes back — the accounts are covered by the existing phrase,
+    // so the UI has nothing to make the user back up.
+    expect(tzA.secret).toBeUndefined();
+    expect(evm.secret).toBeUndefined();
+
+    const byId = new Map((await h.keyring.listAccountSummaries()).map((s) => [s.id, s]));
+    // Onboarding sits at Tezos index 0; consecutive derived adds walk each
+    // curve independently (Tezos → 1, 2; the first derived EVM starts at 0).
+    expect(byId.get(firstId)?.derivationIndex).toBe(0);
+    expect(byId.get(tzA.accountId)?.derivationIndex).toBe(1);
+    expect(byId.get(tzB.accountId)?.derivationIndex).toBe(2);
+    expect(byId.get(evm.accountId)?.derivationIndex).toBe(0);
+
+    // Distinct indices yield distinct addresses.
+    const addrs = [firstId, tzA.accountId, tzB.accountId, evm.accountId]
+      .map((id) => byId.get(id)?.primaryAddress);
+    expect(new Set(addrs).size).toBe(4);
+
+    // Like every ADD_ACCOUNT, deriving does not flip the active account.
+    expect(h.keyring.getUnlocked()!.account.id).toBe(firstId);
+  });
 });
 
 describe('sw-wiring eth_accounts session gating', () => {

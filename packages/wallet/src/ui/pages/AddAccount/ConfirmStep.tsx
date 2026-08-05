@@ -18,21 +18,26 @@ export function ConfirmStep({
   onBack:      () => void;
   onSubmit:    () => void;
 }) {
-  const isTezos  = pick.kind === 'tezos';
-  const isCreate = pick.source === 'fresh';
+  const isTezos   = pick.kind === 'tezos';
+  const isCreate  = pick.source === 'fresh';
+  const isDerived = pick.source === 'derived';
   const chips    = isTezos ? TEZOS_LABEL_CHIPS : EVM_LABEL_CHIPS;
   const placeholder  = `Account ${nextSeq} · tap to label`;
   const primaryLabel = submitting
-    ? (isCreate ? 'Creating…' : 'Importing…')
-    : (isCreate ? 'Create & activate' : 'Import & activate');
+    ? (isDerived ? 'Deriving…' : isCreate ? 'Creating…' : 'Importing…')
+    : (isDerived ? 'Derive & activate' : isCreate ? 'Create & activate' : 'Import & activate');
   const primaryClass = `btn primary${isTezos ? '' : ' l2'}`;
 
   return (
     <>
       <div className="tx-page-scroll">
         <div className="tx-add-step-head" style={{ paddingBottom: 8 }}>
-          <div className="kicker">Step 3 of 3 · Review</div>
-          <h2>{isCreate ? 'Your new account' : `Importing this ${isTezos ? 'Tezos' : 'EVM'} account`}</h2>
+          <div className="kicker">{isDerived ? 'Step 2 of 2 · Review' : 'Step 3 of 3 · Review'}</div>
+          <h2>
+            {isDerived ? 'Next account from your seed phrase'
+              : isCreate ? 'Your new account'
+              : `Importing this ${isTezos ? 'Tezos' : 'EVM'} account`}
+          </h2>
           <p className="sub">Type a label or leave blank for the default. The account becomes active when you confirm.</p>
         </div>
 
@@ -51,7 +56,7 @@ export function ConfirmStep({
               />
               <div className="kind">
                 <span className={`sw ${isTezos ? 'both' : 'l2'}`} aria-hidden />
-                {isTezos ? 'Tezos · dual runtime' : 'EVM-native'} · {isCreate ? 'NEW' : 'IMPORT'}
+                {isTezos ? 'Tezos · dual runtime' : 'EVM-native'} · {isDerived ? 'DERIVED' : isCreate ? 'NEW' : 'IMPORT'}
               </div>
             </div>
           </div>
@@ -76,7 +81,16 @@ export function ConfirmStep({
                 <span className="v">{shortAddr(preview.primary, 8, 6)}</span>
               </div>
             )}
-            {preview == null && (
+            {preview == null && isDerived && (
+              // The wallet seed never leaves the service worker, so the next
+              // index's address can't be previewed here — it appears on Home
+              // right after the derivation lands.
+              <div className="ah-addr">
+                <span className={`badge ${isTezos ? 'l1' : 'l2'}`}>{isTezos ? 'Michelson' : 'EVM'}</span>
+                <span className="v">Next unused index from your seed phrase</span>
+              </div>
+            )}
+            {preview == null && !isDerived && (
               <div className="ah-addr"><span className="badge l1">…</span><span className="v">Deriving…</span></div>
             )}
           </div>
@@ -92,6 +106,8 @@ export function ConfirmStep({
           <span className="ico"><Icon name="info" size={13} /></span>
           {label.trim() !== '' ? (
             <span>Will appear as <strong>"{label.trim()}"</strong> on Home. You can rename later from the switcher.</span>
+          ) : isDerived ? (
+            <span>Backed up by your <strong>existing seed phrase</strong> — nothing new to save. The account activates immediately.</span>
           ) : (
             <span>This account will be created and <strong>activated immediately</strong>. Connected dApps will see the new address on their next request.</span>
           )}
@@ -110,7 +126,7 @@ export function ConfirmStep({
           type="button"
           className={primaryClass}
           onClick={onSubmit}
-          disabled={submitting || preview == null}
+          disabled={submitting || (!isDerived && preview == null)}
         >
           {primaryLabel}
         </button>

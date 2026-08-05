@@ -6,7 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
-## [Unreleased]
+## [0.7.0] — 2026-07-12
 
 ### Added
 - **`encodeErc20Transfer(to, amount)`** (`shared/abi.ts`, exported from
