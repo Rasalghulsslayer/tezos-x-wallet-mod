@@ -30,7 +30,7 @@ extension/
     ├── injected.ts        window.ethereum + EIP-6963  (world: MAIN)
     ├── content.ts         Session bridge page → background  (world: ISOLATED)
     ├── background.ts      Service worker — session storage
-    ├── popup.ts           Popup UI logic
+    ├── popup.tsx          Popup UI (React)
     └── messages.ts        Shared message types
 ```
 

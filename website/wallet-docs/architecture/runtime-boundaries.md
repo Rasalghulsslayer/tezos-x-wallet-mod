@@ -48,12 +48,16 @@ window.postMessage(
 ```ts
 window.postMessage(
   { type: 'TEZOSX_WALLET_EVENT', event: 'accountsChanged', data: accounts },
-  '*',
+  window.location.origin || '*',
 );
 ```
 
+The bridge also relays the service worker's `WALLET_ROLE` push as a `TEZOSX_WALLET_ROLE` message on the same channel (see [dApp Bridge](./dapp-bridge#provider-identity--dapp-detection)).
+
+All three message kinds pin `targetOrigin` to the page's own origin; the `|| '*'` fallback only applies on pages whose origin serializes as empty (opaque origins, e.g. sandboxed frames).
+
 :::caution Origin check
-The injected provider always verifies `event.source === window` before processing incoming messages, preventing pages from spoofing extension responses.
+Both ends — the injected provider and the content bridge — verify `event.source === window` before processing incoming messages, preventing other frames from spoofing requests or responses.
 :::
 
 ### ISOLATED ↔ Service Worker: `chrome.runtime.sendMessage`

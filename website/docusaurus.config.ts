@@ -8,8 +8,7 @@ const config: Config = {
   favicon: 'img/tezos-logo.svg',
   url: 'https://trilitech.github.io',
   baseUrl: process.env.BASE_URL ?? '/tezos-x-wallet/',
-  onBrokenLinks: 'warn',
-  onBrokenMarkdownLinks: 'warn',
+  onBrokenLinks: 'throw',
 
   i18n: {
     defaultLocale: 'en',
@@ -25,14 +24,32 @@ const config: Config = {
         path: 'wallet-docs',
         routeBasePath: 'wallet',
         sidebarPath: './sidebars-wallet.ts',
+        editUrl: 'https://github.com/trilitech/tezos-x-wallet/tree/main/website/',
+        lastVersion: 'current',
+        versions: {
+          current: { label: '0.14.0' },
+        },
       },
     ],
   ],
 
   markdown: {
     mermaid: true,
+    hooks: {
+      onBrokenMarkdownLinks: 'throw',
+    },
   },
-  themes: ['@docusaurus/theme-mermaid'],
+  themes: [
+    '@docusaurus/theme-mermaid',
+    [
+      '@easyops-cn/docusaurus-search-local',
+      {
+        hashed: true,
+        docsRouteBasePath: ['docs', 'wallet'],
+        docsDir: ['docs', 'wallet-docs'],
+      },
+    ],
+  ],
 
   presets: [
     [
@@ -41,6 +58,11 @@ const config: Config = {
         docs: {
           sidebarPath: './sidebars.ts',
           routeBasePath: 'docs',
+          editUrl: 'https://github.com/trilitech/tezos-x-wallet/tree/main/website/',
+          lastVersion: 'current',
+          versions: {
+            current: { label: '0.7.0' },
+          },
         },
         blog: false,
         theme: {
@@ -80,6 +102,12 @@ const config: Config = {
         {
           type: 'docsVersionDropdown',
           position: 'left',
+          dropdownItemsBefore: [
+            {
+              type: 'html',
+              value: '<strong class="dropdown__link" style="pointer-events:none;opacity:0.6;">Relayer docs</strong>',
+            },
+          ],
         },
         {
           to: '/wallet/intro',
@@ -90,6 +118,12 @@ const config: Config = {
           type: 'docsVersionDropdown',
           docsPluginId: 'wallet',
           position: 'right',
+          dropdownItemsBefore: [
+            {
+              type: 'html',
+              value: '<strong class="dropdown__link" style="pointer-events:none;opacity:0.6;">Wallet docs</strong>',
+            },
+          ],
         },
         {
           href: 'https://github.com/trilitech/tezos-x-wallet',

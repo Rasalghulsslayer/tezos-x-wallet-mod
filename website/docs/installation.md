@@ -15,7 +15,7 @@ This page covers the **Relayer** extension (requires Temple Wallet). If you want
 
 - Node.js 20+
 - npm 10+
-- [Temple Wallet](https://templewallet.com) browser extension
+- [Temple Wallet](https://templewallet.com) — the **Temple mobile app**. The Beacon pairing was last verified against Temple mobile (QR-code scan); pairing with the Temple browser extension did not work at the time of writing. See [Connect Wallet](./user-flows/connect-wallet) for details.
 - Tezos X Previewnet configured in Temple (RPC URL: `https://michelson.previewnet.tezosx.nomadic-labs.com`)
 
 ---
@@ -28,9 +28,9 @@ The Chrome/Brave/Firefox MV3 extension is the easiest way to use the relayer. It
 
 ```bash
 git clone https://github.com/trilitech/tezos-x-wallet.git
-cd tezosx-relayer
+cd tezos-x-wallet
 npm install
-npm run build:ext    # → extension/dist/
+npm run build:ext    # → packages/relayer/extension/dist/
 ```
 
 ### Load in Chrome or Brave
@@ -38,7 +38,7 @@ npm run build:ext    # → extension/dist/
 1. Open `chrome://extensions` (or `brave://extensions`)
 2. Enable **Developer mode** (top-right toggle)
 3. Click **Load unpacked**
-4. Select the `extension/` folder
+4. Select the `packages/relayer/extension/` folder — it contains `manifest.json`, which references the built scripts in its `dist/` subfolder
 
 > **Brave only:** go to `brave://settings/web3` → Default wallet → select **None** or **Extensions** to avoid conflict with Brave Wallet.
 
@@ -48,7 +48,7 @@ Firefox supports MV3 since Firefox 109.
 
 1. Go to `about:debugging` → *This Firefox*
 2. Click *Load Temporary Add-on*
-3. Select `extension/manifest.json`
+3. Select `packages/relayer/extension/manifest.json`
 
 ### Development mode (auto-reload)
 
@@ -63,7 +63,7 @@ npm run dev:ext   # launches Chromium with the extension pre-loaded
 If you control the page, add the IIFE bundle before any other scripts:
 
 ```bash
-npm run build    # → dist/relayer.iife.js
+npm run build    # → packages/relayer/dist/relayer.iife.js
 ```
 
 ```html

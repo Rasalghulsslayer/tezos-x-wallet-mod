@@ -6,7 +6,7 @@ sidebar_position: 3
 
 # Smart Contract Call Flow
 
-Call a Michelson smart contract from a Tezos X EVM dApp via the NAC gateway.
+Call an EVM smart contract from a Tezos X EVM dApp via the NAC gateway.
 
 ## Example: Counter contract
 
@@ -24,12 +24,17 @@ await window.ethereum.request({
 
 ## Function selectors (Counter)
 
-| Function | Selector |
-|---|---|
-| `increment()` | `0xd09de08a` |
-| `decrement()` | `0x2baeceb7` |
-| `setNumber(uint256)` | `0x3fb5c1cb` |
-| `retrieve()` | `0x2e64cec1` |
+| Function | Selector | Notes |
+|---|---|---|
+| `increment()` | `0xd09de08a` | |
+| `decrement()` | `0x2baeceb7` | |
+| `setNumber(uint256)` | `0x3fb5c1cb` | |
+| `retrieve()` | `0x2e64cec1` | Read — goes through `eth_call`, not the gateway |
+
+Only selectors on the relayer's curated allow-list can be sent via
+`eth_sendTransaction`; unknown selectors are rejected with
+`UnknownSelectorError` before any signing popup opens. See
+[Selector resolution](../architecture/nac-gateway#selector-resolution).
 
 ## Sequence
 
@@ -38,20 +43,25 @@ sequenceDiagram
     actor User
     participant dApp
     participant Relayer
+    participant Temple
     participant Gateway as NAC Gateway
     participant Kernel
 
-    dApp->>Relayer: eth_sendTransaction({ to: KT1, data: 0xd09de08a })
+    dApp->>Relayer: eth_sendTransaction({ to: 0xContract, data: 0xd09de08a })
     Relayer->>Relayer: Detect contract call (data != 0x)
-    Relayer->>Relayer: Build Micheline callMichelson payload
-    Relayer->>Temple: Sign L1 operation
+    Relayer->>Relayer: Build call_evm Micheline payload
+    Relayer->>Temple: Sign Michelson operation
     Temple->>User: Confirm
     User->>Temple: Sign
-    Temple->>Gateway: callMichelson(Pair(KT1, Pair("increment", bytes)))
+    Temple->>Gateway: call_evm(Pair("0xContract", Pair("increment()", bytes)))
     Gateway->>Kernel: Atomic forward
     Kernel->>Kernel: Execute → counter++
-    Relayer->>dApp: tx hash
+    Relayer->>dApp: synthetic hash
 ```
+
+The hash returned to the dApp is a **synthetic hash** — the real
+kernel-synthesized EVM hash is resolved lazily. See
+[EIP-1193 → synthetic hash](../architecture/eip1193#transaction-receipts--the-synthetic-hash).
 
 ## ABI encoding
 
@@ -70,3 +80,9 @@ await window.ethereum.request({
   }]
 });
 ```
+
+## See also
+
+- [Transfer flow](./transfer) — the empty-calldata path
+- [API Reference](../technical/api-reference) — `eth_sendTransaction` and the typed errors
+- [NAC Gateway](../architecture/nac-gateway) — `call_evm` signature and selector resolution

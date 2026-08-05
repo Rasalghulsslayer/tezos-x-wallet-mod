@@ -1,63 +1,75 @@
 ---
 id: local-signer
-title: Local Signer
-sidebar_label: Local Signer
+title: Local signing (TezosSigner)
+sidebar_label: Local Signing
 ---
 
-# Local Signer
+# Local signing (`TezosSigner`)
 
-`LocalSignerClient` ([`packages/wallet/src/background/signer.ts`](https://github.com/trilitech/tezos-x-wallet/blob/main/packages/wallet/src/background/signer.ts)) is the wallet's implementation of `ITezosWalletClient`. It signs Michelson runtime operations locally using a secret key held in service worker memory — no Temple or Beacon SDK required.
+`TezosSigner` ([`packages/core/src/adapters/tezos/tezos-signer.ts`](https://github.com/trilitech/tezos-x-wallet/blob/main/packages/core/src/adapters/tezos/tezos-signer.ts)) is the Tezos-account implementation of `TezosSignerPort`. It signs Michelson runtime operations locally with a secret key held in service-worker memory — no Temple or Beacon SDK involved. It lives in `@tezosx/wallet-core`, so the same signer serves both the extension and the mobile app.
 
 ## Interface
 
-`LocalSignerClient` implements [`ITezosWalletClient`](https://github.com/trilitech/tezos-x-wallet/blob/main/packages/relayer/src/wallet-client.ts):
+`TezosSignerPort` extends the relayer's [`ITezosWalletClient`](https://github.com/trilitech/tezos-x-wallet/blob/main/packages/relayer/src/ports/tezos-wallet-client.ts) with a same-runtime shortcut:
 
 ```ts
+interface TezosSignerPort extends ITezosWalletClient {
+  readonly kind:    'tezos';
+  readonly account: TezosAccount;
+  sendNativeTransfer(to: string, mutezAmount: string): Promise<string>;
+}
+
 interface ITezosWalletClient {
   getActiveAccount(): Promise<WalletPermissions | null>;
   setAccountChangeHandler(cb: (tz1: string | null) => void): void;
   requestPermissions(): Promise<WalletPermissions>;
   sendContractCall(
-    entrypoint: string,
+    entrypoint:   string,
     michelineArg: MichelsonV1Expression,
     mutezAmount?: string,
-  ): Promise<string>;   // returns Michelson runtime opHash
+  ): Promise<string>;   // returns the Michelson operation hash
   disconnect(): Promise<void>;
 }
 ```
 
+`sendNativeTransfer` is deliberately **not** part of `ITezosWalletClient` — the relayer always targets EVM state, so it never needs the same-runtime shortcut.
+
 ## Construction
 
-The service worker creates a `LocalSignerClient` from the unlocked identity immediately after `keyring.unlock()`:
+The signer is wired per account by the core container (see the [Architecture Overview](../architecture/overview.md)). When a container is needed for an account, the keyring derives the signing key on demand — the unlocked keyring retains no signing keys — and `buildContainer` instantiates the adapter set for the account's kind:
 
 ```ts
-const signer = new LocalSignerClient(
-  unlocked.secretKey,    // edsk…
-  unlocked.publicKey,    // edpk…
-  unlocked.tz1,          // tz1…
-);
-provider = new RelayerProvider(signer);
+const { account, secretKey } = await keyring.getSigningKeyFor(accountId);
+// … inside buildContainer, for a Tezos account:
+const signer   = new TezosSigner(account, secretKey);
+const provider = new RelayerProvider(signer, pendingOpsStore);
 ```
 
-Internally it initialises a Taquito `TezosToolkit` pointed at the Tezos X Previewnet RPC, and registers an `InMemorySigner` with the secret key:
+Internally the signer initialises a Taquito `TezosToolkit` pointed at the Tezos X Previewnet Michelson RPC, and registers an `InMemorySigner` with the secret key:
 
 ```ts
 this.toolkit = new TezosToolkit(TEZOS_L1_RPC);
 this.toolkit.setProvider({ signer: new InMemorySigner(secretKey) });
 ```
 
+## Routing
+
+The transfer use case (`send-transfer` + `decideRoute`) picks the path from the source account kind and the destination address runtime. For a Tezos account:
+
+| Asset | Destination | Path |
+|---|---|---|
+| XTZ | `tz1` / `KT1` (Michelson runtime) | Same-runtime — `sendNativeTransfer` (plain Michelson transfer, no gateway) |
+| XTZ | `0x…` (EVM runtime) | Cross-runtime — `eth_sendTransaction` through `RelayerProvider` → gateway entrypoint `call` |
+| ERC-20 (e.g. USDC) | `0x…` (EVM runtime) | Cross-runtime — `eth_sendTransaction` with `transfer(to, amount)` calldata → gateway entrypoint `call_evm` |
+
+For a **bare native transfer** the relayer builds a generic `%call` HTTP request — `pair url (pair headers (pair body (pair method callback)))` — as a POST to `http://ethereum/<0x recipient>` with empty headers and body, the operation's mutez amount attached, and no callback. (The dedicated `%default` bare-transfer entrypoint was removed upstream; `%call` is its replacement.) ABI-encoded EVM calls go through `call_evm`, with the method signature resolved from the relayer's local selector allow-list.
+
 ## `sendContractCall`
 
-When `RelayerProvider` needs to send an operation (e.g. for `eth_sendTransaction`), it calls:
+Submits a `TRANSACTION` operation to the **NAC gateway contract** (`KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw`) through the internal `transferWithBufferedFees` wrapper (see [Fees](#fees)):
 
 ```ts
-signer.sendContractCall(entrypoint, michelineArg, mutezAmount)
-```
-
-This submits a `TRANSACTION` operation to the **NAC gateway contract** (`KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw`) through the internal `transferWithKernelAwareFees` wrapper (see [Fees — kernel-aware](#fees--kernel-aware)):
-
-```ts
-return this.transferWithKernelAwareFees({
+return this.transferWithBufferedFees({
   to:        NAC_CONTRACT,
   amount:    Number(mutezAmount),
   mutez:     true,
@@ -65,101 +77,55 @@ return this.transferWithKernelAwareFees({
 });
 ```
 
-The wrapper handles fee computation against the live kernel constants; Taquito still handles forging, simulation, and signature injection.
+Taquito handles forging, simulation, and signature injection.
 
 ## `sendNativeTransfer`
 
-For **same-runtime XTZ transfers** (`tz1 → tz1 / KT1`), routing through the gateway would be wasteful — the NAC contract would just receive mutez from the source and forward them to the destination, with no EVM state ever touched. The wallet bypasses the gateway in that case and calls a plain Michelson runtime transfer directly:
+For **same-runtime XTZ transfers** (`tz1 → tz1 / KT1`), routing through the gateway would be wasteful — the NAC contract would just receive mutez from the source and forward them to the destination, with no EVM state ever touched. The wallet bypasses the gateway and issues a plain Michelson runtime transfer:
 
 ```ts
-signer.sendNativeTransfer(to, mutezAmount)
-```
-
-```ts
-return this.transferWithKernelAwareFees({
+return this.transferWithBufferedFees({
   to,                       // tz1 / tz2 / tz3 / KT1
   amount: Number(mutezAmount),
   mutez:  true,
 });
 ```
 
-The decision is made in the service worker's `SEND_TX` handler based on `detectRuntime(msg.to)`:
+## Fees
 
-| asset | recipient runtime | path |
-|---|---|---|
-| `XTZ`  | `l1` (`tz1 / KT1 / …`) | `sendNativeTransfer` (no gateway) |
-| `XTZ`  | `l2` (`0x…`) | `RelayerProvider.request('eth_sendTransaction')` → `sendContractCall('default', …)` |
-| `USDC` | `l2` (`0x…`) | `RelayerProvider.request('eth_sendTransaction')` → `sendContractCall('call_evm', …)` |
+### Why Tezos X fees differ from mainnet
 
-`sendNativeTransfer` is a wallet-only addition; it lives on `LocalSignerClient` but is **not** part of the `ITezosWalletClient` interface — the relayer never needs to know about same-runtime shortcuts since it always targets EVM state.
+The fee schedule the Tezos X kernel enforces — a dynamic, congestion-based gas price plus a data-availability byte fee, served by the node's `mempool/filter` endpoint — differs from Tezos mainnet's. Older Taquito releases hardcoded the mainnet constants in their fee estimator, so the suggested fee under-shot and the kernel rejected operations with `insufficient_fees`; earlier wallet versions worked around this by fetching the filter constants themselves and recomputing the fee. **Taquito ≥ 24.3 derives `suggestedFeeMutez` from the live `mempool/filter` schedule on every estimate**, so the estimate is kernel-correct out of the box and the hand-rolled fee computation is gone.
 
-## Fees — kernel-aware
+### Current model — `transferWithBufferedFees`
 
-### Why this is non-trivial
+1. **Estimate** via `toolkit.estimate.transfer(params)`. `suggestedFeeMutez` is already kernel-correct (see above).
+2. **Volatility buffer**: submit with `fee = ⌈suggestedFeeMutez × 1.5⌉` (`FEE_BUFFER`). The gas price is congestion-based and can rise between estimation and inclusion; the gas and storage *limits* are deterministic, so they are left as estimated (`storageLimit + 1` for a one-byte margin).
+3. **One capped retry**: if the node still rejects with `insufficient_fees`, the `required` value is parsed out of the error (both the mutez-integer and the JSON-quoted decimal-tez formats are handled) and the operation is resubmitted **once** with exactly that fee — but only when `required ≤ computed × 4` (`MAX_RETRY_FEE_MULTIPLE`). The retry trusts a node-reported number, and a buggy or hostile RPC could otherwise name an absurd figure and drain the balance in fees; past the cap the original rejection is surfaced instead.
 
-The Tezos fee formula a node enforces is:
+### `call_evm` fallback — fixed ceilings
 
-```
-fee ≥ minimal_fees + ⌈gas_limit × per_gas / 1000⌉ + ⌈op_size × per_byte / 1000⌉   (mutez)
-```
+Tezlink's `run_operation` can reject the *simulation* of a `call_evm` operation with `tezlink_error` when the default gas budgets are too low for the EVM sub-call. In that case the signer bypasses estimation entirely and submits with fixed Beacon-style ceilings, letting the kernel allocate what the sub-call needs:
 
-The three constants (`minimal_fees`, `per_gas`, `per_byte`) are part of the **node's mempool filter configuration**, not protocol-level constants. Tezos mainnet ships them as `(100, 0.1, 1)` (mutez per gas, mutez per byte). Taquito hardcodes those mainnet values in its auto-fee estimator.
+| Parameter | Value |
+|---|---|
+| `gasLimit` | 1,040,000 |
+| `storageLimit` | 60,000 |
+| `fee` | 100,000 mutez |
 
-The TezosX kernel uses a **different schedule** — gas is roughly 100× cheaper, bytes are 4000× more expensive. With Taquito's hardcoded constants, the suggested fee under-shoots reality by 10–25 % and the kernel rejects with `evm_node.dev.insufficient_fees`. **No multiplier on the wrong base formula reproduces the kernel's exact value** — both the byte and gas terms diverge in opposite directions, and any flat buffer that's safe in one direction over-pays in the other.
-
-This is the same problem the `octez-client` team solved in MRs !21028, !21050, !21155, !21199 — by reading constants live from the node and computing the exact value.
-
-### Resolution
-
-`LocalSignerClient` adopts the same approach. The wrapper `transferWithKernelAwareFees` (used by both `sendContractCall` and `sendNativeTransfer`):
-
-1. **Pre-estimates** the operation via `toolkit.estimate.transfer` to get `gasLimit`, `storageLimit`, and `opSize` — Taquito's simulation is correct on those numbers; only the *fee* it derives from them is wrong.
-2. **Fetches live constants** from the kernel's RPC `chains/main/mempool/filter` (cached 30 s, in-memory):
-
-   ```json
-   {
-     "minimal_fees": "100",
-     "minimal_nanotez_per_gas_unit": ["10", "1"],
-     "minimal_nanotez_per_byte":     ["4000", "1"]
-   }
-   ```
-
-   The two `nanotez_per_*` values are returned as **Q-rationals** (`[numerator, denominator]`); the formula is in nanotez, mutez = nanotez / 1000.
-
-3. **Pads `opSize` by 96 bytes** before computing the fee. Taquito's `est.opSize` measures the *forged, unsigned* operation — but at injection time a 64-byte Ed25519 signature is prepended, and zarith encoding of fee/gas/storage can shift by a few bytes when we override Taquito's suggested values. Without this margin the kernel charges per-byte on the signed op while we pay for the unsigned size, causing under-payment. The 96-byte margin (64 sig + 32 cushion) keeps the first submission accepted; over-payment is bounded at ~400 mutez (~0.0004 tez), negligible.
-4. **Computes the kernel-exact fee** using BigInt arithmetic, rounding each term up:
-
-   ```ts
-   fee = minimalFees
-       + ⌈gasLimit × num_g / (1000 × den_g)⌉
-       + ⌈(opSize + 96) × num_b / (1000 × den_b)⌉
-   ```
-
-5. **Submits** with that exact fee, the unmodified `gasLimit`, and `storageLimit + 1`.
-
-6. **Retries on residual rejection.** If the kernel still returns `insufficient_fees`, the error's `required` field is parsed and the op is resubmitted once with that exact value. The parser scans both the structured `errors` array and the raw `message`, and handles both mutez-integer and JSON-quoted decimal-tez formats (the latter is what the Tezos node actually returns). Without dual-format handling the retry silently no-ops; with it, the 96-byte margin and this safety net together cover the long tail.
-
-### Cache invalidation
-
-The 30 s TTL is a tradeoff: kernel constants change rarely (only on a node-side filter config update), but caching forever risks stale data after a redeploy. 30 s keeps fee-fetch overhead negligible (~one fetch per session burst of sends) without drifting more than a few seconds behind reality.
-
-## Comparison with `BeaconClient`
-
-| Aspect | `LocalSignerClient` | `BeaconClient` |
-|---|---|---|
-| **Key location** | SW memory (from keyring) | Temple Wallet |
-| **Temple required** | No | Yes |
-| **Signing popup** | None | Temple popup |
-| **Fee estimation** | Kernel-aware (`mempool/filter` RPC + Taquito gas/storage estimate) | Beacon / Temple |
-| **Used by** | TezosX Wallet extension | TezosX Relayer extension |
-| **`disconnect()`** | No-op (keyring handles lock) | Clears Beacon active account |
+This fallback applies only to `call_evm`; every other operation goes through the buffered-fee path above.
 
 ## Lifecycle
 
-`LocalSignerClient` is stateless beyond its constructor arguments. It is recreated every time the wallet unlocks:
+`TezosSigner` is stateless beyond its constructor arguments. Containers (signer + provider + fetchers) are cached per account and rebuilt on demand after unlock or an account switch. On lock — manual, auto-lock, or service-worker death — the container cache is cleared and the keyring wipes its vault key; the signing key is unreachable until the next unlock.
 
-```
-keyring.unlock() → new LocalSignerClient(sk, pk, tz1) → new RelayerProvider(signer)
-```
+## Comparison with `BeaconClient`
 
-When the wallet locks, `provider = null` discards the instance. The secret key is no longer accessible until the next unlock.
+| Aspect | `TezosSigner` | `BeaconClient` |
+|---|---|---|
+| **Key location** | Service-worker memory (derived on demand from the vault) | Temple Wallet |
+| **Temple required** | No | Yes |
+| **Signing popup** | None (the wallet's own approval flow gates dApp requests) | Temple popup |
+| **Fee estimation** | Taquito live estimate × 1.5 buffer + one capped retry | Beacon / Temple |
+| **Used by** | TezosX Wallet (extension and mobile, via `@tezosx/wallet-core`) | TezosX Relayer extension (Temple/Beacon integration) |
+| **`disconnect()`** | No-op (the keyring owns lock) | Clears the Beacon active account |

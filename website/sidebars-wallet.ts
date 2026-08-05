@@ -10,9 +10,20 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         'architecture/overview',
+        'architecture/packages',
         'architecture/runtime-boundaries',
         'architecture/keyring',
         'architecture/dapp-bridge',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Mobile app',
+      collapsed: false,
+      items: [
+        'mobile/quickstart',
+        'mobile/walletconnect',
+        'mobile/security',
       ],
     },
     {

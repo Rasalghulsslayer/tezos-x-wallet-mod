@@ -1,19 +1,28 @@
+# One-command testing setup — no local Node/npm required.
+#
+#   docker compose run --rm wallet      -> builds the extension into ./wallet-dist
+#   docker compose up playground        -> (optional) test dApp on http://localhost:3000
+#
+# Load the extension: chrome://extensions -> Developer mode -> Load unpacked -> ./wallet-dist
+# Full instructions in TESTING.md.
+
 services:
-  tezosx-relayer:
-    image: node:latest
-    working_dir: /root/tezosx-relayer
-    ports:
-      - "8080:8080"
+  wallet:
+    build:
+      context: .
+      dockerfile: Dockerfile.wallet
     volumes:
-      - ./.:/root/tezosx-relayer
-    command: /bin/bash -c "npm i && npm run build && npm run serve"
-  frontend:
-    image: node:latest
-    working_dir: /root/tezosx-relayer/frontend
+      - ./wallet-dist:/out
+
+  playground:
+    image: node:22-bookworm
+    working_dir: /app
     ports:
       - "3000:3000"
     volumes:
-      - ./.:/root/tezosx-relayer
-    command: /bin/bash -c "npm i && npm run dev"
-    depends_on:
-      - tezosx-relayer
+      - ./playground:/app
+      - playground_node_modules:/app/node_modules
+    command: /bin/sh -c "npm ci && npm run dev"
+
+volumes:
+  playground_node_modules:

@@ -11,7 +11,7 @@ This page describes connecting via the **TezosX Relayer** extension (requires Te
 :::
 
 :::warning Temple mobile only
-The Beacon connection currently works with **Temple mobile** (QR code scan) only. The Temple browser extension is **not yet supported** — the connection flow via the extension is still under development.
+The Beacon pairing currently works with **Temple mobile** (QR-code scan) only. Pairing with the Temple browser extension did not complete when last verified against Temple (at the time of writing). If the extension pairing starts working with a newer Temple release, this constraint no longer applies.
 :::
 
 ## Sequence
@@ -31,7 +31,7 @@ sequenceDiagram
     User->>Temple: Confirm
     Temple->>Beacon: { address: tz1..., publicKey }
     Beacon->>Relayer: permissions granted
-    Relayer->>Relayer: tez_getEthereumTezosAddress(tz1)
+    Relayer->>Relayer: tez_getTezosEthereumAddress(tz1)
     Note over Relayer: Derives 0xAlias from tz1
     Relayer->>dApp: ['0xAlias...']
     Note over dApp: Shows connected account
@@ -56,6 +56,10 @@ location.reload();
 
 ## Notes
 
-- **Temple mobile** — scan the QR code with the Temple mobile app to connect
-- **Temple extension** — not yet supported; the extension flow is in development
 - If the Beacon modal doesn't open, clear the Beacon localStorage session using the console command above and reload the page
+
+## See also
+
+- [dApp Approval (TezosX Wallet)](/wallet/user-flows/dapp-approval) — the connection flow when using the standalone wallet instead of Temple
+- [Transfer flow](./transfer) — what happens after connecting
+- [dApp Compatibility](./dapp-compatibility) — which dApp stacks detect the relayer

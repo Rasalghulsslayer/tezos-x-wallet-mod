@@ -6,8 +6,8 @@ sidebar_position: 4
 
 # NAC Gateway
 
-**NAC** (Cross-Runtime Atomic Calls) is the Tezos X mechanism for routing
-execution between the Michelson runtime Michelson runtime and the Tezlink EVM runtime
+**NAC** (Native Atomic Composability) is the Tezos X mechanism for routing
+execution between the Michelson runtime and the Tezlink EVM runtime
 within a single atomic operation.
 
 ## The two directions
@@ -16,17 +16,22 @@ NAC is bidirectional. Each direction uses a different surface:
 
 | Direction | Surface | Used by |
 |---|---|---|
-| **EVM → Michelson** | NAC precompile at `0xff00...0007`, called via the EVM selector `callMichelson(string,string,bytes)` | dApps running on Tezlink that want to invoke a Michelson contract |
-| **Michelson → EVM** | NAC gateway contract (KT1...) on the Michelson runtime, entrypoint `call_evm` | **The relayer** — wraps every user EVM transaction as a Michelson op |
+| **EVM → Michelson** | NAC precompile at `0xff00000000000000000000000000000000000007`, via the EVM selectors `callMichelson(string,string,bytes)` (ABI calls) and the generic `call(string,(string,string)[],bytes,uint8)` (bare native transfers) | dApps running on the EVM runtime that want to invoke a Michelson contract or credit a tz1 — see [EVM entry point](../technical/evm-entry) |
+| **Michelson → EVM** | NAC gateway contract `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw` on the Michelson runtime, entrypoints `call_evm` (ABI calls) and `%call` (bare native transfers) | **The relayer** — wraps every user EVM transaction as a Michelson op |
 
 ## What the relayer does
 
 The relayer uses the **Michelson → EVM** direction. Temple can only sign Michelson runtime
 operations, so instead of submitting an EVM transaction directly, the relayer
-wraps the user's intent into a Michelson op targeting the NAC gateway's
-`call_evm` entrypoint. The Tezos X kernel receives the op, synthesizes the
-corresponding EVM transaction, and executes it with `msg.sender` set to the
-user's EVM alias.
+wraps the user's intent into a Michelson op targeting the NAC gateway. The Tezos X
+kernel receives the op, synthesizes the corresponding EVM transaction, and
+executes it with `msg.sender` set to the user's EVM alias.
+
+The builder is the `buildTezosToEvmCall` use case (exported from
+`@tezosx/relayer/tezos`). It picks the entrypoint by calldata:
+
+- **Empty calldata** (bare native transfer) → gateway entrypoint **`call`**
+- **Non-empty calldata** (contract call) → gateway entrypoint **`call_evm`**
 
 ## `call_evm` entrypoint signature
 
@@ -39,12 +44,11 @@ pair string (pair string (pair bytes (option (contract bytes))))
 | `destination` | `string` | The target EVM contract address (`0x...`) |
 | `method_sig`  | `string` | The full text signature of the EVM function, e.g. `"transfer(address,uint256)"`. The kernel recomputes the 4-byte selector from this string. See [Selector resolution](#selector-resolution) below for how the relayer derives this from the ethers.js / viem calldata. |
 | `calldata`    | `bytes`  | ABI-encoded parameters (no selector prefix — the kernel prepends it) |
-| `callback`    | `option (contract bytes)` | Optional Michelson callback invoked by the kernel after the EVM call finishes. The relayer always passes `None` (the second argument of `GatewayBuilder.fromEthTransaction` is defaulted to `{ prim: 'None' }` and exposed for future use cases). |
+| `callback`    | `option (contract bytes)` | Optional Michelson callback invoked by the kernel after the EVM call finishes. The relayer always passes `None` (the second argument of `buildTezosToEvmCall` is defaulted to `{ prim: 'None' }` and exposed for future use cases). |
 
 ## Micheline built by the relayer
 
-For a non-empty calldata EVM transaction, `GatewayBuilder.fromEthTransaction`
-produces:
+For a non-empty calldata EVM transaction, `buildTezosToEvmCall` produces:
 
 ```json
 {
@@ -64,12 +68,47 @@ produces:
 }
 ```
 
-For a bare XTZ transfer (no calldata), the relayer uses the `default`
-entrypoint instead:
+## Bare native transfers — the `%call` entrypoint
+
+Bare transfers (empty calldata) go through the gateway's generic HTTP
+**`%call`** entrypoint. (The old hard-coded `%default` bare-transfer helper
+was removed upstream in tezos/tezos!22168; `%call` is its replacement.) The
+entrypoint takes an HTTP-style request:
+
+```
+pair url (pair headers (pair body (pair method callback)))
+```
+
+A bare native transfer is a **POST** (`method = 1`) to
+`http://ethereum/<0xRecipient>` with empty headers and body and no callback;
+the operation's mutez amount is credited to the destination. The relayer
+builds:
 
 ```json
-{ "string": "0xRecipient" }
+{
+  "prim": "Pair",
+  "args": [
+    { "string": "http://ethereum/0xRecipient" },
+    { "prim": "Pair", "args": [
+        [],
+        { "prim": "Pair", "args": [
+            { "bytes": "" },
+            { "prim": "Pair", "args": [
+                { "int": "1" },
+                { "prim": "None" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
 ```
+
+The wei value from the dApp's `eth_sendTransaction` is converted to mutez
+exactly: amounts that are not divisible by 10¹² wei (1 mutez) are rejected
+with `SubMutezPrecisionError` instead of being silently floored.
 
 ## Flow
 
@@ -79,19 +118,19 @@ sequenceDiagram
     participant dApp
     participant Relayer as Relayer<br/>(window.ethereum)
     participant Temple
-    participant L1 as Michelson runtime
-    participant Gateway as NAC Gateway<br/>(KT1...)
+    participant Michelson as Michelson runtime
+    participant Gateway as NAC Gateway<br/>(KT18oDJJ...qsPw)
     participant Kernel as Tezos X Kernel<br/>(EVM runtime)
 
     dApp->>Relayer: eth_sendTransaction({to, data, value})
-    Relayer->>Relayer: fromEthTransaction → Micheline
+    Relayer->>Relayer: buildTezosToEvmCall → Micheline
     Relayer->>Kernel: eth_blockNumber (snapshot)
     Relayer->>Temple: requestOperation(call_evm, Pair(...))
-    Temple->>L1: inject signed operation
-    L1->>Gateway: transaction(entrypoint=call_evm, Pair(...))
+    Temple->>Michelson: inject signed operation
+    Michelson->>Gateway: transaction(entrypoint=call_evm, Pair(...))
     Gateway->>Kernel: atomic forward
     Note over Kernel: synthesizes EVM tx<br/>msg.sender = user's 0x alias
-    Kernel-->>Relayer: L1 opHash (via Temple)
+    Kernel-->>Relayer: Michelson opHash (via Temple)
     Relayer-->>dApp: synthetic hash (keccak256(opHash))
     dApp->>Relayer: eth_getTransactionByHash / Receipt
     Relayer->>Kernel: scan blocks from snapshot
@@ -104,29 +143,23 @@ sequenceDiagram
 The NAC gateway expects the **full method signature** as a string, not a
 4-byte hex selector. Standard EVM clients (ethers.js, viem) only provide
 the selector in the calldata. The relayer closes this gap in
-`GatewayBuilder.fromEthTransaction` via a three-tier resolver:
+`buildTezosToEvmCall` with a **curated local allow-list**
+(`KNOWN_SIGNATURES`, 17 entries at relayer 0.7.0):
 
-1. **Local `KNOWN_SIGNATURES` registry** — ships with the Tezos X-specific
-   `callMichelson(string,string,bytes)` selector plus the standard ERC-20
-   surface (`transfer`, `approve`, `transferFrom`, `balanceOf`,
-   `allowance`, `totalSupply`, `decimals`) and common DeFi escrow
-   selectors (`deposit(uint256)`, `withdraw(uint256)`, `claim()`,
-   `unstake(uint256)`, bare `deposit()` / `withdraw()`).
-2. **4byte.directory lookup** — for selectors not in the local registry.
-   `results[0]` is used.
-3. **Raw hex fallback** — if both lookups fail, the relayer passes the
-   hex selector string. The kernel will reject the call unless the target
-   contract happens to accept raw-hex as a valid signature (rare).
+- The Tezos X-specific `callMichelson(string,string,bytes)` selector
+- The standard ERC-20 surface (`transfer`, `approve`, `transferFrom`,
+  `balanceOf`, `allowance`, `totalSupply`, `decimals`)
+- Common DeFi escrow selectors (`deposit(uint256)`, `withdraw(uint256)`,
+  bare `deposit()` / `withdraw()`, `claim()`, `unstake(uint256)`)
+- The playground Counter selectors (`increment()`, `decrement()`,
+  `setNumber(uint256)`)
 
-:::caution
-4byte.directory can return colliding signatures for common 4-byte
-prefixes (e.g., `0xb6b55f25` is `deposit(uint256)` but another unrelated
-method was registered first and comes back as `results[0]`). When the
-kernel recomputes the selector from the wrong string, the target
-contract rejects the call — typically with an empty-body `400 Bad
-Request` from the EVM runtime. Prefer adding the selector to
-`KNOWN_SIGNATURES` for deterministic resolution.
-:::
+Selectors **not** in the allow-list are rejected with `UnknownSelectorError`
+(surfaced to the dApp as JSON-RPC error `-32602`) **before any signing popup
+opens**. There is no remote lookup and no raw-hex fallback: the text
+signature is embedded verbatim in the signed Micheline payload, so every
+entry is reviewed before being added — extending the list is a code change
+in the relayer.
 
 Every `call_evm` build logs the resolved mapping:
 ```

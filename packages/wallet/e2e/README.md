@@ -24,8 +24,6 @@ In CI: `e2e-wallet` is a blocking gate — `needs: [build-wallet]`, downloads th
 - `specs/` — Playwright specs grouped by flow (smoke, send same-runtime, send cross-runtime, dApp approvals).
 - `scripts/` — one-shot tooling (`spike.ts`, `gen-vault.ts`).
 
-See the implementation plan in `.claude/plans/` for the full design rationale.
-
 ## Conventions
 
 - No `page.waitForTimeout` in specs — wait for DOM events or for `respondSequence` sequences in the mock router.
@@ -33,11 +31,16 @@ See the implementation plan in `.claude/plans/` for the full design rationale.
 - REPLAY mode is fail-loud on cache miss (`route.abort('failed')` + clear log) — no silent empty response.
 - Selectors: `getByRole` first, then a `data-testid` added to the target component, then `text=` for stable product strings.
 
-## Feasibility findings
+## Feasibility findings (historical record)
+
+> The spike below was run on **2026-06-05 against wallet 0.11.3**, before the
+> keyring and vault crypto moved to `@tezosx/wallet-core`. It is kept as the
+> record of the decisions that shaped the harness; where the codebase has
+> since moved, the current state is noted inline.
 
 Status: ✓ **All green. Strategy validated, harness construction unblocked.**
 
-Run on 2026-06-05 on macOS (darwin) with Node v23.9.0 against the current `dist/` (wallet 0.11.3). Script: `e2e/scripts/spike.ts`. See the source to reproduce.
+Run on 2026-06-05 on macOS (darwin) with Node v23.9.0 against the `dist/` of the time (wallet 0.11.3). Script: `e2e/scripts/spike.ts`. See the source to reproduce.
 
 ### `context.route('**')` × service worker MV3 fetch (the founding bet)
 
@@ -53,9 +56,9 @@ Run on 2026-06-05 on macOS (darwin) with Node v23.9.0 against the current `dist/
 
 ### `keyring.ts` import under tsx Node
 
-**Result: PASS.** `import('../../src/background/keyring.ts')` resolves under tsx (Node v23.9.0). Observed exports: `AccountNotFoundError`, `CannotRemoveLastAccountError`, `Keyring`, `MaxAccountsReachedError`. The transitive chain (Taquito `InMemorySigner`, `@scure/bip39`, etc.) does not block under Node.
+**Result: PASS.** At spike time the import was `import('../../src/background/keyring.ts')`; the keyring has since moved to `@tezosx/wallet-core` and is imported as `@tezosx/wallet-core/keyring` (source: `packages/core/src/background/keyring.ts`) — the tsx resolution result carries over. Observed exports: `AccountNotFoundError`, `CannotRemoveLastAccountError`, `Keyring`, `MaxAccountsReachedError`. The transitive chain (Taquito `InMemorySigner`, `@scure/bip39`, etc.) does not block under Node.
 
-**Nuance for the test-vault generator**: `encryptJson` / `decryptVaultRaw` are **not** free exports — encryption happens through the `Keyring` class. The generator script will therefore either instantiate a `Keyring` and call its public API (`createWallet` / `importWallet`) to produce an encrypted vault, or refactor to export the encryption primitive. Decision deferred to the generator implementation — the "shipping code = generation code" invariant holds either way.
+**Test-vault generator (resolved)**: at spike time the encryption primitives were not free exports and the decision between "go through the `Keyring` public API" and "export the primitive" was deferred. Both have since happened: `packages/core/src/shared/vault-crypto.ts` exposes the primitives (`sealVault`, `encryptVault`, `decryptVault`, `deriveVaultKey`, …), and `gen-vault.ts` instantiates a `Keyring` from `@tezosx/wallet-core/keyring` and drives its public API — so the "shipping code = generation code" invariant holds.
 
 ### Locked-in decisions
 
@@ -66,7 +69,7 @@ Run on 2026-06-05 on macOS (darwin) with Node v23.9.0 against the current `dist/
 
 ### Re-running the check
 
-If Playwright bumps a major version, if the wallet code changes the `keyring → seed → Taquito` import chain, or to validate a new Chromium version in CI:
+If Playwright bumps a major version, if `@tezosx/wallet-core` changes the `keyring → seed → Taquito` import chain, or to validate a new Chromium version in CI:
 
 ```bash
 cd packages/wallet

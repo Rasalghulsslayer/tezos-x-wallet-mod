@@ -6,38 +6,46 @@ sidebar_label: Send XTZ
 
 # Send XTZ
 
-The Send screen lets you transfer XTZ to any Tezos (`tz1 / tz2 / tz3 / KT1`) or EVM (`0x…`) address. The wallet auto-detects the destination runtime, compares it to the active account's runtime, and picks the cheapest valid routing path under the hood.
+The Send screen lets you transfer XTZ — or a registered ERC-20 token — to any Tezos (`tz1 / tz2 / tz3 / KT1`) or EVM (`0x…`) address. The wallet auto-detects the destination runtime, compares it to the active account's runtime, and picks the cheapest valid routing path under the hood.
 
 ## Steps
 
 1. Click **Send** on the Home screen
-2. **Stage 1 — Form**: enter the destination address and amount
+2. **Stage 1 — Form**: pick the asset, enter the destination address and amount
 3. **Stage 2 — Review**: confirm destination, amount, and the routing path
 4. **Stage 3 — Sent**: view the transaction hash, follow the live timeline, return home
 
 ## Routing matrix
 
-Since version 0.7.0 the wallet supports both Michelson and EVM-native accounts. The 4 valid (source kind × destination runtime) combinations are:
+The wallet supports both Michelson and EVM-native accounts. The 4 valid (source kind × destination runtime) combinations, with the exact captions the Review lane shows:
 
 | From | To | Route | What gets signed | Hash returned |
 |---|---|---|---|---|
-| `tz1 / tz2 / tz3 / KT1` | `tz1 / tz2 / tz3 / KT1` | Same-runtime · Tezos L1 | Native Michelson transfer (Taquito) | L1 op hash (`o…`, Base58) |
-| `tz1 / tz2 / tz3 / KT1` | `0x…` | Cross-runtime · L1 → L2 via NAC gateway | Michelson op against `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw` | Synthetic EVM hash, resolved to the real one within ~60s |
-| `0x…` | `0x…` | Same-runtime · Tezos L2 (EVM) | EIP-1559 type-`0x02` tx | Real EVM tx hash |
-| `0x…` | `tz1 / tz2 / tz3 / KT1` | Cross-runtime · L2 → L1 via NAC precompile | EIP-1559 tx calling `0xff00000000000000000000000000000000000007` | Real EVM tx hash |
+| `tz1 / tz2 / tz3 / KT1` | `tz1 / tz2 / tz3 / KT1` | Same-runtime · Michelson runtime | Native Michelson transfer (Taquito) | Michelson op hash (`o…`, Base58) |
+| `tz1 / tz2 / tz3 / KT1` | `0x…` | Cross-runtime · Michelson → EVM via NAC gateway | Michelson op against `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw` | Synthetic EVM hash, resolved to the real one (typically ~30 s) |
+| `0x…` | `0x…` | Same-runtime · Tezos X (EVM) | EIP-1559 type-`0x02` tx | Real EVM tx hash |
+| `0x…` | `tz1 / tz2 / tz3 / KT1` | Cross-runtime · EVM → Michelson via NAC precompile | EIP-1559 tx calling `0xff00000000000000000000000000000000000007` | Real EVM tx hash |
 
-The Send page surfaces the active route in real time via a `RoutingCard` below the recipient input — the pill colour and caption update as you type. From an EVM account the USDC asset selector is disabled (`Soon · EVM-source` tooltip).
+The Send page surfaces the active route in real time via a `RoutingCard` below the recipient input — the pill colour and caption update as you type. The asset selector lists XTZ plus every registered token; from an EVM account, ERC-20 assets are disabled (`Soon · EVM-source` tooltip) — token sends from EVM-native accounts land in a follow-up release.
+
+## Recipient validation
+
+- The destination must parse as a Tezos address (`tz1/tz2/tz3/KT1`) or a 40-hex-digit `0x` address.
+- **EIP-55 checksums are enforced**: a mixed-case `0x` address whose casing doesn't match its keccak checksum is treated as a typo and refused (all-lowercase and all-uppercase addresses carry no checksum and are accepted).
+- **Self-sends are refused**: sending to the active account's own address only burns fees, so the service worker rejects it. A `tz1` sending to its *own EVM alias* is allowed — that's alias forwarding, a real operation (see the caution below).
+- An ERC-20 asset cannot target a Michelson-runtime destination — tokens only exist on the EVM runtime (the `RoutingCard` flips to a warning).
 
 ## Amount validation
 
 - Must be a positive decimal number (e.g. `1`, `0.5`, `1.23456`)
-- Cannot exceed your current native XTZ balance (read from L1 RPC for Michelson accounts, `eth_getBalance` for EVM-native accounts)
-- Minimum: no enforced minimum (network will reject dust if needed)
-- EVM-source sends reserve gas implicitly: with the default 2 M gas limit and `maxFeePerGas = 2 × eth_gasPrice ≈ 2 gwei`, that's roughly 0.004 XTZ in fee headroom per send.
+- Cannot exceed your current balance for the selected asset (XTZ read from the Michelson RPC for Tezos accounts, `eth_getBalance` for EVM-native accounts; ERC-20s via `balanceOf`)
+- **Sub-mutez precision is rejected, not floored**: any XTZ amount that converts to a non-integer number of mutez (wei not divisible by 10¹²) is refused by `weiToMutezExact` rather than silently rounded away
+- The **Max** button on XTZ keeps a 10 000-mutez (0.01 XTZ) reserve for fees
+- EVM-source sends price fees at `maxFeePerGas = 2 × eth_gasPrice`
 
 ## How the transaction is sent
 
-The popup sends a `SEND_TX { to, amount: hexWei, asset }` envelope to the service worker. `decideRoute(activeAccount, to)` resolves the route, then `sendTransfer` dispatches across the matrix.
+The popup sends a `SEND_TX { to, amount, asset }` envelope to the service worker (`amount` is hex base units — wei for XTZ, token decimals for an ERC-20). `decideRoute(activeAccount, to)` resolves the route, then the `sendTransfer` use case (`packages/core/src/use-cases/send-transfer.ts`) dispatches across the matrix.
 
 ### tz1 → tz1: native Michelson runtime transfer
 
@@ -56,10 +64,12 @@ The kernel materialises the value on the EVM runtime via the gateway contract:
 
 1. `provider.request('eth_sendTransaction', [{ to, value: hexWei, data: '0x' }])` on the `RelayerProvider` (Tezos container)
 2. `buildTezosToEvmCall` detects empty calldata → the generic `call` entrypoint (a `%call` HTTP request: a POST to `http://ethereum/<destination>` with empty headers and an empty body). The legacy `%default` helper was removed in the Tezos X release candidate.
-3. `TezosSigner.sendContractCall('call', <%call Micheline>, mutezAmount)` submits the operation to `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw`
-4. The L1 `opHash` is converted to a synthetic 32-byte EVM hash; the relayer then resolves it to the real kernel-synthesized EVM tx hash by scanning blocks
+3. The signer submits the operation to `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw` with the mutez amount attached
+4. The Michelson op hash is converted to a synthetic 32-byte EVM hash; the relayer then resolves it to the real kernel-synthesized EVM tx hash by scanning blocks — typically within **~30 s** (the relayer retries 15 times at 2 s intervals)
 
-### 0x → 0x: native EVM transfer (same-runtime L2)
+**Sending an ERC-20 from a Tezos account** takes the same gateway but the `call_evm` entrypoint: the wallet encodes a real `transfer(recipient, amount)` ABI call against the *token contract* (value 0, amount in the token's base units) and signs that. The Review screen's "What you actually sign" card shows the Michelson target, the entrypoint (`call` for XTZ, `call_evm` for a token), the decoded method (`transfer(address,uint256)`), and the exact mutez debit.
+
+### 0x → 0x: native EVM transfer (same-runtime)
 
 The wallet's `EvmProvider` adapter takes over:
 
@@ -85,25 +95,25 @@ The XTZ decimal input is converted to hex wei in the popup, then back to mutez w
 
 ```
 wei   = amount × 10^18      (popup → SW)
-mutez = wei / 10^12         (SW → Taquito)
+mutez = wei / 10^12         (SW → Taquito; exact division enforced)
 ```
 
-Both `sendNativeTransfer` and `sendContractCall` consume `mutez`. The cross-runtime path keeps wei inside the `eth_sendTransaction` envelope until the gateway builder converts it.
+The cross-runtime path keeps wei inside the `eth_sendTransaction` envelope until the gateway builder converts it. ERC-20 amounts are scaled by the token's own decimals instead, so the signed `transfer` amount matches what the user typed.
 
 ## Stage 3 — Live status timeline
 
-Since 0.6.0, the "Done" stage shows a **3-step timeline** that polls the right backend until the operation reaches finality:
+The "Done" stage shows a **3-step timeline** that polls the right backend until the operation reaches finality:
 
 1. **Broadcasted** — set immediately after the popup hands the op to the SW (active dot, purple, pulsing).
 2. **Included** — the op was picked up by a block; the row shows `Block #N`. Polling switches from the fast cadence (2 s) to the slow cadence (5 s).
-3. **Finalized** — for **L1 native** ops, the row reads "attested" (or "N attestations") and the dot turns green once `head.level - op.level ≥ TEZOS_L1_FINALITY_BLOCKS` (currently `2`, the Tenderbake attestation depth). For **L2** ops (cross-runtime and native L2 alike), the row reads "final on L1" once the tx's L2 block has been included in a finalised L1 Tezos block — the wallet polls `eth_getBlockByNumber("finalized", false)` on the Tezlink EVM RPC and considers the tx finalised when its block number is ≤ the `finalized` block.
+3. **Finalized** — for **Michelson-runtime native** ops, the row reads "attested" (or "N attestations") and the dot turns green once `head.level - op.level ≥ TEZOS_L1_FINALITY_BLOCKS` (currently `2`, the Tenderbake attestation depth). For **EVM-runtime** txs (cross-runtime and same-runtime alike), the row reads "final" once the tx's block has been anchored in a finalized Tezos L1 block — the wallet polls `eth_getBlockByNumber("finalized", false)` on the Tezlink EVM RPC and considers the tx finalised when its block number is ≤ the `finalized` block.
 
-:::info L2 finality is L1-anchored on Tezos X
-A Tezlink L2 block on Tezos X is final when its parent L1 block is final — not after a fixed count of L2 blocks above it. The `finalized` block tag exposed by the Tezlink EVM RPC tracks that signal directly: it returns the most recent L2 block whose L1 parent has reached Tenderbake finality. Polling it and checking `tx.blockLevel ≤ finalized.number` is the correct (and tight) finality test.
+:::info EVM-runtime finality is anchored on Tezos L1
+An EVM-runtime block on Tezos X is final when the Tezos L1 block that anchors it is final — not after a fixed count of EVM blocks above it. The `finalized` block tag exposed by the Tezlink EVM RPC tracks that signal directly: it returns the most recent EVM block whose Tezos L1 anchor has reached Tenderbake finality. Polling it and checking `tx.blockLevel ≤ finalized.number` is the correct (and tight) finality test.
 
-Earlier versions of the wallet used heuristics — first a `head - tx ≥ 2` L2-block count (ported from Ethereum mainnet), then a same-block "treat inclusion as final" shortcut. Both were misaligned: the first overcounts (extra L2 blocks add no guarantee), the second undercounts (L1 finality hasn't actually happened yet at receipt time). 0.10.1 switches to the `finalized` tag, per kernel-team feedback (`#techrel-tezosx-mvp`, 2026-05-15).
+Earlier versions of the wallet used heuristics — first a `head - tx ≥ 2` block count (ported from Ethereum mainnet), then a same-block "treat inclusion as final" shortcut. Both were misaligned: the first overcounts (extra EVM blocks add no guarantee), the second undercounts (Tezos L1 finality hasn't actually happened yet at receipt time). The wallet now uses the `finalized` tag.
 
-L1 ops keep their Tenderbake check: a Tezos L1 block is final after 2 attestation rounds, and `head.level - op.level ≥ 2` is the canonical condition. The constant lives in `shared/constants.ts` as `TEZOS_L1_FINALITY_BLOCKS` (renamed from `FINALIZED_AFTER_BLOCKS` in 0.10.1 to pin its scope to L1).
+Michelson-runtime ops keep their Tenderbake check: a Tezos L1 block is final after 2 attestation rounds, and `head.level - op.level ≥ 2` is the canonical condition. The constant lives in `packages/core/src/shared/constants.ts` as `TEZOS_L1_FINALITY_BLOCKS`.
 :::
 
 The timeline reads from:
@@ -112,14 +122,14 @@ The timeline reads from:
 |---|---|---|---|
 | `tz1 → tz1` same-runtime | `o…` Base58 (~51 chars) | TzKT REST (`/v1/operations/transactions?hash=…` + `/v1/head`) | tzkt |
 | `tz1 → 0x` via NAC gateway | `0x…` 32-byte hex (synthetic, resolved) | Tezlink EVM JSON-RPC (`eth_getTransactionReceipt` + `eth_getBlockByNumber("finalized")`) | Blockscout (resolved real EVM hash) |
-| `0x → 0x` same-runtime L2 | `0x…` 32-byte hex (real) | Tezlink EVM JSON-RPC (`eth_getTransactionReceipt` + `eth_getBlockByNumber("finalized")`) | Blockscout |
+| `0x → 0x` same-runtime | `0x…` 32-byte hex (real) | Tezlink EVM JSON-RPC (`eth_getTransactionReceipt` + `eth_getBlockByNumber("finalized")`) | Blockscout |
 | `0x → tz1` via NAC precompile | `0x…` 32-byte hex (real) | Tezlink EVM JSON-RPC (`eth_getTransactionReceipt` + `eth_getBlockByNumber("finalized")`) | Blockscout (precompile call); tzkt shows the receiving tz1 credit |
 
 A `View on tzkt` / `View on blockscout` link sits at the bottom of the timeline regardless of stage, so you can always jump to the explorer.
 
 If the backend can't be reached for `TX_POLL_TIMEOUT_MS` (default 2 minutes — RPC down, network blocked, etc.), the timeline collapses to **Status unavailable** with a manual explorer link. If the op itself reverts or is misapplied, the corresponding step turns red (`failed`) and polling stops.
 
-The poller is built on a generic `shared/poller.ts` engine (`startPoller({ fetch, onUpdate, isDone, intervalMs, timeoutMs, onTimeout })`), separated from the domain-specific L1 / L2 fetchers in `shared/tx-status.ts`. The Send page just calls `trackTx({ hash, runtime, onUpdate })` and stops it on unmount via the returned handle.
+The poller is built on a generic `poller.ts` engine (`startPoller({ fetch, onUpdate, isDone, intervalMs, timeoutMs, onTimeout })`), separated from the domain-specific status fetchers in `packages/core/src/shared/tx-status.ts`. The Send page just calls `trackTx({ hash, runtime, onUpdate })` and stops it on unmount via the returned handle.
 
 :::info Why four paths?
 The kernel can settle a transfer on either runtime. Same-runtime transfers (`tz1 → tz1`, `0x → 0x`) skip the NAC indirection entirely — they pay only the native fees of their runtime. Cross-runtime transfers need the kernel's atomic forwarding primitive, which lives in two distinct contracts depending on which side initiates: the `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw` gateway on Michelson (used by `tz1 → 0x`), and the `0xff…007` precompile on EVM (used by `0x → tz1`). The wallet's `decideRoute` resolves the four cases by comparing the active account's kind with the destination address format.
@@ -128,5 +138,11 @@ The kernel can settle a transfer on either runtime. Same-runtime transfers (`tz1
 :::caution XTZ on a tz1's EVM alias is forwarded back to its origin tz1
 Under the Tezos X account model, **EVM aliases of Tezos accounts cannot hold native XTZ**. The kernel's `AliasForwarder` automatically reroutes any XTZ sent to such an alias back to its tz1 of origin. This means a `tz1 → 0x` XTZ transfer where the destination 0x is the alias of a known tz1 ends up crediting that tz1, not the alias.
 
-EVM-native accounts (those created with a standalone secp256k1 key, no underlying tz1) are **not aliases** — they can hold native XTZ on L2 normally, and `0x → 0x` transfers between them settle as ordinary L2 sends. ERC-20 tokens (USDC, …) are unaffected by the alias forwarder regardless ; they live in contract mappings.
+EVM-native accounts (those created with a standalone secp256k1 key, no underlying tz1) are **not aliases** — they can hold native XTZ on the EVM runtime normally, and `0x → 0x` transfers between them settle as ordinary same-runtime sends. ERC-20 tokens (USDC, …) are unaffected by the alias forwarder regardless; they live in contract mappings.
 :::
+
+## See also
+
+- [Activity tab](./activity-tab) — where sent transfers land, including cross-runtime rows
+- [View Balances](./view-balances) — where the available amounts come from
+- [Custom tokens](./custom-tokens) — registering the ERC-20s the asset selector offers

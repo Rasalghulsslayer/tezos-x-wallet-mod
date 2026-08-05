@@ -3,10 +3,10 @@ import { motion, useInView } from 'framer-motion';
 import { TiltCard } from './TiltCard';
 
 const STATS = [
-  { value: '6+', label: 'EIP Standards' },
-  { value: '3', label: 'Injection Methods' },
-  { value: '<1s', label: 'Relay Time' },
-  { value: '0', label: 'dApp Code Changes' },
+  { value: '4', label: 'Packages, one monorepo' },
+  { value: '2', label: 'Wallet form factors' },
+  { value: '12', label: 'E2E specs gating CI' },
+  { value: '128064', label: 'Tezos X EVM chain id' },
 ];
 
 export function Stats() {

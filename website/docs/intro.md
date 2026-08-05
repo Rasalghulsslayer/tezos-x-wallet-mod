@@ -6,17 +6,19 @@ sidebar_position: 1
 
 # TezosX
 
-**TezosX** bridges Tezos to the Ethereum ecosystem. It ships two products that share the same NAC gateway architecture and EIP-1193 provider interface.
+**Tezos X** is one ledger with two runtimes — Michelson and EVM. This project ships two products that let Tezos users and dApps work across both runtimes, sharing the same NAC gateway architecture and EIP-1193 provider interface.
 
 ## Products
 
 | | [TezosX Relayer](/docs/installation) | [TezosX Wallet](/wallet/intro) |
 |---|---|---|
-| **What it is** | Injectable EIP-1193 provider | Standalone Chrome extension wallet |
+| **What it is** | Injectable EIP-1193 provider | Standalone wallet — Chrome extension and mobile app |
 | **Signing** | Delegates to Temple Wallet | Built-in — keys stored locally |
 | **Dependencies** | Requires Temple | None |
 | **Best for** | Developers testing with Temple | End users wanting a self-contained wallet |
-| **Version** | 0.5.0 | 0.7.0 |
+| **Version** | [Relayer CHANGELOG](https://github.com/trilitech/tezos-x-wallet/blob/main/packages/relayer/CHANGELOG.md) | [Wallet CHANGELOG](https://github.com/trilitech/tezos-x-wallet/blob/main/packages/wallet/CHANGELOG.md) · [Mobile CHANGELOG](https://github.com/trilitech/tezos-x-wallet/blob/main/packages/mobile/CHANGELOG.md) |
+
+The standalone wallet comes in two form factors — a Chrome MV3 extension and a mobile app — both built on the same shared core (`@tezosx/wallet-core`) and consuming this relayer for cross-runtime transactions. See [Wallet — Introduction](/wallet/intro).
 
 ## Relayer — how it works
 

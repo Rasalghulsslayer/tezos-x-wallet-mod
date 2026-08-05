@@ -6,7 +6,7 @@ sidebar_label: Overview
 
 # Architecture Overview
 
-TezosX Wallet is a Chrome Manifest V3 extension composed of four runtime components, each living in a different execution boundary.
+TezosX Wallet is a Chrome Manifest V3 extension composed of four runtime components, each living in a different execution boundary. Most of the logic — keyring, use cases, message routing, container wiring — lives in the shared `@tezosx/wallet-core` package and is consumed unchanged by the mobile app; see [the four packages](./packages) for how the pieces fit together.
 
 ## Component diagram
 
@@ -59,17 +59,19 @@ Runs in the extension's isolated world — it can see the page DOM but cannot ac
 
 **File**: [`packages/wallet/src/background/service-worker.ts`](https://github.com/trilitech/tezos-x-wallet/blob/main/packages/wallet/src/background/service-worker.ts)
 
-The extension's backend. Since version 0.7.0 the service worker is intentionally thin (~95 lines) — it instantiates the long-lived state and delegates every incoming message to `composition/sw-wiring.ts`'s `dispatch()`. The state that persists across popup opens:
+The extension's backend. The service worker is a thin host shell: it builds the Chrome-specific adapters (vault / session / token stores, notifications, approval presenter, Web Crypto port), wires the auto-lock alarms, and delegates every incoming message to `dispatch()` in [`packages/core/src/composition/sw-wiring.ts`](https://github.com/trilitech/tezos-x-wallet/blob/main/packages/core/src/composition/sw-wiring.ts) — the routing table shared with the mobile app. The state that persists across popup opens:
 
-- `Keyring` — in-memory `UnlockedSession` (the active `Account` plus its decoded secret key). Handles AES-GCM vault encryption and the V1 → V2 upgrade-on-read described in [Keyring & Vault](./keyring).
-- `Container` — a freshly built `{ signer, provider, balanceFetcher, vaultStore, sessionStore, notifications }` rebuilt on every unlock by [`composition/container.ts`](https://github.com/trilitech/tezos-x-wallet/blob/main/packages/wallet/src/composition/container.ts), with the adapter set wired to the active account's kind. Tezos accounts get `TezosSigner` + `RelayerProvider` + `TezosBalanceFetcher`; EVM-native accounts get `EvmSigner` + `EvmProvider` + `EvmBalanceFetcher` (plus the NAC precompile builder for cross-runtime sends).
+- `Keyring` — the in-memory `UnlockedKeyring` (active account, decrypted vault payload, and the derived vault key — never the password, never a signing key). Handles AES-GCM vault encryption and the v2 → v3 upgrade-on-read described in [Keyring & Vault](./keyring).
+- `Container` + `ContainerCache` — a per-account bundle `{ signer, provider, balanceFetcher, activitySources, crossRuntimeBuilder, … }` built by [`packages/core/src/composition/container.ts`](https://github.com/trilitech/tezos-x-wallet/blob/main/packages/core/src/composition/container.ts) with the adapter set matching the account's kind: Tezos accounts get `TezosSigner` + `RelayerProvider` + `TezosBalanceFetcher` (plus Michelson- and EVM-runtime activity fetchers); EVM-native accounts get `EvmSigner` + `EvmProvider` + `EvmBalanceFetcher`. Both kinds carry the cross-runtime builder for NAC precompile sends. Containers are cached in an in-memory LRU keyed by `accountId` (cleared on lock and service-worker death, evicted on account removal), so account switches are fast and a pending approval is served by the exact account it was pinned to.
 - `ApprovalQueue` — pending dApp requests awaiting user consent (`connect`, `transaction`, `signature`).
 
-Handles three message categories, routed by `dispatch()` to the matching use case under `src/use-cases/`:
+Handles three message categories, routed by `dispatch()` to the matching use case under `packages/core/src/use-cases/`:
 
-- **PopupRequest** — from the popup UI (`UNLOCK`, `LOCK`, `CREATE_WALLET`, `IMPORT_WALLET`, `IMPORT_SECRET_KEY`, `IMPORT_EVM_PRIVKEY`, `SEND_TX`, `RESOLVE_TX`, `LIST_SESSIONS`, `DISCONNECT`, etc.)
+- **PopupRequest** — from the popup UI. The full verb list (from [`packages/core/src/shared/messages.ts`](https://github.com/trilitech/tezos-x-wallet/blob/main/packages/core/src/shared/messages.ts)): `GET_STATE`, `CREATE_WALLET`, `IMPORT_WALLET`, `IMPORT_SECRET_KEY`, `IMPORT_EVM_PRIVKEY`, `UNLOCK`, `LOCK`, `EXPORT_SEED`, `EXPORT_WALLET_SEED`, `SEND_TX`, `RESOLVE_TX`, `LIST_PENDING`, `LIST_SESSIONS`, `LIST_ACTIVITY`, `DISCONNECT`, `ADD_ACCOUNT`, `REMOVE_ACCOUNT`, `SET_ACTIVE_ACCOUNT`, `RENAME_ACCOUNT`, `LIST_ACCOUNTS`, `PEEK_CUSTOM_TOKEN`, `ADD_CUSTOM_TOKEN`, `REMOVE_CUSTOM_TOKEN`, `LIST_REGISTERED_TOKENS`.
 - **ApproveRequest** — from `approve.html` (`GET_PENDING`, `RESOLVE_PENDING`)
-- **EthereumRequest** — from the content bridge (dApp's `provider.request()` calls). `eth_requestAccounts`, `eth_sendTransaction`, `personal_sign`, and `eth_signTypedData_v4` are gated by the approval queue.
+- **EthereumRequest** — from the content bridge (dApp `provider.request()` calls). `eth_requestAccounts`, `eth_sendTransaction`, and `personal_sign` are gated by the approval queue; `eth_signTypedData*` is refused without prompting, because neither signer implements it.
+
+`dispatch()` also enforces the sender guard: privileged messages (unlock, seed export, approval decisions) are accepted only from the extension's own trusted UI surfaces, and dApp traffic only from the content-script channel with a matching origin.
 
 ### Popup UI
 
@@ -94,15 +96,18 @@ sequenceDiagram
     CB->>SW: chrome.runtime.sendMessage ETHEREUM_REQUEST
     SW->>AW: chrome.windows.create (approve.html?requestId=…)
     AW-->>SW: RESOLVE_PENDING { decision: 'approve' }
-    SW->>SW: RelayerProvider.request() → LocalSignerClient.sendContractCall()
-    Note over SW: For wallet-initiated same-runtime XTZ sends<br/>the SW skips the gateway and calls<br/>LocalSignerClient.sendNativeTransfer() instead
+    SW->>SW: dispatch() → container.provider.request()
+    Note over SW: Tezos-source account: RelayerProvider wraps the call as a<br/>NAC gateway Michelson op signed by TezosSigner.<br/>EVM-source account: EvmProvider signs an EIP-1559 tx directly.
     SW-->>CB: WalletResponse { ok: true, data: txHash }
     CB-->>IP: postMessage TEZOSX_WALLET_RESPONSE
     IP-->>dApp: Promise resolves with txHash
 ```
 
+Wallet-initiated same-runtime XTZ sends (`tz1 → tz1`) never touch the gateway: the `sendTransfer` use case routes them through `TezosSigner.sendNativeTransfer()` as a plain Michelson operation.
+
 ## See also
 
+- [The four packages](./packages) — `@tezosx/wallet-core`, the extension, the mobile app, and the relayer
 - [Runtime Boundaries](./runtime-boundaries) — detailed MAIN vs ISOLATED world rules
 - [Keyring](./keyring) — encryption and key derivation
 - [dApp Bridge & Approval Queue](./dapp-bridge) — approval popup lifecycle

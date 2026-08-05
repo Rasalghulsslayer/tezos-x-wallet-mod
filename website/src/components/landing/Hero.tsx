@@ -147,17 +147,17 @@ export function Hero() {
           className="mt-10 flex flex-wrap justify-center gap-4"
         >
           <Link
-            to="/docs/intro"
-            className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#6c47ff] to-[#7c3aed] px-6 py-3 text-sm font-bold text-white shadow-[0_4px_24px_rgba(108,71,255,0.3)] transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_32px_rgba(108,71,255,0.45)] no-underline hover:no-underline"
-          >
-            Relayer docs
-            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-          <Link
             to="/wallet/intro"
             className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#0284c7] to-[#00c2ff] px-6 py-3 text-sm font-bold text-white shadow-[0_4px_24px_rgba(0,194,255,0.25)] transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_32px_rgba(0,194,255,0.4)] no-underline hover:no-underline"
           >
-            Wallet docs
+            Use the wallet
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+          </Link>
+          <Link
+            to="/docs/intro"
+            className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#6c47ff] to-[#7c3aed] px-6 py-3 text-sm font-bold text-white shadow-[0_4px_24px_rgba(108,71,255,0.3)] transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_32px_rgba(108,71,255,0.45)] no-underline hover:no-underline"
+          >
+            Build on the SDK
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
           <Link

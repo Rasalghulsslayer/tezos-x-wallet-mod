@@ -1,0 +1,18 @@
+# Builds the Tezos X Wallet extension in a clean, reproducible environment.
+
+FROM node:22-bookworm
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY packages/relayer/package.json packages/relayer/
+COPY packages/core/package.json packages/core/
+COPY packages/wallet/package.json packages/wallet/
+COPY packages/mobile/package.json packages/mobile/
+RUN npm ci
+
+COPY . .
+
+RUN npm run wallet:build
+
+CMD ["sh", "-c", "cp -r packages/wallet/dist/. /out/ && echo '' && echo 'Extension built into ./wallet-dist' && echo 'Load it in Chrome: chrome://extensions -> enable Developer mode -> Load unpacked -> select the wallet-dist folder.'"]

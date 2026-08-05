@@ -23,6 +23,7 @@ const sidebars: SidebarsConfig = {
         'technical/build',
         'technical/injection',
         'technical/api-reference',
+        'technical/evm-entry',
       ],
     },
     {

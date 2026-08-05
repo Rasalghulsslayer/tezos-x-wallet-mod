@@ -1,11 +1,19 @@
 # Changelog
 
-This monorepo ships **two independently versioned packages**. Each has its own changelog with the full set of release notes:
+The per-package CHANGELOGs are the source of truth for all releases. This monorepo ships **four independently versioned packages**:
 
 - **`@tezosx/relayer`** — [packages/relayer/CHANGELOG.md](packages/relayer/CHANGELOG.md)
+- **`@tezosx/wallet-core`** — [packages/core/CHANGELOG.md](packages/core/CHANGELOG.md)
 - **`@tezosx/wallet`** — [packages/wallet/CHANGELOG.md](packages/wallet/CHANGELOG.md)
+- **`@tezosx/wallet-mobile`** — [packages/mobile/CHANGELOG.md](packages/mobile/CHANGELOG.md)
 
-This file is an index of releases. For details (added / changed / fixed / compatibility notes), follow the link to the relevant package changelog.
+This file is a frozen historical index and is no longer updated per release. For anything recent — and for details (added / changed / fixed / compatibility notes) — follow the link to the relevant package changelog.
+
+---
+
+## Historical entries (up to 2026-06-04)
+
+The entries below are kept as-is for reference. They predate the extraction of `@tezosx/wallet-core` and the mobile app, and reflect the vocabulary in use at the time.
 
 ---
 

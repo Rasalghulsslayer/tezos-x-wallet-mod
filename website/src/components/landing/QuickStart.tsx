@@ -10,9 +10,9 @@ const TABS = [
     steps: [
       {
         n: '01',
-        t: 'Install the extension',
-        s: 'Build and load unpacked in Chrome, or inject via script tag',
-        code: '# Build\ncd packages/relayer && node build.mjs\n# Or: <script src="/dist/relayer.iife.js"></script>',
+        t: 'Build & install the extension',
+        s: 'Build from the repo root, then load unpacked in Chrome',
+        code: 'npm install && npm run build:ext\n# Load packages/relayer/extension/ as unpacked\n# extension in chrome://extensions',
       },
       {
         n: '02',
@@ -43,13 +43,13 @@ const TABS = [
       {
         n: '01',
         t: 'Build & install the wallet',
-        s: 'Load the unpacked extension from packages/wallet/dist/',
-        code: 'cd packages/wallet\npnpm install && pnpm build\n# Load dist/ as unpacked extension in chrome://extensions',
+        s: 'Build from the repo root, then load the unpacked extension',
+        code: 'npm install && npm run wallet:build\n# Load packages/wallet/dist/ as unpacked\n# extension in chrome://extensions',
       },
       {
         n: '02',
-        t: 'Create or import a wallet',
-        s: 'Click the toolbar icon — set up your BIP-39 seed phrase',
+        t: 'Connect from a dApp',
+        s: 'Create or import a wallet from the toolbar popup first — then dApps connect as usual',
         code: `// window.ethereum is injected automatically.
 // dApps call eth_requestAccounts as usual:
 const accounts = await window.ethereum.request({

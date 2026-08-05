@@ -7,10 +7,10 @@ export function FlowSection() {
   const inView = useInView(ref, { once: true, margin: '-40px' });
   const { siteConfig: { baseUrl } } = useDocusaurusContext();
   const flow = [
-    { logo: `${baseUrl}img/temple.png`,       label: 'Temple',    sub: 'Beacon · tz1' },
-    { logo: `${baseUrl}img/relayer-logo.png`, label: 'Relayer',   sub: 'EIP-1193' },
-    { logo: `${baseUrl}img/tezos-logo.svg`,   label: 'NAC',       sub: 'Gateway' },
-    { logo: `${baseUrl}img/evm.png`,          label: 'EVM runtime', sub: 'EVM dApps' },
+    { logo: `${baseUrl}img/evm.png`,            label: 'EVM dApp',          sub: 'wagmi · ethers' },
+    { logo: `${baseUrl}img/relayer-logo.png`,   label: 'EIP-1193 provider', sub: 'Extension · WalletConnect · Injected' },
+    { logo: `${baseUrl}img/tezos-logo.svg`,     label: 'NAC',               sub: 'Gateway' },
+    { logo: `${baseUrl}img/tezos-logo-blue.svg`, label: 'EVM runtime',      sub: 'Tezos X' },
   ];
 
   return (
