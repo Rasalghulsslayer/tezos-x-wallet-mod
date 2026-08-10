@@ -14,6 +14,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { VaultState, VaultStateUnlocked, PendingRequest } from '@tezosx/wallet-core/shared/messages';
 import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
+import type { Contact } from '@tezosx/wallet-core/domain/contact';
 import { accountCardVM, type AccountCardVM } from '@tezosx/wallet-core/view-models/account-card-vm';
 import { getState } from '@tezosx/wallet-core/use-cases/get-state';
 import type { ImportAccountReq } from '@tezosx/wallet-core/use-cases/import-account';
@@ -31,7 +32,7 @@ import { activeToView, summaryToView, type ViewAccount } from './view-account';
 export type VaultView = 'onboarding' | 'locked' | 'unlocked';
 export type TabId = 'home' | 'activity' | 'connections' | 'settings';
 export type StackName =
-  | 'send' | 'receive' | 'addAccount' | 'addToken' | 'tokens'
+  | 'send' | 'receive' | 'addAccount' | 'addToken' | 'tokens' | 'contacts'
   | 'welcome' | 'create' | 'import';
 
 export interface StackEntry { name: StackName; params: Record<string, unknown>; }
@@ -54,6 +55,7 @@ export interface WalletContextValue {
   activeId: string;
   hasSeed: boolean;
   sessions: StoredSession[];
+  contacts: Contact[];
   approve: PendingRequest | null;
   switcherOpen: boolean;
   toastMsg: string | null;
@@ -85,6 +87,9 @@ export interface WalletContextValue {
   peekToken: (address: string, tryAnyway?: boolean) => Promise<RegisteredToken>;
   addToken: (address: string, tryAnyway?: boolean) => Promise<RegisteredToken>;
   removeToken: (address: string) => Promise<void>;
+  addContact: (address: string, label: string) => Promise<Contact>;
+  renameContact: (address: string, label: string) => Promise<Contact>;
+  removeContact: (address: string) => Promise<void>;
   addAccount: (req: AddAccountReq) => Promise<AddAccountResult>;
   removeAccount: (id: string, password: string) => Promise<void>;
   sendTransfer: (req: SendTransferReq) => Promise<SendTransferResult>;
@@ -112,6 +117,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
   const [navDir, setNavDir] = useState<'fwd' | 'back'>('fwd');
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [sessions, setSessions] = useState<StoredSession[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoLock = useRef<AutoLockHandle | null>(null);
@@ -139,6 +145,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
 
   const reloadSessions = useCallback(async (): Promise<void> => {
     setSessions(await vaultActions.loadSessions());
+  }, []);
+
+  const reloadContacts = useCallback(async (): Promise<void> => {
+    setContacts(await vaultActions.loadContacts());
   }, []);
 
   // Boot: instant network-free read, then (if unlocked) warm the container +
@@ -185,6 +195,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
     return vaultActions.subscribeSessions(() => { void reloadSessions(); });
   }, [vault, reloadSessions]);
 
+  // Load the address book on unlock; clear it on lock. Mutations below refresh
+  // it explicitly — no subscription needed, the book only changes through them.
+  useEffect(() => {
+    if (vault !== 'unlocked') { setContacts([]); return; }
+    void reloadContacts();
+  }, [vault, reloadContacts]);
+
   const labelFor = useCallback((a: ViewAccount | undefined): string => {
     if (a == null) return 'Account';
     if (a.label.trim() !== '') return a.label;
@@ -208,7 +225,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
     booted, vault, biometricsAvailable: bioAvailable,
     accounts, activeAccount, accountCard, activeId: activeState?.accountId ?? '',
     hasSeed: activeState?.hasSeed ?? false,
-    sessions, approve, switcherOpen, toastMsg, stack, navDir, nav,
+    sessions, contacts, approve, switcherOpen, toastMsg, stack, navDir, nav,
     balances: accountData.balances,
     tokens: accountData.tokens,
     activity: accountData.activity,
@@ -279,6 +296,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
       await vaultActions.removeToken(address);
       setDataNonce((n) => n + 1);
     },
+    addContact: async (address, label) => {
+      const contact = await vaultActions.addContact(address, label);
+      await reloadContacts();
+      return contact;
+    },
+    renameContact: async (address, label) => {
+      const contact = await vaultActions.renameContact(address, label);
+      await reloadContacts();
+      return contact;
+    },
+    removeContact: async (address) => {
+      await vaultActions.removeContact(address);
+      await reloadContacts();
+    },
     addAccount: async (req) => {
       const { state, result } = await vaultActions.addAccount(req);
       setVaultState(state);
@@ -293,7 +324,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
     sendTransfer: (req) => vaultActions.sendTransfer(req),
     resolveTx: (syntheticHash) => vaultActions.resolveTx(syntheticHash),
   }), [booted, vault, bioAvailable, accounts, activeAccount, accountCard, accountData, activeState, approve, sessions,
-      switcherOpen, toastMsg, stack, navDir, nav, labelFor, toast, copy, lock, enterUnlocked, refresh, reloadSessions]);
+      contacts, switcherOpen, toastMsg, stack, navDir, nav, labelFor, toast, copy, lock, enterUnlocked, refresh,
+      reloadSessions, reloadContacts]);
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }

@@ -50,6 +50,10 @@ import { peekCustomToken }         from '../use-cases/peek-custom-token';
 import { addCustomToken }          from '../use-cases/add-custom-token';
 import { removeCustomToken }       from '../use-cases/remove-custom-token';
 import { listRegisteredTokens }    from '../use-cases/list-registered-tokens';
+import { addContact }              from '../use-cases/add-contact';
+import { renameContact }           from '../use-cases/rename-contact';
+import { removeContact }           from '../use-cases/remove-contact';
+import { listContacts }            from '../use-cases/list-contacts';
 import { TEZLINK_EVM_RPC }         from '@tezosx/relayer/constants';
 import { buildTezosToEvmCall, UnknownSelectorError, SubMutezPrecisionError, InvalidDestinationError } from '@tezosx/relayer/use-cases/build-tezos-to-evm-call';
 
@@ -327,6 +331,39 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
           { tokenStore: deps.persistentPorts.tokenStore },
         );
         return { ok: true, data: tokens };
+      }
+
+      // Contacts are wallet-global (no accountId), but still gated on an
+      // unlocked vault: the address book is user-private metadata and only
+      // the unlocked UI has any business reading or editing it.
+      case 'ADD_CONTACT': {
+        if (deps.keyring.getUnlocked() == null) return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+        const contact = await addContact(
+          { address: msg.address, label: msg.label },
+          { contactStore: deps.persistentPorts.contactStore },
+        );
+        return { ok: true, data: contact };
+      }
+
+      case 'RENAME_CONTACT': {
+        if (deps.keyring.getUnlocked() == null) return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+        const contact = await renameContact(
+          { address: msg.address, label: msg.label },
+          { contactStore: deps.persistentPorts.contactStore },
+        );
+        return { ok: true, data: contact };
+      }
+
+      case 'REMOVE_CONTACT': {
+        if (deps.keyring.getUnlocked() == null) return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+        await removeContact({ address: msg.address }, { contactStore: deps.persistentPorts.contactStore });
+        return { ok: true };
+      }
+
+      case 'LIST_CONTACTS': {
+        if (deps.keyring.getUnlocked() == null) return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+        const contacts = await listContacts({ contactStore: deps.persistentPorts.contactStore });
+        return { ok: true, data: contacts };
       }
 
       default:

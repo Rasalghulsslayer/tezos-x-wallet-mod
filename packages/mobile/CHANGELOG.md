@@ -5,7 +5,21 @@ The Tezos X wallet for iOS/Android (React Native, Expo bare). Format follows
 shared `@tezosx/wallet-core` over the workspace; only platform adapters
 (storage, secure RNG, biometrics) and the UI live here.
 
-## [Unreleased]
+## [0.3.0] — 2026-08-10
+
+### Added
+- **Contacts.** The wallet gains an address book: save a tz1 or 0x address
+  under a name and manage the list from Settings → Contacts (add, rename,
+  remove — validation runs through the core validators, so a mistyped EIP-55
+  checksum is refused). In the Send flow the recipient field suggests matching
+  contacts while you type, a recipient that is a contact shows its name
+  instead of only a truncated address (form and review), and after sending to
+  an unknown address the success screen offers to save it. Storage is a new
+  `MmkvContactStore` behind the core's `ContactStore` port. Contacts are
+  non-secret metadata (public addresses and labels); like sessions and tokens
+  they are currently stored plaintext in MMKV and will join the tracked
+  at-rest metadata encryption follow-up (Keychain-held `encryptionKey`) when
+  it lands.
 
 ### Changed
 - The activity rows' runtime tag colours now come from the theme (`purpleText`,
@@ -16,7 +30,7 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
 
 ### Compatibility
 - Workspace dependency ranges follow the shared packages' release cut:
-  `@tezosx/wallet-core` `^0.4.0` and `@tezosx/relayer` `^0.7.0`. No behaviour
+  `@tezosx/wallet-core` `^0.5.0` and `@tezosx/relayer` `^0.7.0`. No behaviour
   change — the app was already consuming this code over the workspace link.
 
 ## [0.2.0] — 2026-07-12

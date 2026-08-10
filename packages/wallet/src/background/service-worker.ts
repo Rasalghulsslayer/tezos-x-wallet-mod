@@ -4,6 +4,7 @@ import { ApprovalQueue } from '@tezosx/wallet-core/approval-queue';
 import { ChromeVaultStore } from '../adapters/chrome/chrome-vault-store';
 import { ChromeSessionStore } from '../adapters/chrome/chrome-session-store';
 import { ChromeTokenStore } from '../adapters/chrome/chrome-token-store';
+import { ChromeContactStore } from '../adapters/chrome/chrome-contact-store';
 import { ChromeNotificationPort } from '../adapters/chrome/chrome-notification';
 import { WebCryptoPort } from '../adapters/crypto/web-crypto-port';
 import { classifyChromeSender } from '../adapters/chrome/chrome-message-source';
@@ -36,6 +37,7 @@ const persistentPorts: PersistentPorts = {
   vaultStore:    new ChromeVaultStore(),
   sessionStore:  new ChromeSessionStore(),
   tokenStore:    new ChromeTokenStore(),
+  contactStore:  new ChromeContactStore(),
   notifications: new ChromeNotificationPort(),
   pendingOpsStore: (accountId) => new ChromePendingOpsStore(accountId),
 };

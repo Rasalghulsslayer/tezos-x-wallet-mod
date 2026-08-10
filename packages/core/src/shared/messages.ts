@@ -109,7 +109,11 @@ export type PopupRequest =
   | { type: 'PEEK_CUSTOM_TOKEN';   address: string; tryAnyway?: boolean }
   | { type: 'ADD_CUSTOM_TOKEN';    address: string; tryAnyway?: boolean }
   | { type: 'REMOVE_CUSTOM_TOKEN'; address: string }
-  | { type: 'LIST_REGISTERED_TOKENS' };
+  | { type: 'LIST_REGISTERED_TOKENS' }
+  | { type: 'ADD_CONTACT';    address: string; label: string }
+  | { type: 'RENAME_CONTACT'; address: string; label: string }
+  | { type: 'REMOVE_CONTACT'; address: string }
+  | { type: 'LIST_CONTACTS' };
 
 // ── Approve.html → Service Worker ─────────────────────────────────────────────
 

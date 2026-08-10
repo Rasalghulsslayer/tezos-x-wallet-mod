@@ -55,6 +55,9 @@ export const CONTAINER_CACHE_SIZE      = 16;
 export const MAX_TOKENS_PER_ACCOUNT    = 30;
 export const TOKEN_METADATA_TIMEOUT_MS = 5_000;
 
+/** Address-book cap (wallet-global — contacts are the user's, not an account's). */
+export const MAX_CONTACTS              = 50;
+
 /**
  * Default tokens seeded into every account's registry on first 0.10.0 unlock
  * (CT4 wires the auto-seed step). In 0.10.0 the seed is just USDC; multi-token

@@ -21,7 +21,8 @@ import type { TxStatus } from '@tezosx/wallet-core/domain/tx-status';
 import type { ResolveTxResult } from '@tezosx/wallet-core/use-cases/resolve-tx';
 import { formatError, type FormattedError } from '@tezosx/wallet-core/domain/error';
 import { XTZ_L1_ASSET, XTZ_L2_ASSET, type Asset } from '@tezosx/wallet-core/domain/asset';
-import { TEZOS_EXPLORER, EVM_EXPLORER } from '@tezosx/wallet-core/shared/constants';
+import { contactFor, matchContacts, shouldOfferSaveContact } from '@tezosx/wallet-core/view-models/contacts-vm';
+import { TEZOS_EXPLORER, EVM_EXPLORER, MAX_LABEL_LENGTH } from '@tezosx/wallet-core/shared/constants';
 import { NAC_CONTRACT } from '@tezosx/relayer/constants';
 import { colors, font, fontSize, radius, space } from '../theme';
 import { detectRuntime, fmtXtz, truncAddr } from '../ui/format';
@@ -104,8 +105,15 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
   const realHashRef = useRef<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<FormattedError | null>(null);
+  const [toFocused, setToFocused] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [saveErr, setSaveErr] = useState<FormattedError | null>(null);
+  const [saveHidden, setSaveHidden] = useState(false);
 
   const dest = detectRuntime(to);
+  const toContact = contactFor(to, ctx.contacts);
+  const suggestions = useMemo(() => matchContacts(to, ctx.contacts), [to, ctx.contacts]);
   const available =
     asset.kind === 'xtz' ? bal?.xtz ?? '0' : bal?.tokens[(asset.address ?? '').toLowerCase()] ?? '0';
   const insufficient = parseFloat(amount || '0') > parseFloat(available);
@@ -164,6 +172,24 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
         setStage('review');
       } finally {
         setSubmitting(false);
+      }
+    })();
+  };
+
+  // Post-send save offer: name the destination and add it to the address book.
+  const saveContact = (dest_: string): void => {
+    if (saveBusy || saveName.trim() === '') return;
+    setSaveBusy(true);
+    setSaveErr(null);
+    void (async () => {
+      try {
+        await ctx.addContact(dest_, saveName);
+        setSaveHidden(true);
+        ctx.toast('Contact saved');
+      } catch (e) {
+        setSaveErr(formatError(e));
+      } finally {
+        setSaveBusy(false);
       }
     })();
   };
@@ -231,6 +257,7 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
           style={styles.scroll}
           contentContainerStyle={styles.doneScroll}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
           <View style={styles.statusHero}>
             {failed ? (
@@ -294,6 +321,27 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
               The EVM transaction hasn't been indexed yet. The transfer was broadcast on the Michelson runtime — the final hash resolves shortly.
             </Text>
           )}
+
+          {!failed && !saveHidden && shouldOfferSaveContact(done.to, ctx.contacts) && (
+            <View style={styles.saveContact}>
+              <Text style={styles.saveContactTitle}>Save as contact</Text>
+              <View style={styles.saveContactRow}>
+                <TextInput
+                  style={styles.saveContactInput}
+                  value={saveName}
+                  onChangeText={(v) => { setSaveName(v); setSaveErr(null); }}
+                  placeholder="Name"
+                  placeholderTextColor={colors.fgSubtle}
+                  maxLength={MAX_LABEL_LENGTH}
+                  autoCorrect={false}
+                />
+                <Btn variant="outline" size="sm" loading={saveBusy} disabled={saveName.trim() === ''} onPress={() => saveContact(done.to)}>
+                  Save
+                </Btn>
+              </View>
+              {saveErr != null && <ErrorInline title={saveErr.title} detail={saveErr.detail} />}
+            </View>
+          )}
         </ScrollView>
         <View style={styles.actionBar}>
           {failed ? (
@@ -344,6 +392,11 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
             </View>
             <View style={styles.laneSide}>
               <Text style={styles.laneK}>To</Text>
+              {toContact != null && (
+                <Text style={styles.laneName} numberOfLines={1}>
+                  {toContact.label}
+                </Text>
+              )}
               <Text style={styles.laneV} numberOfLines={1}>
                 {truncAddr(to, 6)}
               </Text>
@@ -424,7 +477,12 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
   return (
     <View style={styles.screen}>
       <TopBar title="Send" onBack={back} />
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.formScroll}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={[styles.kicker, styles.kickerFirst]}>Asset</Text>
         <Pressable
           style={({ pressed }) => [styles.assetPicker, pressed && styles.assetPickerPressed]}
@@ -445,11 +503,41 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
           style={styles.input}
           value={to}
           onChangeText={setTo}
+          onFocus={() => setToFocused(true)}
+          onBlur={() => setToFocused(false)}
           placeholder={isEvm ? '0x… or tz1…' : 'tz1… or 0x…'}
           placeholderTextColor={colors.fgSubtle}
           autoCapitalize="none"
           autoCorrect={false}
         />
+        {toContact != null && (
+          <View style={styles.contactHint}>
+            <Text style={styles.contactHintLabel} numberOfLines={1}>
+              {toContact.label}
+            </Text>
+            <Text style={styles.contactHintAddr} numberOfLines={1}>
+              {truncAddr(toContact.address, 8)}
+            </Text>
+          </View>
+        )}
+        {toFocused && toContact == null && suggestions.length > 0 && (
+          <View style={styles.suggestions}>
+            {suggestions.map((c) => (
+              <Pressable
+                key={c.address}
+                style={({ pressed }) => [styles.suggestRow, pressed && styles.suggestRowPressed]}
+                onPress={() => setTo(c.address)}
+              >
+                <Text style={styles.suggestLabel} numberOfLines={1}>
+                  {c.label}
+                </Text>
+                <Text style={styles.suggestAddr} numberOfLines={1}>
+                  {truncAddr(c.address, 6)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
         <RoutingCard sourceKind={acc.kind} dest={dest} />
 
         <Text style={[styles.kicker, styles.kickerAmount]}>Amount</Text>
@@ -583,6 +671,35 @@ const styles = StyleSheet.create({
     fontFamily: font.mono,
   },
 
+  contactHint: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  contactHintLabel: { fontSize: fontSize.sm, color: colors.fgMuted, fontWeight: '500', flexShrink: 1 },
+  contactHintAddr: { fontSize: fontSize.xs, color: colors.fgSubtle, fontFamily: font.mono },
+  suggestions: {
+    marginTop: 8,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+  },
+  suggestRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  suggestRowPressed: { backgroundColor: colors.surface2 },
+  suggestLabel: { fontSize: fontSize.sm, fontWeight: '500', color: colors.fg, flexShrink: 1 },
+  suggestAddr: { fontSize: fontSize.xs, color: colors.fgMuted, fontFamily: font.mono },
+
   amountCard: { backgroundColor: colors.surface2, borderRadius: radius.md, padding: 18 },
   amountInput: {
     width: '100%',
@@ -634,6 +751,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   laneK: { fontSize: 10.5, textTransform: 'uppercase', letterSpacing: 0.63, color: colors.fgSubtle },
+  laneName: { fontSize: fontSize.sm, fontWeight: '600', color: colors.fg },
   laneV: { fontSize: fontSize.sm, color: colors.fg, letterSpacing: -0.1, fontFamily: font.mono },
   laneArrow: {
     width: 34,
@@ -714,6 +832,27 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     textAlign: 'center',
     paddingHorizontal: 8,
+  },
+  saveContact: {
+    width: '100%',
+    marginTop: 12,
+    backgroundColor: colors.surface2,
+    borderRadius: radius.lg,
+    padding: 14,
+  },
+  saveContactTitle: { fontSize: fontSize.sm, fontWeight: '600', color: colors.fgMuted, marginBottom: 10 },
+  saveContactRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  saveContactInput: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: colors.surface3,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    borderRadius: radius.sm,
+    color: colors.fg,
+    fontSize: fontSize.sm,
+    height: 38,
+    paddingHorizontal: 12,
   },
   reviewErr: { marginTop: 14 },
 

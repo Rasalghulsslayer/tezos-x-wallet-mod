@@ -15,6 +15,7 @@ import type { VaultStore } from './vault-store';
 import type { SessionStore } from './session-store';
 import type { NotificationPort } from './notification-port';
 import type { TokenStore } from './token-store';
+import type { ContactStore } from './contact-store';
 import type { CrossRuntimeBuilderPort } from './cross-runtime-builder';
 import type { AccountId } from '../domain/account';
 
@@ -60,6 +61,7 @@ export interface PersistentPorts {
   vaultStore:    VaultStore;
   sessionStore:  SessionStore;
   tokenStore:    TokenStore;
+  contactStore:  ContactStore;
   notifications: NotificationPort;
   /** Optional per-account store for cross-runtime resolution state, so a
    *  tz1 account's pending synthetic→real hash mappings survive lock / switch

@@ -8,10 +8,12 @@ import type { ContentPush } from '@tezosx/wallet-core/shared/messages';
 import type { VaultStore, EncryptedVault } from '@tezosx/wallet-core/ports/vault-store';
 import type { SessionStore, StoredSession } from '@tezosx/wallet-core/ports/session-store';
 import type { TokenStore } from '@tezosx/wallet-core/ports/token-store';
+import type { ContactStore } from '@tezosx/wallet-core/ports/contact-store';
 import type { NotificationPort } from '@tezosx/wallet-core/ports/notification-port';
 import type { ClassifiedSource } from '@tezosx/wallet-core/ports/message-source';
 import type { ApprovalPresenter } from '@tezosx/wallet-core/ports/approval-presenter';
 import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
+import type { Contact } from '@tezosx/wallet-core/domain/contact';
 
 class MemoryVault implements VaultStore {
   private v: EncryptedVault | undefined;
@@ -35,6 +37,13 @@ class MemoryTokens implements TokenStore {
   }
   async clear() { this.map.clear(); }
 }
+class MemoryContacts implements ContactStore {
+  private map = new Map<string, Contact>();
+  async list() { return Array.from(this.map.values()); }
+  async upsert(c: Contact) { this.map.set(c.address, c); }
+  async remove(address: string) { this.map.delete(address); }
+  async clear() { this.map.clear(); }
+}
 
 const stubNotifications: NotificationPort = { async setPendingCount() {} };
 // dispatch is chrome-free and the queue takes an injected presenter, so this
@@ -50,7 +59,7 @@ async function setupHarness() {
   const deps: SwDeps = {
     keyring,
     approvalQueue:   new ApprovalQueue(stubNotifications, stubPresenter),
-    persistentPorts: { vaultStore: new MemoryVault(), sessionStore: new MemorySessions(), tokenStore: new MemoryTokens(), notifications: stubNotifications },
+    persistentPorts: { vaultStore: new MemoryVault(), sessionStore: new MemorySessions(), tokenStore: new MemoryTokens(), contactStore: new MemoryContacts(), notifications: stubNotifications },
     state:           { container: null, evmAlias: null },
     containerCache:  new ContainerCache(),
     rebuildContainer: async () => {},

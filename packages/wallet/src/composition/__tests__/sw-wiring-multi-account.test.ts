@@ -8,10 +8,12 @@ import type { ContentPush, PopupRequest, AccountSummary } from '@tezosx/wallet-c
 import type { VaultStore, EncryptedVault } from '@tezosx/wallet-core/ports/vault-store';
 import type { SessionStore, StoredSession } from '@tezosx/wallet-core/ports/session-store';
 import type { TokenStore } from '@tezosx/wallet-core/ports/token-store';
+import type { ContactStore } from '@tezosx/wallet-core/ports/contact-store';
 import type { NotificationPort } from '@tezosx/wallet-core/ports/notification-port';
 import type { ClassifiedSource } from '@tezosx/wallet-core/ports/message-source';
 import type { ApprovalPresenter } from '@tezosx/wallet-core/ports/approval-presenter';
 import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
+import type { Contact } from '@tezosx/wallet-core/domain/contact';
 
 class MemoryVault implements VaultStore {
   private v: EncryptedVault | undefined;
@@ -39,6 +41,14 @@ class MemoryTokens implements TokenStore {
   async remove(accountId: string, address: string) {
     this.map.set(accountId, (this.map.get(accountId) ?? []).filter(t => t.address.toLowerCase() !== address.toLowerCase()));
   }
+  async clear() { this.map.clear(); }
+}
+
+class MemoryContacts implements ContactStore {
+  private map = new Map<string, Contact>();
+  async list() { return Array.from(this.map.values()); }
+  async upsert(c: Contact) { this.map.set(c.address, c); }
+  async remove(address: string) { this.map.delete(address); }
   async clear() { this.map.clear(); }
 }
 
@@ -78,7 +88,7 @@ async function setupHarness(): Promise<Harness> {
   const deps: SwDeps = {
     keyring,
     approvalQueue:  new ApprovalQueue(stubNotifications, stubPresenter),
-    persistentPorts: { vaultStore: new MemoryVault(), sessionStore, tokenStore: new MemoryTokens(), notifications: stubNotifications },
+    persistentPorts: { vaultStore: new MemoryVault(), sessionStore, tokenStore: new MemoryTokens(), contactStore: new MemoryContacts(), notifications: stubNotifications },
     state:          { container: null, evmAlias: null },
     containerCache: new ContainerCache(),
     rebuildContainer: async () => { rebuilds++; },
@@ -432,6 +442,75 @@ describe('dispatch sender validation', () => {
     // The host could attest no trusted facts (a web page, a foreign extension):
     // the classifier returns null and the privileged guard rejects it.
     const res = await dispatch({ type: 'GET_STATE' }, null, h.deps);
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('unreachable');
+    expect(res.code).toBe(4100);
+  });
+});
+
+describe('sw-wiring contacts dispatch', () => {
+  let h: Harness;
+  beforeEach(async () => { h = await setupHarness(); });
+
+  // EIP-55 checksum-valid mixed-case address (spec test vector); the book
+  // stores its identity-normalized (lowercase) form.
+  const CHECKSUMMED = '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed';
+  const NORMALIZED  = CHECKSUMMED.toLowerCase();
+
+  it('ADD_CONTACT stores the contact and returns it with the 0x address lowercased', async () => {
+    const res = await send(h.deps, { type: 'ADD_CONTACT', address: CHECKSUMMED, label: 'Alice' });
+    expect(res.ok).toBe(true);
+    if (!res.ok) throw new Error('unreachable');
+    const contact = res.data as Contact;
+    expect(contact.address).toBe(NORMALIZED);
+    expect(contact.label).toBe('Alice');
+
+    const stored = await h.deps.persistentPorts.contactStore.list();
+    expect(stored).toHaveLength(1);
+    expect(stored[0].address).toBe(NORMALIZED);
+  });
+
+  it('ADD_CONTACT rejects an invalid address', async () => {
+    const res = await send(h.deps, { type: 'ADD_CONTACT', address: 'not-an-address', label: 'Nobody' });
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('unreachable');
+    expect(res.message).toMatch(/Invalid address/);
+    expect(await h.deps.persistentPorts.contactStore.list()).toHaveLength(0);
+  });
+
+  it('LIST_CONTACTS returns the book label-sorted (case-insensitive)', async () => {
+    await send(h.deps, { type: 'ADD_CONTACT', address: '0x' + 'a'.repeat(40), label: 'charlie' });
+    await send(h.deps, { type: 'ADD_CONTACT', address: '0x' + 'b'.repeat(40), label: 'Alice' });
+    await send(h.deps, { type: 'ADD_CONTACT', address: '0x' + 'c'.repeat(40), label: 'Bob' });
+
+    const res = await send(h.deps, { type: 'LIST_CONTACTS' });
+    expect(res.ok).toBe(true);
+    if (!res.ok) throw new Error('unreachable');
+    expect((res.data as Contact[]).map((c) => c.label)).toEqual(['Alice', 'Bob', 'charlie']);
+  });
+
+  it('RENAME_CONTACT changes the label but not the address', async () => {
+    await send(h.deps, { type: 'ADD_CONTACT', address: CHECKSUMMED, label: 'Alice' });
+    const res = await send(h.deps, { type: 'RENAME_CONTACT', address: CHECKSUMMED, label: 'Alice (work)' });
+    expect(res.ok).toBe(true);
+    if (!res.ok) throw new Error('unreachable');
+    expect((res.data as Contact).label).toBe('Alice (work)');
+
+    const stored = await h.deps.persistentPorts.contactStore.list();
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({ address: NORMALIZED, label: 'Alice (work)' });
+  });
+
+  it('REMOVE_CONTACT deletes the entry', async () => {
+    await send(h.deps, { type: 'ADD_CONTACT', address: CHECKSUMMED, label: 'Alice' });
+    const res = await send(h.deps, { type: 'REMOVE_CONTACT', address: CHECKSUMMED });
+    expect(res.ok).toBe(true);
+    expect(await h.deps.persistentPorts.contactStore.list()).toHaveLength(0);
+  });
+
+  it('returns 4100 for contact commands when the wallet is locked', async () => {
+    h.keyring.lock();
+    const res = await send(h.deps, { type: 'LIST_CONTACTS' });
     expect(res.ok).toBe(false);
     if (res.ok) throw new Error('unreachable');
     expect(res.code).toBe(4100);

@@ -2270,6 +2270,33 @@ html, body {
   border-bottom: 1px solid var(--tx-border);
 }
 
+/* ── Send · contact suggestions under the recipient field ────────────── */
+.tx-contact-suggest {
+  margin-top: 6px;
+  background: var(--tx-surface-2);
+  border: 1px solid var(--tx-border);
+  border-radius: var(--tx-r-md);
+  overflow: hidden;
+}
+.tx-contact-suggest button {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 8px 12px;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--tx-fg); font: inherit; text-align: left;
+  transition: background var(--tx-dur-fast);
+}
+.tx-contact-suggest button:hover { background: var(--tx-surface); }
+.tx-contact-suggest button + button { border-top: 1px solid var(--tx-border); }
+.tx-contact-suggest .n {
+  flex: 1; min-width: 0;
+  font-size: 13px; font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tx-contact-suggest .a {
+  font-family: var(--tx-font-mono);
+  font-size: var(--tx-fs-xs); color: var(--tx-fg-muted);
+}
+
 /* ── Home "+ Add token" affordance ───────────────────────────────────── */
 .tx-home-add-token {
   margin: 6px 16px 0;

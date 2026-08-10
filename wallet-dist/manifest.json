@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TezosX Wallet",
-  "version": "0.15.0",
+  "version": "0.14.0",
   "description": "Standalone Tezos wallet with built-in TezosX relayer for Tezos X EVM dApps",
   "permissions": [
     "storage",
@@ -22,26 +22,26 @@
     "https://www.4byte.directory/*"
   ],
   "background": {
-    "service_worker": "src/background/service-worker.ts",
+    "service_worker": "service-worker-loader.js",
     "type": "module"
   },
   "content_scripts": [
     {
+      "js": [
+        "assets/bridge.ts--RQJnT10.js"
+      ],
       "matches": [
         "<all_urls>"
-      ],
-      "js": [
-        "src/content/bridge.ts"
       ],
       "run_at": "document_start",
       "world": "ISOLATED"
     },
     {
+      "js": [
+        "assets/provider.ts-cFru8Jik.js"
+      ],
       "matches": [
         "<all_urls>"
-      ],
-      "js": [
-        "src/injected/provider.ts"
       ],
       "run_at": "document_start",
       "world": "MAIN"
@@ -62,5 +62,17 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "resources": [
+        "assets/bridge.ts--RQJnT10.js",
+        "assets/provider.ts-cFru8Jik.js"
+      ],
+      "use_dynamic_url": false
+    }
+  ]
 }

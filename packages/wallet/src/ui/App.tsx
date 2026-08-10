@@ -16,6 +16,7 @@ import { Receive }     from './pages/Receive';
 import { AddAccount }  from './pages/AddAccount';
 import { AddToken }    from './pages/AddToken';
 import { TokensSettings } from './pages/TokensSettings';
+import { Contacts }    from './pages/Contacts';
 import { ToastHost }   from './tx/Toast';
 import { ExperimentalBanner } from './tx/ExperimentalBanner';
 import { FatalScreen } from './tx/FatalScreen';
@@ -99,6 +100,7 @@ function Gate() {
       <Route path="/accounts/add" element={<AddAccount  state={state}   onChanged={refresh} />} />
       <Route path="/tokens"       element={<TokensSettings state={state} />} />
       <Route path="/tokens/add"   element={<AddToken    state={state} />} />
+      <Route path="/contacts"     element={<Contacts    state={state} />} />
       <Route path="*"            element={<Navigate to="/" replace />} />
     </Routes>
   );
