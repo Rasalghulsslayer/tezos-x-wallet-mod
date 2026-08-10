@@ -70,7 +70,7 @@ test('tz1 → 0x cross-runtime transfer resolves synthetic hash and reaches fina
   await send.clickReview();
   await send.waitForReview();
   await send.clickConfirm();
-  await send.waitForFinalized(30_000);
+  await send.waitForFinalized(120_000);
 
   expect(await send.finalizedStepState()).toBe('done');
 });

@@ -16,7 +16,7 @@
     "JSON-RPC eth_call [{\"data\":\"0x70a08231000000000000000000000000b650b9991e6e7f693d72cd66c6aceeaf254ef606\",\"to\":\"0xd77420f73b4612a7a99dba8c2afd30a1886b0344\"},\"latest\"]": {
       "status": 200,
       "contentType": "application/json",
-      "body": "{\"jsonrpc\":\"2.0\",\"result\":\"0x0000000000000000000000000000000000000000000000000000000000989680\",\"id\":1}\n"
+      "body": "{\"jsonrpc\":\"2.0\",\"result\":\"0x\",\"id\":1}\n"
     }
   }
 }

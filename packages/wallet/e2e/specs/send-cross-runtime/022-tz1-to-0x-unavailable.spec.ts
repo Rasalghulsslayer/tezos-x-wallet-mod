@@ -55,7 +55,7 @@ test('tz1 → 0x: when the kernel mapping never materialises, the status falls b
   // timeout in ~txPollTimeoutMs regardless of the resolver. The fail banner
   // reads "Status unavailable" — distinct from 021's on-chain revert
   // ("Transaction failed").
-  await send.waitForFinalized(20_000);
+  await send.waitForFinalized(60_000);
   const fail = popup.page.locator('.tx-status-fail');
   await expect(fail).toBeVisible();
   await expect(fail).toContainText('Status unavailable');

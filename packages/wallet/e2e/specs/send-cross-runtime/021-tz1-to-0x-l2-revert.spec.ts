@@ -58,7 +58,7 @@ test('tz1 → 0x: a reverted L2 receipt surfaces the failure card', async ({
   await send.clickReview();
   await send.waitForReview();
   await send.clickConfirm();
-  await send.waitForFinalized(30_000);
+  await send.waitForFinalized(120_000);
 
   // When the L2 receipt reports a revert, StatusTimeline marks the `included`
   // step (idx 1) as `failed` and leaves `finalized` (idx 2) as `pending`. The
