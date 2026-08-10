@@ -1,9 +1,11 @@
 /**
  * Unlock — the returning-user password screen (mirrors the design's
  * UnlockScreen). Brand mark + "Welcome back", a single password field, and a
- * ghost link back to onboarding for a lost password. Biometric-first (the sealed
- * password is released by Face ID / Touch ID), with a password fallback; errors
- * surface through formatError.
+ * forgot-password link opening the reset-and-re-import recovery sheet (the
+ * password is unrecoverable by design, so recovery wipes the vault and walks
+ * back through onboarding). Biometric-first (the sealed password is released
+ * by Face ID / Touch ID), with a password fallback; errors surface through
+ * formatError.
  */
 
 import { useEffect, useState } from 'react';
@@ -12,7 +14,10 @@ import { formatError, type FormattedError } from '@tezosx/wallet-core/domain/err
 import { colors, fontSize, radius, space } from '../theme';
 import { useWallet } from '../wallet/context';
 import { Btn } from '../ui/tx/Btn';
+import { Check } from '../ui/tx/Check';
+import { ErrorCard } from '../ui/tx/ErrorCard';
 import { ErrorInline } from '../ui/tx/ErrorInline';
+import { Sheet } from '../ui/tx/Sheet';
 import { Icon } from '../ui/icon';
 import { LogoMark } from '../ui/tx/LogoMark';
 
@@ -21,6 +26,7 @@ export function Unlock(): React.JSX.Element {
   const [pwd, setPwd] = useState('');
   const [err, setErr] = useState<FormattedError | null>(null);
   const [busy, setBusy] = useState(false);
+  const [recover, setRecover] = useState(false);
 
   // Prompt biometrics on mount when a sealed secret is available.
   useEffect(() => {
@@ -85,10 +91,105 @@ export function Unlock(): React.JSX.Element {
           )}
         </View>
 
-        <Pressable onPress={() => ctx.resetToWelcome()} style={styles.forgot}>
-          <Text style={styles.forgotText}>Forgot password? Import with seed phrase</Text>
+        <Pressable onPress={() => setRecover(true)} style={styles.forgot}>
+          <Text style={styles.forgotText}>Forgot password? Reset wallet and re-import</Text>
         </Pressable>
       </ScrollView>
+
+      {recover && <RecoverySheet onClose={() => setRecover(false)} />}
+    </View>
+  );
+}
+
+/**
+ * The forgot-password recovery sheet. The password is unrecoverable by design,
+ * so the only way forward is wiping the vault and re-importing from the seed
+ * phrase — the sheet is explicit about what that recovers, what it does not,
+ * and what is kept, and requires an acknowledgement before the danger button
+ * arms. On success the provider drops to onboarding (Welcome → Import).
+ */
+function RecoverySheet({ onClose }: { onClose: () => void }): React.JSX.Element {
+  const ctx = useWallet();
+  const [acked, setAcked] = useState(false);
+  const [err, setErr] = useState<FormattedError | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = (): void => {
+    if (!acked || busy) return;
+    setErr(null);
+    setBusy(true);
+    void (async () => {
+      try {
+        await ctx.resetWallet();
+        // The provider now shows onboarding; this whole screen unmounts.
+      } catch (e) {
+        setErr(formatError(e));
+        setBusy(false);
+      }
+    })();
+  };
+
+  return (
+    <Sheet title="Reset wallet" onClose={onClose}>
+      <View style={styles.recoverBody}>
+        <Text style={styles.recoverIntro}>
+          Your password cannot be recovered. To regain access, erase the wallet on this device and
+          re-import it with your seed phrase.
+        </Text>
+
+        <RecoverGroup icon="check" tone="success" label="Recovered">
+          Accounts derived from your seed phrase — re-importing the phrase restores them at the same
+          addresses.
+        </RecoverGroup>
+        <RecoverGroup icon="x" tone="danger" label="Not recovered">
+          Accounts imported from a raw private key (Tezos edsk or EVM 0x key) and your account
+          labels — re-import those keys separately.
+        </RecoverGroup>
+        <RecoverGroup icon="list" tone="muted" label="Kept">
+          Your contacts stay on this device.
+        </RecoverGroup>
+
+        <View style={styles.recoverAck}>
+          <Check checked={acked} onToggle={setAcked}>
+            I understand the wallet on this device will be erased and my seed phrase is the only way
+            to restore my accounts.
+          </Check>
+        </View>
+
+        {err != null && <ErrorCard title={err.title} detail={err.detail} />}
+
+        <Btn variant="danger" full loading={busy} disabled={!acked} onPress={submit} style={styles.recoverBtn}>
+          Reset wallet & re-import
+        </Btn>
+      </View>
+    </Sheet>
+  );
+}
+
+const GROUP_TONES = {
+  success: colors.success,
+  danger:  colors.danger,
+  muted:   colors.fgMuted,
+} as const;
+
+function RecoverGroup({
+  icon,
+  tone,
+  label,
+  children,
+}: {
+  icon: 'check' | 'x' | 'list';
+  tone: keyof typeof GROUP_TONES;
+  label: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <View style={styles.recoverGroup}>
+      <View style={styles.recoverHead}>
+        <Icon name={icon} size={14} color={GROUP_TONES[tone]} strokeWidth={2.4} />
+        <Text style={[styles.recoverLabel, { color: GROUP_TONES[tone] }]}>{label}</Text>
+      </View>
+      <Text style={styles.recoverText}>{children}</Text>
     </View>
   );
 }
@@ -114,4 +215,13 @@ const styles = StyleSheet.create({
   bioText: { color: colors.fgMuted, fontSize: fontSize.md, fontWeight: '600' },
   forgot: { marginTop: space[4], alignItems: 'center' },
   forgotText: { color: colors.fgMuted, fontSize: fontSize.sm },
+
+  recoverBody: { paddingHorizontal: 4, paddingTop: 4, paddingBottom: 16 },
+  recoverIntro: { fontSize: fontSize.sm, color: colors.fgMuted, lineHeight: 20, marginBottom: space[4] },
+  recoverGroup: { marginBottom: space[3] },
+  recoverHead: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 3 },
+  recoverLabel: { fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', fontWeight: '600' },
+  recoverText: { fontSize: fontSize.sm, color: colors.fg, lineHeight: 20 },
+  recoverAck: { marginTop: space[2], paddingVertical: space[2] },
+  recoverBtn: { marginTop: space[3] },
 });

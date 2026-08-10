@@ -5,6 +5,30 @@ The Tezos X wallet for iOS/Android (React Native, Expo bare). Format follows
 shared `@tezosx/wallet-core` over the workspace; only platform adapters
 (storage, secure RNG, biometrics) and the UI live here.
 
+## [0.4.0] — 2026-08-10
+
+### Added
+- **Change password** from Settings → Security (Sheet with current/new/confirm,
+  same validation as onboarding, fields scrubbed on any way out).
+- **Forgot-password recovery** behind the Unlock screen's "Forgot password?"
+  affordance — previously it only routed to onboarding, leaving the old vault,
+  sessions, throttle state and the Keychain-sealed password in place. It now
+  shows the explicit recovered / not-recovered / kept checklist (seed-derived
+  accounts re-importable at the same addresses; imported edsk and EVM keys and
+  labels are not recoverable from the phrase; contacts are kept), requires an
+  acknowledgement, then wipes and lands on onboarding.
+
+### Security
+- **Biometric unlock follows a password change.** Changing the password
+  re-seals the Keychain-held unlock secret with the new password in the same
+  operation — without this the keystore would keep releasing the old one and
+  biometric unlock would silently break. If the re-seal fails (enrolment
+  changed, keystore refusal), the sealed secret is cleared instead, degrading
+  biometrics to manual password entry rather than ever replaying a stale
+  password. The recovery wipe likewise clears the sealed secret, so nothing in
+  the keystore outlives the vault it opened. Both paths are covered by
+  vault-actions tests.
+
 ## [0.3.0] — 2026-08-10
 
 ### Added

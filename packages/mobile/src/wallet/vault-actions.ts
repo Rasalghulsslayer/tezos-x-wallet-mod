@@ -24,6 +24,8 @@ import { resolveTx as resolveTxUseCase, type ResolveTxResult } from '@tezosx/wal
 import { listSessions as listStoredSessions } from '@tezosx/wallet-core/use-cases/list-sessions';
 import { disconnectOrigin } from '@tezosx/wallet-core/use-cases/disconnect-origin';
 import { lockVault } from '@tezosx/wallet-core/use-cases/lock-vault';
+import { changePassword as changePasswordUseCase } from '@tezosx/wallet-core/use-cases/change-password';
+import { resetWallet as resetWalletUseCase } from '@tezosx/wallet-core/use-cases/reset-wallet';
 import { getState } from '@tezosx/wallet-core/use-cases/get-state';
 import type { VaultState } from '@tezosx/wallet-core/shared/messages';
 import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
@@ -101,6 +103,45 @@ export function lockWallet(): void {
   deps.state.container = null;
   deps.state.evmAlias  = null;
   evmAliasCache.value  = null;
+}
+
+/**
+ * Change the vault password, then re-seal the Keychain unlock secret with the
+ * new one. Ordering matters: once the keyring re-seal succeeds the vault only
+ * opens with the new password, so the biometric copy must be replaced — the
+ * keystore would otherwise keep releasing the old password and every biometric
+ * unlock would silently fail against the re-sealed vault. If sealing the new
+ * password fails (no enrolment, keystore refusal), the sealed copy is cleared
+ * instead so biometrics degrade to manual password entry rather than replaying
+ * a dead password. Neither Keychain outcome fails the operation: the vault
+ * change has already happened and must not be reported as an error.
+ */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  await changePasswordUseCase({ currentPassword, newPassword }, { keyring });
+  try {
+    await unlockSecret.seal(newPassword);
+  } catch {
+    await unlockSecret.clear().catch(() => { /* biometric unlock is already unusable; password entry remains */ });
+  }
+}
+
+/**
+ * Forgot-password recovery: destroy the vault so the user can re-import from
+ * their seed phrase. The core use-case wipes the sealed vault + unlock
+ * throttle and clears dApp sessions and token registries (the address book is
+ * deliberately kept). The mobile extras go with it: pending approvals are
+ * flushed, every in-memory container reference is dropped synchronously (the
+ * same block lockWallet runs, for the same reason), and the Keychain-sealed
+ * unlock password is removed — it must not survive the vault it opened.
+ */
+export async function resetWallet(): Promise<void> {
+  await resetWalletUseCase({ keyring, sessionStore, tokenStore });
+  deps.approvalQueue.rejectAll('wallet reset');
+  deps.containerCache.clear();
+  deps.state.container = null;
+  deps.state.evmAlias  = null;
+  evmAliasCache.value  = null;
+  await unlockSecret.clear();
 }
 
 export interface AddAccountOutcome {

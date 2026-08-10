@@ -113,7 +113,11 @@ export type PopupRequest =
   | { type: 'ADD_CONTACT';    address: string; label: string }
   | { type: 'RENAME_CONTACT'; address: string; label: string }
   | { type: 'REMOVE_CONTACT'; address: string }
-  | { type: 'LIST_CONTACTS' };
+  | { type: 'LIST_CONTACTS' }
+  | { type: 'CHANGE_PASSWORD'; currentPassword: string; newPassword: string }
+  // Forgot-password recovery: destroys the sealed vault so the user can
+  // re-onboard from the seed phrase. Deliberately usable while locked.
+  | { type: 'RESET_WALLET' };
 
 // ── Approve.html → Service Worker ─────────────────────────────────────────────
 
