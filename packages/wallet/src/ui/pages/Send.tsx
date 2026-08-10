@@ -5,6 +5,9 @@ import { sendPopupRequest } from '@/shared/messaging';
 import { detectRuntime } from '@tezosx/wallet-core/domain/validation';
 import type { DestRuntime } from '@tezosx/wallet-core/domain/chain';
 import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
+import type { Contact } from '@tezosx/wallet-core/domain/contact';
+import { contactFor, matchContacts, shouldOfferSaveContact } from '@tezosx/wallet-core/view-models/contacts-vm';
+import { MAX_LABEL_LENGTH } from '@tezosx/wallet-core/shared/constants';
 import {
   fetchL1XtzBalance,
   fetchXtzBalance,
@@ -28,6 +31,9 @@ import { RoutingCard } from '../tx/RoutingCard';
 import { AvailableRow } from '../tx/AvailableRow';
 import { InsufficientWarning } from '../tx/InsufficientWarning';
 import { ErrorCard } from '../tx/ErrorCard';
+import { ErrorInline } from '../tx/ErrorInline';
+import { Identicon } from '../tx/Identicon';
+import { toast } from '../tx/Toast';
 import { StatusTimeline } from '../tx/StatusTimeline';
 import { StatusHero } from '../tx/StatusHero';
 import { StatusMeta } from '../tx/StatusMeta';
@@ -118,10 +124,21 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
   const [tokens,   setTokens]   = useState<RegisteredToken[]>([]);
   const [balances, setBalances] = useState<BalanceMap>({});
   const [balancesLoading, setBalancesLoading] = useState(true);
+  const [contacts,  setContacts]  = useState<Contact[]>([]);
+  const [toFocused, setToFocused] = useState(false);
+  // Post-send "Save as contact" offer state.
+  const [saveName,  setSaveName]  = useState('');
+  const [saveErr,   setSaveErr]   = useState<unknown>(null);
+  const [saveBusy,  setSaveBusy]  = useState(false);
+  const [contactSaved, setContactSaved] = useState(false);
 
   // Kind-dependent address resolution for ERC-20 balance reads.
   const fromAddr = signingSourceAddress(state);
   const evmAddr  = state.kind === 'tezos' ? state.evmAlias : state.address;
+
+  useEffect(() => {
+    void sendPopupRequest<Contact[]>({ type: 'LIST_CONTACTS' }).then(setContacts).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (fromAddr === '') return;
@@ -198,6 +215,11 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
 
   const dest    = detectRuntime(to);
   const isCross = state.kind === 'tezos' ? dest === 'l2' : dest === 'l1';
+
+  // Address-book projections: the resolved name for the typed recipient, and
+  // the suggestions offered while the field has focus and resolves to nothing.
+  const toContact   = contactFor(to, contacts);
+  const suggestions = toFocused && toContact == null ? matchContacts(to, contacts) : [];
 
   // ERC-20 tokens live on the EVM runtime only; a Michelson-runtime destination is invalid.
   const erc20OnL1 = asset.kind === 'erc20' && dest === 'l1';
@@ -280,6 +302,26 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
     if (stage === 'review') setStage('form');
   };
 
+  // Offer to name the destination after a send when the book (loaded at mount)
+  // doesn't know it yet; hidden once saved in this flow.
+  const offerSave = shouldOfferSaveContact(to, contacts) && !contactSaved;
+
+  const saveContact = async () => {
+    if (saveName.trim() === '' || saveBusy) return;
+    setSaveErr(null);
+    setSaveBusy(true);
+    try {
+      const added = await sendPopupRequest<Contact>({ type: 'ADD_CONTACT', address: to.trim(), label: saveName });
+      setContacts((prev) => [...prev, added]);
+      setContactSaved(true);
+      toast('Contact saved');
+    } catch (e) {
+      setSaveErr(e);
+    } finally {
+      setSaveBusy(false);
+    }
+  };
+
   // ── Done stage ───────────────────────────────────────────────────────────
   if (stage === 'done' && done != null && doneStartedAt != null) {
     const isFinalized   = txStatus?.stage === 'finalized';
@@ -305,6 +347,33 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
           />
           <StatusTimeline status={status} runtime={done.runtime} startedAt={doneStartedAt} />
           {!isFailed && done.hash !== '' && <StatusMeta status={status} runtime={done.runtime} hash={done.hash} />}
+          {!isFailed && offerSave && (
+            <div className="tx-card flat" style={{ marginTop: 12, padding: 12, width: '100%' }}>
+              <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}>
+                Save {truncAddr(to, 6)} as a contact
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  className="tx-input"
+                  value={saveName}
+                  maxLength={MAX_LABEL_LENGTH}
+                  placeholder="Name"
+                  onChange={(e) => { setSaveName(e.target.value); setSaveErr(null); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') void saveContact(); }}
+                  aria-label="Contact name"
+                  style={{ height: 36, flex: 1, minWidth: 0 }}
+                />
+                <Button variant="outline" size="sm" disabled={saveName.trim() === '' || saveBusy} onClick={() => void saveContact()}>
+                  {saveBusy ? 'Saving…' : 'Save'}
+                </Button>
+              </div>
+              {saveErr != null && (
+                <div style={{ marginTop: 8 }}>
+                  <ErrorInline error={formatError(saveErr)} />
+                </div>
+              )}
+            </div>
+          )}
           {isFailed && (
             <div className="tx-status-fail" role="alert">
               <span className="tx-status-fail-ico" aria-hidden="true">
@@ -368,6 +437,11 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
             </span>
             <div className="tx-lane-side">
               <span className="k">To</span>
+              {toContact != null && (
+                <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--tx-fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {toContact.label}
+                </span>
+              )}
               <span className="v">{truncAddr(to, 6)}</span>
               <ChainPill chain={destChain} />
             </div>
@@ -461,12 +535,39 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
           className="tx-input mono"
           value={to}
           onChange={(e) => setTo(e.target.value)}
+          onFocus={() => setToFocused(true)}
+          onBlur={() => setToFocused(false)}
           placeholder={
             isEvmSource ? '0x… or tz1…' :
             asset.kind === 'erc20' ? '0x…' :
             'tz1… or 0x…'
           }
         />
+        {suggestions.length > 0 && (
+          <div className="tx-contact-suggest" role="listbox" aria-label="Contact suggestions">
+            {suggestions.map((c) => (
+              <button
+                key={c.address}
+                type="button"
+                role="option"
+                aria-selected={false}
+                // mousedown (not click) so the pick lands before the input's blur.
+                onMouseDown={(e) => { e.preventDefault(); setTo(c.address); setToFocused(false); }}
+              >
+                <Identicon seed={c.address} size="sm" />
+                <span className="n">{c.label}</span>
+                <span className="a">{truncAddr(c.address, 6)}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {toContact != null && (
+          <div style={{ marginTop: 6, fontSize: 11, color: 'var(--tx-fg-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Icon name="check" size={12} color="var(--tx-fg-muted)" />
+            <span style={{ fontWeight: 500 }}>{toContact.label}</span>
+            <span className="tx-mono">{truncAddr(to, 6)}</span>
+          </div>
+        )}
         <RoutingCard asset={asset} dest={dest} sourceKind={state.kind} />
 
         <div className="tx-kicker" style={{ padding: '18px 0 8px' }}>Amount</div>

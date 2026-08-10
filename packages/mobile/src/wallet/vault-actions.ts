@@ -15,6 +15,10 @@ import { setActiveAccount } from '@tezosx/wallet-core/use-cases/set-active-accou
 import { peekCustomToken } from '@tezosx/wallet-core/use-cases/peek-custom-token';
 import { addCustomToken } from '@tezosx/wallet-core/use-cases/add-custom-token';
 import { removeCustomToken } from '@tezosx/wallet-core/use-cases/remove-custom-token';
+import { listContacts as listContactsUseCase } from '@tezosx/wallet-core/use-cases/list-contacts';
+import { addContact as addContactUseCase } from '@tezosx/wallet-core/use-cases/add-contact';
+import { renameContact as renameContactUseCase } from '@tezosx/wallet-core/use-cases/rename-contact';
+import { removeContact as removeContactUseCase } from '@tezosx/wallet-core/use-cases/remove-contact';
 import { sendTransfer as sendTransferUseCase, type SendTransferReq, type SendTransferResult } from '@tezosx/wallet-core/use-cases/send-transfer';
 import { resolveTx as resolveTxUseCase, type ResolveTxResult } from '@tezosx/wallet-core/use-cases/resolve-tx';
 import { listSessions as listStoredSessions } from '@tezosx/wallet-core/use-cases/list-sessions';
@@ -23,6 +27,7 @@ import { lockVault } from '@tezosx/wallet-core/use-cases/lock-vault';
 import { getState } from '@tezosx/wallet-core/use-cases/get-state';
 import type { VaultState } from '@tezosx/wallet-core/shared/messages';
 import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
+import type { Contact } from '@tezosx/wallet-core/domain/contact';
 import type { StoredSession } from '@tezosx/wallet-core/ports/session-store';
 import type { Container } from '@tezosx/wallet-core/ports/container';
 import { TEZLINK_EVM_RPC } from '@tezosx/relayer/constants';
@@ -167,6 +172,26 @@ export async function addToken(address: string, tryAnyway = false): Promise<Regi
 export async function removeToken(address: string): Promise<void> {
   await removeCustomToken({ accountId: activeAccountId(), address }, { tokenStore });
   await deps.rebuildContainer();
+}
+
+/** The wallet-global address book, label-sorted. */
+export function loadContacts(): Promise<Contact[]> {
+  return listContactsUseCase({ contactStore: deps.persistentPorts.contactStore });
+}
+
+/** Save a new address-book entry (validated + deduped + capped by the use-case). */
+export function addContact(address: string, label: string): Promise<Contact> {
+  return addContactUseCase({ address, label }, { contactStore: deps.persistentPorts.contactStore });
+}
+
+/** Relabel an existing entry — the address is its identity and never changes. */
+export function renameContact(address: string, label: string): Promise<Contact> {
+  return renameContactUseCase({ address, label }, { contactStore: deps.persistentPorts.contactStore });
+}
+
+/** Drop an entry from the address book (idempotent). */
+export function removeContact(address: string): Promise<void> {
+  return removeContactUseCase({ address }, { contactStore: deps.persistentPorts.contactStore });
 }
 
 /**

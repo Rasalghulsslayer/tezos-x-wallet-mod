@@ -7,6 +7,26 @@ TypeScript source over the npm-workspace symlink (no build step), by both the
 Chrome extension (`@tezosx/wallet`) and the React Native app
 (`@tezosx/wallet-mobile`).
 
+## [0.5.0] — 2026-08-10
+
+### Added
+- **Address book.** A wallet-global contact registry — a user-chosen label over
+  a public tz1/tz2/tz3/KT1 or 0x address — behind a new `ContactStore` port
+  (`ports/contact-store.ts`), deliberately not per-account: contacts belong to
+  the user, and every account sends to the same peers. Pure domain in
+  `domain/contact.ts` (identity normalization lowercases hex addresses but the
+  raw input is validated first, so a wrong EIP-55 checksum is rejected rather
+  than laundered by the lowercasing; labels share `MAX_LABEL_LENGTH`); four
+  use-cases (`addContact` with duplicate and `MAX_CONTACTS = 50` cap guards,
+  `renameContact`, `removeContact` idempotent, `listContacts` label-sorted);
+  shared UI projections in `view-models/contacts-vm.ts` (`contactFor`,
+  `matchContacts`, `shouldOfferSaveContact`) so both shells resolve names and
+  build recipient suggestions from one implementation. Four new popup messages
+  (`ADD_CONTACT`, `RENAME_CONTACT`, `REMOVE_CONTACT`, `LIST_CONTACTS`) with
+  unlock-gated dispatch branches; `PersistentPorts` gains a required
+  `contactStore`, so each shell wires its platform adapter at compile time.
+  Contacts are non-secret metadata (public addresses and labels only).
+
 ## [0.4.0] — 2026-07-12
 
 ### Added

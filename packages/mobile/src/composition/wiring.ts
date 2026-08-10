@@ -19,6 +19,7 @@ import { QuickCryptoPort } from '../adapters/quick-crypto-port';
 import { MmkvVaultStore } from '../adapters/mmkv-vault-store';
 import { MmkvSessionStore } from '../adapters/mmkv-session-store';
 import { MmkvTokenStore } from '../adapters/mmkv-token-store';
+import { MmkvContactStore } from '../adapters/mmkv-contact-store';
 import { MmkvUnlockGuardStore } from '../adapters/mmkv-unlock-guard-store';
 import { MmkvPendingOpsStore } from '../adapters/mmkv-pending-ops-store';
 import { NoopNotificationPort } from '../adapters/noop-notification-port';
@@ -50,6 +51,7 @@ export const persistentPorts: PersistentPorts = {
   vaultStore,
   sessionStore,
   tokenStore,
+  contactStore: new MmkvContactStore(mmkv),
   notifications,
   pendingOpsStore: (accountId) => new MmkvPendingOpsStore(mmkv, accountId),
 };

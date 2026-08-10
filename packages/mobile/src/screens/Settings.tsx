@@ -46,6 +46,7 @@ export function Settings(): React.JSX.Element {
         <LinkRow icon="link" title="Connected sites" onPress={() => ctx.nav.goTab('connections')} />
         <LinkRow icon="plus" title="Add account" sub="Create or import another account" onPress={() => ctx.nav.push('addAccount')} />
         <LinkRow icon="wallet" title="Manage tokens" sub="Add or remove custom ERC-20" onPress={() => ctx.nav.push('tokens')} />
+        <LinkRow icon="list" title="Contacts" sub="Name the addresses you send to" onPress={() => ctx.nav.push('contacts')} />
         <LinkRow
           icon="globe"
           title="Blockscout (EVM)"

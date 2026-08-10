@@ -6,6 +6,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.15.0] — 2026-08-10
+
+### Added
+- **Contacts.** The wallet gains an address book: save a tz1 or 0x address
+  under a name and manage the list from Settings → Contacts (add, rename,
+  remove — validation runs through the core validators, so a mistyped EIP-55
+  checksum is refused). Where it pays off is the Send flow: the recipient
+  field suggests matching contacts while you type, a recipient that is a
+  contact shows its name instead of only a truncated address (form and
+  review), and after sending to an address the book doesn't know, the success
+  screen offers to save it. Storage is a new `ChromeContactStore`
+  (`chrome.storage.local`, wallet-global) behind the core's `ContactStore`
+  port, exactly like the token registry; contacts are non-secret metadata.
+
 ## [0.14.0] — 2026-07-12
 
 ### Added

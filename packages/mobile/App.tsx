@@ -27,6 +27,7 @@ import { Receive } from './src/screens/Receive';
 import { AddAccount } from './src/screens/AddAccount';
 import { AddToken } from './src/screens/AddToken';
 import { Tokens } from './src/screens/Tokens';
+import { Contacts } from './src/screens/Contacts';
 import { Welcome } from './src/screens/Welcome';
 import { Create } from './src/screens/Create';
 import { Import } from './src/screens/Import';
@@ -54,6 +55,7 @@ const STACK_SCREENS: Record<StackName, React.ComponentType<{ params: Params }>> 
   addAccount: AddAccount,
   addToken: AddToken,
   tokens: Tokens,
+  contacts: Contacts,
   welcome: Welcome,
   create: Create,
   import: Import,
