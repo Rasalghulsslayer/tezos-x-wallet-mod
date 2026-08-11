@@ -64,11 +64,9 @@ An imported EVM private key yields a single `0x` address — a native EVM accoun
 
 The password you set during import is **specific to this device**. It protects the locally encrypted vault. It is not your Tezos wallet password (if you had one) and is not stored anywhere.
 
-You can set a different password than the one you used on another device — only the secret must match.
+You can set a different password than the one you used on another device — only the secret must match. To change the password later, use **Settings → Change password** — it re-seals the vault without touching your secrets or addresses, no re-import needed (see [Settings](./settings#change-password)).
 
-:::info Changing your password
-There is no password-change flow yet. To change your password, re-import your secret (reveal it first via **Settings → Reveal secret** if needed) — the import flow asks for a fresh password.
-:::
+Import is also where **forgot-password recovery** lands: the Unlock screen's *Forgot password? Reset & re-import* path erases the encrypted vault — the password is the only key to it — and returns here so you can start over from your recovery phrase. Only **seed-derived accounts** come back at their original addresses; separately imported `edsk…` or EVM private keys are not covered by the phrase and must be re-imported on their own. See [Password lifecycle](../technical/security-model#password-lifecycle).
 
 ## See also
 
