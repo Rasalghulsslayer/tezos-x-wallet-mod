@@ -37,7 +37,7 @@ While unlocked, the keyring retains exactly two things: the **decrypted vault pa
 
 It retains **neither of the following**:
 
-- **The password.** Flows that must prove the user knows it (account removal) derive a candidate key at the retained salt and work factor and compare it to `km` **in constant time**; reveal/export flows re-prompt and decrypt the vault from disk.
+- **The password.** Flows that must prove the user knows it (account removal, password change) derive a candidate key at the retained salt and work factor and compare it to `km` **in constant time**; reveal/export flows re-prompt and decrypt the vault from disk.
 - **Per-account signing keys.** The container builder derives a signing key on demand via `getSigningKeyFor` when it wires the adapters for an account; nothing signing-capable lingers between uses.
 
 On lock, `km`'s raw key bytes are zeroized (overwritten in place). Two honest limits remain: the payload's secrets are JavaScript strings, which cannot be overwritten — on lock their guarantee is unreachability, then garbage collection; and in-flight operations keep references to what they need until they settle.
@@ -45,6 +45,28 @@ On lock, `km`'s raw key bytes are zeroized (overwritten in place). Two honest li
 ## Unlock throttle
 
 The first 5 failed unlock attempts carry no penalty. Past that, an exponential lockout arms: 5 seconds, doubling per further failure, capped at 5 minutes. While a lockout window is active, unlock refuses before even deriving a key. The state is persisted in `chrome.storage.local`, so restarting the service worker (or the browser) does not reset it — an attacker with the device cannot grind the vault by restarting the process. It is cleared on a successful unlock.
+
+## Password lifecycle
+
+### Changing the password
+
+**Settings → Change password** re-seals the vault under a new password while the wallet is unlocked. The current password is re-verified exactly the way account removal is — a candidate key is derived at the retained salt and work factor and compared to `km` in constant time — then the payload is re-encrypted with the **standard envelope** at a fresh random salt and the current work factor (600,000 iterations). The envelope format is untouched, so cross-implementation byte compatibility is preserved: a vault re-sealed on mobile still opens in the extension with the new password, and vice versa. The retention contract is intact too — neither the old nor the new password is retained, both transient keys are wiped, and the session stays unlocked under the new vault key.
+
+On mobile, the Keychain-sealed biometric unlock secret is **re-sealed with the new password in the same operation**. Ordering matters: once the vault only opens with the new password, the keystore must not keep releasing the old one. If sealing the new password fails (no enrolment, a keystore refusal), the sealed copy is **cleared** instead — biometrics degrade to manual password entry rather than replaying a stale password. The sealed secret is also removed on wallet reset: it must not survive the vault it opened.
+
+### Forgot-password recovery
+
+The seed phrase is a key to **the accounts it derives — never to the envelope**. The vault key comes only from the password, so a forgotten password leaves the ciphertext unrecoverable by design, and recovery is an explicit **wipe + re-import**: the Unlock screen's *Forgot password?* path erases the sealed vault, the unlock throttle, dApp sessions, and the per-account token registries, then lands on [Import](../user-flows/import-wallet) so you can start over from your recovery phrase. The address book is deliberately kept — contacts are wallet-global and non-secret.
+
+Before anything is destroyed, the confirm stage spells out the outcome:
+
+| | |
+|---|---|
+| **Recovered** | Accounts derived from the seed phrase — re-importing it re-derives them at the same addresses |
+| **Not recovered** | Tezos secret keys (`edsk…`) and EVM private keys imported outside the phrase — each needs its own backup and its own re-import — and account labels |
+| **Kept** | Your contacts |
+
+This is **deliberately not** a seed-wrapped key-indirection design — wrapping the vault key under a key derived from the seed phrase, so the phrase itself could open the vault. That convenience would silently promote the phrase to a master key over *everything* in the vault; here, a stolen phrase compromises exactly the accounts it derives, and still cannot decrypt separately imported `edsk…` / EVM secrets.
 
 ## Auto-lock
 

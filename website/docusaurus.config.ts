@@ -27,7 +27,7 @@ const config: Config = {
         editUrl: 'https://github.com/trilitech/tezos-x-wallet/tree/main/website/',
         lastVersion: 'current',
         versions: {
-          current: { label: '0.14.0' },
+          current: { label: '0.16.0' },
         },
       },
     ],

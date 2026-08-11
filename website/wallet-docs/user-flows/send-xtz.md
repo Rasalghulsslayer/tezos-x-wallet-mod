@@ -35,6 +35,14 @@ The Send page surfaces the active route in real time via a `RoutingCard` below t
 - **Self-sends are refused**: sending to the active account's own address only burns fees, so the service worker rejects it. A `tz1` sending to its *own EVM alias* is allowed — that's alias forwarding, a real operation (see the caution below).
 - An ERC-20 asset cannot target a Michelson-runtime destination — tokens only exist on the EVM runtime (the `RoutingCard` flips to a warning).
 
+## Contacts in the Send flow
+
+Saved [contacts](./contacts) surface at three points:
+
+- **Suggestions while typing** — focusing the recipient field offers up to five contacts matching your input by name or address prefix (the whole book, capped, when the field is empty); picking one fills the address.
+- **Resolved name** — when the typed address is a saved contact, its name is shown under the field and again in the Review stage's **To** lane, so you confirm a name, not just a hex string.
+- **Post-send save offer** — after a successful send to a valid address the book doesn't know yet, the Done stage offers to **Save as contact** without leaving the flow.
+
 ## Amount validation
 
 - Must be a positive decimal number (e.g. `1`, `0.5`, `1.23456`)
@@ -146,3 +154,4 @@ EVM-native accounts (those created with a standalone secp256k1 key, no underlyin
 - [Activity tab](./activity-tab) — where sent transfers land, including cross-runtime rows
 - [View Balances](./view-balances) — where the available amounts come from
 - [Custom tokens](./custom-tokens) — registering the ERC-20s the asset selector offers
+- [Contacts](./contacts) — managing the address book behind the recipient suggestions

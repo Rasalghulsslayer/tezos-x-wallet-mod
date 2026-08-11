@@ -20,9 +20,16 @@ The mobile app shares the wallet's security model — vault envelope, keyring re
 
 Unlock flow: biometric prompt → the keystore releases the password → the keyring derives the vault key and decrypts the MMKV blob. The password is sealed (best-effort) after every successful unlock, create, or import; on devices without biometry the wallet is simply password-only.
 
+The sealed item follows the vault's lifecycle:
+
+- **Changing the password re-seals it with the new password in the same operation.** Once the vault only opens with the new password, the keystore must not keep releasing the old one. If sealing the new password fails (no enrolment, a keystore refusal), the item is **cleared instead** — biometrics degrade to manual password entry rather than replaying a stale password. Neither keystore outcome rolls back or fails the vault change itself.
+- **A wallet reset removes the sealed secret** along with the vault — it must not survive the vault it opened.
+
+See [Password lifecycle](../technical/security-model#password-lifecycle) for the shared model.
+
 ## What is — and is not — encrypted at rest
 
-The vault blob (every secret: seeds, private keys) is AES-256-GCM encrypted before it touches MMKV. **Session and token metadata are currently stored in plaintext in MMKV** — per-origin dApp sessions and the custom-token registry, which contain no key material but do reveal usage metadata to anything that can read the app's storage. Wrapping the MMKV instance with an at-rest `encryptionKey` held in the Keychain is tracked as follow-up work (it needs an async composition-root bootstrap and a migration for existing installs).
+The vault blob (every secret: seeds, private keys) is AES-256-GCM encrypted before it touches MMKV. **Session, token, and contact metadata are currently stored in plaintext in MMKV** — per-origin dApp sessions, the custom-token registry, and the [address book](../user-flows/contacts), which contain no key material but do reveal usage metadata to anything that can read the app's storage. Wrapping the MMKV instance with an at-rest `encryptionKey` held in the Keychain is tracked as follow-up work (it needs an async composition-root bootstrap and a migration for existing installs).
 
 ## Auto-lock
 

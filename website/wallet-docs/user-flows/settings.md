@@ -15,6 +15,7 @@ The Settings page is reachable from the gear icon in the Home top bar and from t
 | **Connected sites** | Opens the [Connections](./manage-connections) page listing per-origin dApp sessions |
 | **Add account** | Opens the [Add account](./multi-account) flow (create, derive, or import another account) |
 | **Manage tokens** | Add or remove [custom ERC-20 tokens](./custom-tokens) for the active account |
+| **Contacts** | Opens the [Contacts](./contacts) address book — name the addresses you send to |
 
 ## Explorers
 
@@ -44,6 +45,17 @@ When the vault holds a wallet-level seed (created or imported from a recovery ph
 :::danger Keep your secrets private
 Do not take screenshots or share your seed phrase or private keys. Anyone with them has full, irrecoverable access to your funds. Remember that separately imported keys are not covered by the wallet seed phrase — each needs its own backup.
 :::
+
+### Change password
+
+**Change password** re-seals the encrypted vault under a new password. Your secrets and addresses are unchanged — only the key that opens the vault on this device. The form asks for the current password, the new one (same 8-character minimum as onboarding), and a confirmation:
+
+- The current password is re-verified against the vault key **in constant time**, the same check account removal runs — it is never stored
+- The vault is re-encrypted with the standard envelope at a fresh random salt; the wallet **stays unlocked** afterwards
+- The password fields are scrubbed on every exit path (success or cancel); on a failed attempt, only the field you have to retype is cleared
+- On mobile, the biometric unlock secret sealed in the OS keystore is re-sealed with the new password in the same operation — see [Mobile Security](../mobile/security)
+
+Details in [Password lifecycle](../technical/security-model#password-lifecycle).
 
 ### Lock wallet
 
@@ -77,6 +89,7 @@ The version strings are build-time defines (`__WALLET_VERSION__` / `__CORE_VERSI
 
 ## See also
 
-- [Security model](../technical/security-model) — vault encryption, auto-lock, unlock throttle
+- [Security model](../technical/security-model) — vault encryption, auto-lock, unlock throttle, password lifecycle
 - [Multi-account vaults](./multi-account) — Add account, Reveal secret per account, Reveal seed phrase
+- [Contacts](./contacts) — the wallet-global address book behind the Contacts row
 - [Manage Connections](./manage-connections) — the page behind Connected sites
