@@ -6,6 +6,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.16.0] — 2026-08-10
+
+### Added
+- **Change password** from Settings → Security: current password re-verified,
+  new one confirmed twice and held to the onboarding minimum, vault re-sealed
+  in place (the session stays unlocked). Password fields are scrubbed on every
+  way out of the sheet.
+- **Forgot-password recovery** behind the Unlock screen's existing "Forgot
+  password?" affordance — which previously routed to import **without wiping
+  anything**. It now opens an explicit recovery stage stating exactly what is
+  recovered (accounts derived from the seed phrase, re-importable at the same
+  addresses), what is not (Tezos secret keys and EVM private keys imported
+  outside the phrase — they must be re-imported separately — and account
+  labels), and what is kept (contacts). One acknowledgement checkbox gates the
+  reset; the wipe clears the vault, the unlock throttle, dApp sessions and
+  token registries, then routes to import.
+
 ## [0.15.0] — 2026-08-10
 
 ### Added

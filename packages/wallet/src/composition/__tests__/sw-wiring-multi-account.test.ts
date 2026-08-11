@@ -56,8 +56,9 @@ const stubNotifications: NotificationPort = {
   async setPendingCount() {},
 };
 
-// No multi-account test reaches the approval enqueue path (signing requests
-// reject before it), so a no-op presenter is enough to satisfy the constructor.
+// No test here needs an approval surface (signing requests reject before the
+// enqueue path; the RESET_WALLET test enqueues directly and only watches the
+// decision promise), so a no-op presenter is enough to satisfy the constructor.
 const stubPresenter: ApprovalPresenter = { async open() { return undefined; }, close() {} };
 
 // dispatch() takes a transport-neutral ClassifiedSource — the host classifies
@@ -514,5 +515,73 @@ describe('sw-wiring contacts dispatch', () => {
     expect(res.ok).toBe(false);
     if (res.ok) throw new Error('unreachable');
     expect(res.code).toBe(4100);
+  });
+});
+
+describe('sw-wiring password lifecycle dispatch', () => {
+  let h: Harness;
+  beforeEach(async () => { h = await setupHarness(); });
+
+  const NEW_PASSWORD = 'staple-battery-horse';
+
+  it('CHANGE_PASSWORD re-seals the vault: the old password stops unlocking, the new one works', async () => {
+    const accountId = h.keyring.getUnlocked()!.account.id;
+    const res = await send(h.deps, { type: 'CHANGE_PASSWORD', currentPassword: PASSWORD, newPassword: NEW_PASSWORD });
+    expect(res.ok).toBe(true);
+
+    h.keyring.lock();
+    await expect(h.keyring.unlock(PASSWORD)).rejects.toThrow(/Incorrect password/);
+    const { accountId: unlockedId } = await h.keyring.unlock(NEW_PASSWORD);
+    expect(unlockedId).toBe(accountId);
+  });
+
+  it('CHANGE_PASSWORD returns 4100 while locked', async () => {
+    h.keyring.lock();
+    const res = await send(h.deps, { type: 'CHANGE_PASSWORD', currentPassword: PASSWORD, newPassword: NEW_PASSWORD });
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('unreachable');
+    expect(res.code).toBe(4100);
+  });
+
+  it('CHANGE_PASSWORD rejects a wrong current password and leaves the vault sealed under the old one', async () => {
+    const res = await send(h.deps, { type: 'CHANGE_PASSWORD', currentPassword: 'not-the-password', newPassword: NEW_PASSWORD });
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('unreachable');
+    expect(res.message).toMatch(/Incorrect password/);
+
+    h.keyring.lock();
+    const { accountId } = await h.keyring.unlock(PASSWORD);
+    expect(accountId).toBeDefined();
+  });
+
+  it('RESET_WALLET while locked wipes the vault, clears sessions and tokens, keeps contacts, rejects pending approvals', async () => {
+    const accountId = h.keyring.getUnlocked()!.account.id;
+    const { sessionStore, tokenStore, contactStore } = h.deps.persistentPorts;
+
+    await sessionStore.upsert({
+      origin: 'https://app.example', accountId,
+      tz1Address: '', evmAlias: '0x' + 'a'.repeat(40), chainId: '0x1f4f0', connectedAt: 1,
+    });
+    await tokenStore.upsert(accountId, {
+      address: '0x' + 'b'.repeat(40), symbol: 'TOK', name: 'Token', decimals: 6, addedAt: 1,
+    });
+    await contactStore.upsert({ address: '0x' + 'c'.repeat(40), label: 'Alice', createdAt: 1 });
+
+    const decision = h.deps.approvalQueue.enqueue({
+      kind: 'connect', requestId: 'req-reset-1', origin: 'https://app.example', accountId, createdAt: 1,
+    });
+
+    h.keyring.lock();
+    const res = await send(h.deps, { type: 'RESET_WALLET' });
+    expect(res.ok).toBe(true);
+
+    expect(await h.keyring.hasVault()).toBe(false);
+    expect(h.keyring.isUnlocked()).toBe(false);
+    expect(await sessionStore.list()).toEqual([]);
+    expect(await tokenStore.list(accountId)).toEqual([]);
+    // Contacts are wallet-global, non-secret, and still useful after recovery.
+    expect((await contactStore.list()).map((c) => c.label)).toEqual(['Alice']);
+    await expect(decision).resolves.toBe('reject');
+    expect(h.deps.approvalQueue.list()).toEqual([]);
   });
 });

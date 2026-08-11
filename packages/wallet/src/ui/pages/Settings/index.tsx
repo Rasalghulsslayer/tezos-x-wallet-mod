@@ -17,6 +17,7 @@ import { AccountCard } from '../../tx/AccountCard';
 import { LinkRow } from './LinkRow';
 import { RevealPicker } from './RevealPicker';
 import { RevealView } from './RevealView';
+import { ChangePasswordView } from './ChangePasswordView';
 import type { Modal, Secret } from './types';
 
 export function Settings({ state, onLock }: { state: VaultState; onLock: () => void }) {
@@ -142,6 +143,12 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
             onClick={openRevealSeed}
           />
         )}
+        <LinkRow
+          icon="lock"
+          t="Change password"
+          sub="Enter your current password, then pick a new one"
+          onClick={() => setModal({ kind: 'change-password' })}
+        />
         <LinkRow icon="lock" t="Lock wallet" onClick={lock} />
 
         <div className="tx-section-head"><span className="t">About</span></div>
@@ -203,6 +210,10 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
                 onCancel={closeModal}
                 onReveal={reveal}
               />
+            )}
+
+            {modal.kind === 'change-password' && (
+              <ChangePasswordView onClose={closeModal} />
             )}
           </div>
         </div>

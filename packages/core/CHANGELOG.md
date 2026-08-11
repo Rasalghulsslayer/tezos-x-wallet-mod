@@ -7,6 +7,36 @@ TypeScript source over the npm-workspace symlink (no build step), by both the
 Chrome extension (`@tezosx/wallet`) and the React Native app
 (`@tezosx/wallet-mobile`).
 
+## [0.6.0] — 2026-08-10
+
+### Added
+- **Password change.** `Keyring.changePassword(current, next)` re-verifies the
+  current password exactly like account removal does (candidate key derived at
+  the retained salt/work factor, constant-time comparison, transient keys
+  wiped) and re-seals the vault under the new password at a fresh salt and the
+  current work factor. A pending in-memory active-pointer change rides along
+  with the re-seal. New `CHANGE_PASSWORD` popup message, unlock-gated.
+- **Forgot-password recovery.** `Keyring.wipe()` destroys the sealed vault and
+  the unlock-throttle state and locks; the `resetWallet` use-case wraps it and
+  clears dApp sessions and the per-account token registries (bound to account
+  ids that will no longer exist) while deliberately keeping the address book
+  (wallet-global, non-secret, still useful after recovery). New `RESET_WALLET`
+  popup message, deliberately usable while locked — it is the forgot-password
+  path, reachable only from the trusted UI channel; the flow in front of it
+  carries the explicit what-is-lost disclosure.
+
+### Security
+- The vault envelope is untouched by both features: `changePassword` re-seals
+  with the standard `sealVault` format (same fields, fresh salt, current work
+  factor), so the byte-compatibility contract between the three CryptoPort
+  implementations and the upgrade-on-read path are unaffected — the cross-impl
+  vectors run unchanged. The retention contract holds: neither password ever
+  outlives its call frame, the old derived key is zeroized as the new one
+  replaces it, and a failed re-verification leaves the sealed vault
+  byte-identical. Recovery is a wipe, not a bypass: the seed phrase remains a
+  key to the accounts it derives, never to the envelope — a stolen phrase
+  still cannot decrypt imported (edsk / EVM private-key) secrets.
+
 ## [0.5.0] — 2026-08-10
 
 ### Added

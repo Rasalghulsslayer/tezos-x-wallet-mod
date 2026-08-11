@@ -11,4 +11,5 @@ export type Modal =
   | { kind: 'reveal'; accountId: AccountId }
   // The wallet-level seed phrase (what derived accounts hang off) — distinct
   // from a single account's own signing material.
-  | { kind: 'reveal-seed' };
+  | { kind: 'reveal-seed' }
+  | { kind: 'change-password' };

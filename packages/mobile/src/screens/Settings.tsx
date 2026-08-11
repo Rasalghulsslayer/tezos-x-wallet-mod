@@ -4,12 +4,14 @@
  * Wallet (connections, add account, manage tokens, explorers), Security (reveal
  * secret, lock), and About (version, network). The explorer rows and the tzkt
  * row are runtime-aware — a tz1 account also exposes the Michelson explorer.
- * "Reveal secret" opens a password-gated bottom sheet.
+ * "Reveal secret" opens a password-gated bottom sheet; "Change password"
+ * opens a three-field sheet that re-seals the vault (and the biometric unlock
+ * secret) under a new password.
  */
 
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors, fontSize, font, radius } from '../theme';
+import { colors, fontSize, font, radius, space } from '../theme';
 import { Icon } from '../ui/icon';
 import { Btn } from '../ui/tx/Btn';
 import { AccountHeader } from '../ui/tx/AccountHeader';
@@ -31,6 +33,7 @@ export function Settings(): React.JSX.Element {
   const isEvm = acc.kind === 'evm';
   const [reveal, setReveal] = useState(false);
   const [revealSeed, setRevealSeed] = useState(false);
+  const [changePwd, setChangePwd] = useState(false);
 
   return (
     <View style={styles.screen}>
@@ -66,6 +69,12 @@ export function Settings(): React.JSX.Element {
 
         <SectionHead label="Security" />
         <LinkRow
+          icon="key"
+          title="Change password"
+          sub="Re-encrypt the vault with a new password"
+          onPress={() => setChangePwd(true)}
+        />
+        <LinkRow
           icon="shield"
           title="Reveal secret"
           sub={isEvm ? 'EVM private key' : 'Private key for this account'}
@@ -89,7 +98,108 @@ export function Settings(): React.JSX.Element {
 
       {reveal && <RevealSheet account={acc} onClose={() => setReveal(false)} />}
       {revealSeed && <RevealSheet account={acc} walletSeed onClose={() => setRevealSeed(false)} />}
+      {changePwd && <ChangePasswordSheet onClose={() => setChangePwd(false)} />}
     </View>
+  );
+}
+
+function ChangePasswordSheet({ onClose }: { onClose: () => void }): React.JSX.Element {
+  const ctx = useWallet();
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [err, setErr] = useState<{ title: string; detail?: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // Every way out of the sheet scrubs all three password fields first — the
+  // strings stay GC-bound, but nothing keeps referencing them.
+  const close = (): void => {
+    setCurrent('');
+    setNext('');
+    setConfirm('');
+    onClose();
+  };
+
+  const submit = (): void => {
+    if (busy) return;
+    setErr(null);
+    if (next.length < 8) { setErr({ title: 'Password must be at least 8 characters' }); return; }
+    if (next !== confirm) { setErr({ title: 'Passwords do not match' }); return; }
+    setBusy(true);
+    void (async () => {
+      try {
+        await ctx.changePassword(current, next);
+        close();
+        ctx.toast('Password changed');
+      } catch (e) {
+        const f: FormattedError = formatError(e);
+        setErr({ title: f.title, detail: f.detail });
+        setCurrent(''); // the rejected password should not linger in the field
+      } finally {
+        setBusy(false);
+      }
+    })();
+  };
+
+  return (
+    <Sheet title="Change password" onClose={close}>
+      <View style={styles.revealBody}>
+        <Text style={styles.revealIntro}>
+          Re-encrypts the vault on this device with a new password. Your accounts and secrets are
+          unchanged; biometric unlock is re-sealed automatically.
+        </Text>
+        <View style={styles.pwdFields}>
+          <View>
+            <Text style={styles.fieldLabel}>Current password</Text>
+            <TextInput
+              style={styles.input}
+              secureTextEntry
+              value={current}
+              autoFocus
+              placeholder="Current password"
+              placeholderTextColor={colors.fgSubtle}
+              autoCapitalize="none"
+              onChangeText={(t) => { setCurrent(t); setErr(null); }}
+            />
+          </View>
+          <View>
+            <Text style={styles.fieldLabel}>New password</Text>
+            <TextInput
+              style={styles.input}
+              secureTextEntry
+              value={next}
+              placeholder="At least 8 characters"
+              placeholderTextColor={colors.fgSubtle}
+              autoCapitalize="none"
+              onChangeText={(t) => { setNext(t); setErr(null); }}
+            />
+          </View>
+          <View>
+            <Text style={styles.fieldLabel}>Confirm new password</Text>
+            <TextInput
+              style={styles.input}
+              secureTextEntry
+              value={confirm}
+              placeholder="Re-enter new password"
+              placeholderTextColor={colors.fgSubtle}
+              autoCapitalize="none"
+              onChangeText={(t) => { setConfirm(t); setErr(null); }}
+            />
+          </View>
+        </View>
+        {err != null && <ErrorInline title={err.title} detail={err.detail} />}
+        <Btn
+          variant="accent"
+          full
+          loading={busy}
+          disabled={current.length === 0 || next.length === 0 || confirm.length === 0}
+          onPress={submit}
+          style={styles.revealBtn}
+        >
+          Change password
+        </Btn>
+      </View>
+    </Sheet>
   );
 }
 
@@ -247,6 +357,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   revealBtn: { marginTop: 14 },
+  pwdFields: { gap: space[3] },
+  fieldLabel: { fontSize: fontSize.sm, color: colors.fgMuted, marginBottom: space[2] },
   warnBanner: {
     marginTop: 4,
     flexDirection: 'row',

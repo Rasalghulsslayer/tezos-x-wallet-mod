@@ -74,6 +74,8 @@ export interface WalletContextValue {
   touch: () => void;
   setActive: (id: string) => void;
   lock: () => void;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  resetWallet: () => Promise<void>;
   unlock: (password: string) => Promise<void>;
   unlockBiometric: () => Promise<boolean>;
   createTezosWallet: (mnemonic: string, password: string) => Promise<void>;
@@ -262,6 +264,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
       })();
     },
     lock,
+    changePassword: (currentPassword, newPassword) => vaultActions.changePassword(currentPassword, newPassword),
+    resetWallet: async () => {
+      await vaultActions.resetWallet();
+      // The vault is gone: drop the React shell to onboarding the way lock +
+      // resetToWelcome do (stack/switcher cleared, auto-lock disarmed). The
+      // contacts state may stay — the address book survives a reset.
+      autoLock.current?.stop();
+      autoLock.current = null;
+      setStack([]);
+      setSwitcherOpen(false);
+      setOnboardingOverride(false);
+      setVaultState({ status: 'empty' });
+    },
     unlock: async (password) => { enterUnlocked(await vaultActions.unlockWithPassword(password)); await refresh(); },
     unlockBiometric: async () => {
       const s = await vaultActions.unlockWithBiometrics();

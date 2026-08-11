@@ -54,6 +54,8 @@ import { addContact }              from '../use-cases/add-contact';
 import { renameContact }           from '../use-cases/rename-contact';
 import { removeContact }           from '../use-cases/remove-contact';
 import { listContacts }            from '../use-cases/list-contacts';
+import { changePassword }          from '../use-cases/change-password';
+import { resetWallet }             from '../use-cases/reset-wallet';
 import { TEZLINK_EVM_RPC }         from '@tezosx/relayer/constants';
 import { buildTezosToEvmCall, UnknownSelectorError, SubMutezPrecisionError, InvalidDestinationError } from '@tezosx/relayer/use-cases/build-tezos-to-evm-call';
 
@@ -364,6 +366,33 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
         if (deps.keyring.getUnlocked() == null) return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
         const contacts = await listContacts({ contactStore: deps.persistentPorts.contactStore });
         return { ok: true, data: contacts };
+      }
+
+      case 'CHANGE_PASSWORD': {
+        if (deps.keyring.getUnlocked() == null) return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+        await changePassword(
+          { currentPassword: msg.currentPassword, newPassword: msg.newPassword },
+          { keyring: deps.keyring },
+        );
+        return { ok: true };
+      }
+
+      // Deliberately NOT gated on an unlocked keyring: this is the
+      // forgot-password path, reachable only from the trusted UI (the sender
+      // guard upstream rejects dApp channels for every popup request). It
+      // destroys ciphertext the user cannot open anyway; the UI in front of
+      // it carries the explicit what-is-lost disclosure.
+      case 'RESET_WALLET': {
+        await resetWallet({
+          keyring:      deps.keyring,
+          sessionStore: deps.persistentPorts.sessionStore,
+          tokenStore:   deps.persistentPorts.tokenStore,
+        });
+        deps.approvalQueue.rejectAll('wallet reset');
+        deps.state.container = null;
+        deps.state.evmAlias  = null;
+        deps.containerCache.clear();
+        return { ok: true };
       }
 
       default:

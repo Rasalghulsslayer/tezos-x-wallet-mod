@@ -386,6 +386,50 @@ export class Keyring {
     await this.persist(removeAccountFromPayload(u.payload, accountId), u.km);
   }
 
+  /**
+   * Re-seal the vault under a new password. The current password is
+   * re-verified the same way removeAccount does (derive a candidate key at the
+   * retained salt/work factor, compare in constant time) — it is never
+   * retained, and both transient keys are wiped. The envelope format is
+   * untouched: the payload is re-encrypted with the standard seal at a fresh
+   * salt and the current work factor, so cross-platform byte compatibility and
+   * upgrade-on-read are unaffected. A pending in-memory active-pointer change
+   * rides along with the re-seal.
+   */
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    const u = this.requireUnlocked();
+    if (newPassword.length < 8) throw new Error('Password must be at least 8 characters');
+
+    const candidate = await deriveVaultKey(currentPassword, u.km.salt, u.km.iterations, this.crypto);
+    const ok = constantTimeEqual(candidate, u.km.key);
+    wipe(candidate);
+    if (!ok) throw new Error('Incorrect password');
+
+    const salt = freshVaultSalt(this.crypto);
+    const km: VaultKeyMaterial = {
+      key:        await deriveVaultKey(newPassword, salt, PBKDF2_ITERATIONS, this.crypto),
+      salt,
+      iterations: PBKDF2_ITERATIONS,
+    };
+    await this.vaultStore.save(await encryptVaultWithKey(JSON.stringify(u.payload), km, this.crypto));
+    wipe(u.km.key);
+    this.unlocked = { ...u, km };
+    this.activeDirty = false;
+  }
+
+  /**
+   * Destroy the sealed vault and lock. This is the forgot-password recovery
+   * path: the ciphertext is unrecoverable without the password by design, so
+   * recovery means wiping it and re-importing from the seed phrase. Only
+   * removes what this keyring owns (the vault blob and the unlock throttle
+   * state); the caller clears the platform stores around it.
+   */
+  async wipe(): Promise<void> {
+    await this.vaultStore.clear();
+    await this.unlockGuard?.clear();
+    this.lock();
+  }
+
   async setActiveAccount(accountId: AccountId): Promise<void> {
     const u = this.requireUnlocked();
     const next = setActiveOnPayload(u.payload, accountId);
