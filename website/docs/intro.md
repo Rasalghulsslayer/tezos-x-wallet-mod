@@ -8,6 +8,8 @@ sidebar_position: 1
 
 **Tezos X** is one ledger with two runtimes — Michelson and EVM. This project ships two products that let Tezos users and dApps work across both runtimes, sharing the same NAC gateway architecture and EIP-1193 provider interface.
 
+The relayer is designed, versioned and consumed as an **SDK**; the [TezosX Wallet](/wallet/intro) is its reference integration.
+
 ## Products
 
 | | [TezosX Relayer](/docs/installation) | [TezosX Wallet](/wallet/intro) |

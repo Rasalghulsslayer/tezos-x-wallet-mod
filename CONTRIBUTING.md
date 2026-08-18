@@ -167,8 +167,8 @@ When you cut a release for a package:
    ```
 4. After the PR is merged, **tag the release** on `main` with the `<package>-vX.Y.Z` format (prefixes: `relayer-`, `wallet-core-`, `wallet-`, `wallet-mobile-`):
    ```bash
-   git tag -a "wallet-v0.14.0" -m "Wallet 0.14.0"
-   git push origin "wallet-v0.14.0"
+   git tag -a "wallet-v0.17.0" -m "Wallet 0.17.0"
+   git push origin "wallet-v0.17.0"
    ```
 5. Create a **GitHub Release** from that tag with the relevant CHANGELOG section as notes.
 

@@ -3,6 +3,9 @@
 Cross-runtime SDK for Tezos X — encoders, builders, and an EIP-1193 provider
 for both Tezos-native (tz1) and EVM-native (0x) consumer wallets.
 
+The relayer is designed, versioned and consumed as an SDK; the
+[TezosX Wallet](../wallet) is its reference integration.
+
 The package serves two distinct consumer modes:
 
 | Consumer | What you get | Entry point |

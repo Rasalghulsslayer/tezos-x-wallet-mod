@@ -144,7 +144,7 @@ The NAC gateway expects the **full method signature** as a string, not a
 4-byte hex selector. Standard EVM clients (ethers.js, viem) only provide
 the selector in the calldata. The relayer closes this gap in
 `buildTezosToEvmCall` with a **curated local allow-list**
-(`KNOWN_SIGNATURES`, 17 entries at relayer 0.7.0):
+(`KNOWN_SIGNATURES`, 17 entries at relayer 0.8.0):
 
 - The Tezos X-specific `callMichelson(string,string,bytes)` selector
 - The standard ERC-20 surface (`transfer`, `approve`, `transferFrom`,

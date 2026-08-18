@@ -2,7 +2,7 @@
 
 Monorepo containing four packages that let Ethereum-compatible dApps run on **Tezos X** and give users native wallets for its two runtimes:
 
-- **[`@tezosx/relayer`](packages/relayer)** — Cross-runtime SDK: an EIP-1193 provider (`window.ethereum`) for Tezos-native (tz1) signers that routes transactions through the Tezos X NAC cross-runtime gateway, plus NAC precompile encoders and builders for EVM-native (0x) consumers.
+- **[`@tezosx/relayer`](packages/relayer)** — Cross-runtime SDK: an EIP-1193 provider (`window.ethereum`) for Tezos-native (tz1) signers that routes transactions through the Tezos X NAC cross-runtime gateway, plus NAC precompile encoders and builders for EVM-native (0x) consumers. The relayer is designed, versioned and consumed as an SDK; the wallet is its reference integration.
 - **[`@tezosx/wallet-core`](packages/core)** — Shared wallet engine: keyring, vault crypto, use-cases, ports and adapters. Consumed as raw TypeScript by both wallet shells.
 - **[`@tezosx/wallet`](packages/wallet)** — Standalone Chrome MV3 wallet that signs transactions locally with the built-in signer from `@tezosx/wallet-core` (no Temple required) and embeds the relayer for dApp connectivity.
 - **[`@tezosx/wallet-mobile`](packages/mobile)** — Expo / React Native wallet app: WalletConnect pairing, biometric unlock, auto-lock, native crypto.
@@ -85,7 +85,7 @@ The four packages are versioned **independently**. See:
 - [packages/mobile/CHANGELOG.md](packages/mobile/CHANGELOG.md)
 - [Root historical index](CHANGELOG.md) (frozen — per-package changelogs are canonical)
 
-Tags follow the `<package>-vX.Y.Z` format: `relayer-v0.7.0`, `wallet-core-v0.4.0`, `wallet-v0.14.0`, `wallet-mobile-v0.2.0`.
+Tags follow the `<package>-vX.Y.Z` format: `relayer-v0.8.0`, `wallet-core-v0.7.0`, `wallet-v0.17.0`, `wallet-mobile-v0.5.0`.
 
 ## Contributing
 

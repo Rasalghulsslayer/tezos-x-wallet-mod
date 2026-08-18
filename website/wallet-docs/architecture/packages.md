@@ -10,10 +10,10 @@ The monorepo ships four npm workspace packages. Two are user-facing shells (the 
 
 ```mermaid
 graph TD
-    W["@tezosx/wallet 0.14.0<br/>Chrome MV3 extension"]
-    M["@tezosx/wallet-mobile 0.2.0<br/>React Native app"]
-    C["@tezosx/wallet-core 0.4.0<br/>shared wallet core"]
-    R["@tezosx/relayer 0.7.0<br/>EIP-1193 provider + NAC builders"]
+    W["@tezosx/wallet 0.17.0<br/>Chrome MV3 extension"]
+    M["@tezosx/wallet-mobile 0.5.0<br/>React Native app"]
+    C["@tezosx/wallet-core 0.7.0<br/>shared wallet core"]
+    R["@tezosx/relayer 0.8.0<br/>EIP-1193 provider + NAC builders"]
     D["dApp integrators"]
 
     W --> C
