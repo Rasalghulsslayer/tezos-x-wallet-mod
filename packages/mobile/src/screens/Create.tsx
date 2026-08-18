@@ -10,7 +10,7 @@
 
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { newMnemonic } from '@tezosx/wallet-core/shared/seed';
+import { newMnemonic, pickConfirmPositions } from '@tezosx/wallet-core/shared/seed';
 import { randomEvmPrivateKey } from '@tezosx/wallet-core/shared/evm-signing';
 import { formatError } from '@tezosx/wallet-core/domain/error';
 import { colors, fontSize, font, radius, space } from '../theme';
@@ -24,11 +24,16 @@ import { TopBar } from '../ui/tx/TopBar';
 
 type Stage = 'intro' | 'reveal' | 'confirm' | 'password';
 
-const POSITIONS = [3, 7, 11] as const;
-
 export function Create({ params }: { params: Record<string, unknown> }): React.JSX.Element {
   const ctx = useWallet();
   const isEvm = params.kind === 'evm';
+
+  // Single source of truth for the per-kind stage order: Back and the Dots
+  // both derive from it, so the EVM path can never step into the Tezos-only
+  // 'reveal' stage or hand the stepper an out-of-range index.
+  const stages: readonly Stage[] = isEvm
+    ? ['intro', 'confirm', 'password']
+    : ['intro', 'reveal', 'confirm', 'password'];
 
   const [stage, setStage] = useState<Stage>('intro');
   const [ack1, setAck1] = useState(false);
@@ -44,16 +49,15 @@ export function Create({ params }: { params: Record<string, unknown> }): React.J
   const [mnemonic, setMnemonic] = useState(() => newMnemonic());
   const [privkey, setPrivkey] = useState(() => randomEvmPrivateKey());
   const words = useMemo(() => mnemonic.split(' '), [mnemonic]);
-  const allCorrect = POSITIONS.every(
+  const positions = useMemo(() => pickConfirmPositions(words.length), [words.length]);
+  const allCorrect = positions.every(
     (p, i) => cv[i].trim().toLowerCase() === words[p - 1],
   );
-  const stageIdx: Record<Stage, number> = { intro: 0, reveal: 1, confirm: 2, password: 3 };
 
   const back = (): void => {
-    if (stage === 'intro') ctx.nav.back();
-    else if (stage === 'reveal') setStage('intro');
-    else if (stage === 'confirm') setStage(isEvm ? 'intro' : 'reveal');
-    else setStage(isEvm ? 'reveal' : 'confirm');
+    const i = stages.indexOf(stage);
+    if (i <= 0) ctx.nav.back();
+    else setStage(stages[i - 1]);
   };
 
   const submit = (): void => {
@@ -80,8 +84,8 @@ export function Create({ params }: { params: Record<string, unknown> }): React.J
 
   const title: Record<Stage, string> = {
     intro: isEvm ? 'Create EVM account' : 'Create wallet',
-    reveal: isEvm ? 'Private key' : 'Recovery phrase',
-    confirm: 'Confirm phrase',
+    reveal: 'Recovery phrase', // Tezos-only stage: unreachable on the EVM path
+    confirm: isEvm ? 'Private key' : 'Confirm phrase',
     password: 'Set password',
   };
 
@@ -95,7 +99,7 @@ export function Create({ params }: { params: Record<string, unknown> }): React.J
         onBack={back}
         right={
           <View style={styles.dots}>
-            <Dots i={stageIdx[stage]} n={isEvm ? 3 : 4} />
+            <Dots i={stages.indexOf(stage)} n={stages.length} />
           </View>
         }
       />
@@ -194,7 +198,7 @@ export function Create({ params }: { params: Record<string, unknown> }): React.J
               <>
                 <Text style={styles.lead}>Type the words that go in these positions.</Text>
                 <View style={styles.fields}>
-                  {POSITIONS.map((p, i) => (
+                  {positions.map((p, i) => (
                     <View key={p}>
                       <Text style={styles.fieldLabel}>Word #{p}</Text>
                       <TextInput

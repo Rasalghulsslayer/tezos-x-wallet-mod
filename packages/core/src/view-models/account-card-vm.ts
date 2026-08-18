@@ -9,8 +9,11 @@ import type { VaultStateUnlocked } from '../shared/messages';
 
 export interface AccountFace {
   chain:   'l1' | 'l2';
-  label:   string;          // human-readable runtime name
-  address: string;          // tz1 / 0x
+  label:   string;                // human-readable runtime name
+  // tz1 / 0x. null while the EVM alias of a tz1 account is still resolving
+  // (first unlock, or offline) — shells render a resolving placeholder and
+  // disable the copy affordance for that face.
+  address: string | null;
 }
 
 export interface AccountCardVM {

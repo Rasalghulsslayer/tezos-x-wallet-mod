@@ -78,7 +78,7 @@ export function CreatePane({
             <label className={`${ack2 ? 'on' : ''}${isTezos ? '' : ' l2'}`}>
               <span className="cb">{ack2 && <Icon name="check" size={10} />}</span>
               <span onClick={() => setAck2(!ack2)}>
-                I understand that <strong>losing this {isTezos ? 'phrase' : 'key'} means losing the account</strong> — TezosX can't recover it.
+                I understand that <strong>losing this {isTezos ? 'phrase' : 'key'} means losing the account</strong> — Tezos X can't recover it.
               </span>
               <input type="checkbox" checked={ack2} onChange={(e) => setAck2(e.target.checked)} style={{ display: 'none' }} />
             </label>

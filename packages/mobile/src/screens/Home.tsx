@@ -28,6 +28,15 @@ export function Home(): React.JSX.Element {
   const balances = ctx.balances;
   const bal = balances.data;
   const tokens = ctx.tokens.data ?? [];
+  // A failed balance read is an unknown balance, not zero — rendering "0.00"
+  // would tell the user their funds are gone. Show an em dash instead.
+  const xtzText = bal != null ? fmtXtz(bal.xtz) : '—';
+  // Same for a token whose balance was never read (e.g. the EVM alias of the
+  // tz1 holder is still resolving, so the ERC-20 read was skipped).
+  const tokenText = (address: string): string => {
+    const v = bal?.tokens[address.toLowerCase()];
+    return v != null ? fmtXtz(v, 2, 2) : '—';
+  };
 
   return (
     <View style={styles.screen}>
@@ -56,7 +65,7 @@ export function Home(): React.JSX.Element {
           ) : (
             <>
               <View style={styles.num}>
-                <Text style={styles.numValue}>{hidden ? '••••••' : fmtXtz(bal?.xtz ?? '0')}</Text>
+                <Text style={styles.numValue}>{hidden ? '••••••' : xtzText}</Text>
                 <View style={styles.numUnit}>
                   <TezosGlyph size={fontSize.xl} color={colors.fgMuted} />
                   <Text style={styles.numUnitLabel}>XTZ</Text>
@@ -111,7 +120,7 @@ export function Home(): React.JSX.Element {
         </View>
         <AssetRow
           asset={{ kind: 'xtz', symbol: 'XTZ' }}
-          balance={fmtXtz(bal?.xtz ?? '0')}
+          balance={xtzText}
           hidden={hidden}
           onPress={() => ctx.nav.push('receive')}
         />
@@ -119,7 +128,7 @@ export function Home(): React.JSX.Element {
           <AssetRow
             key={t.address}
             asset={{ kind: 'token', symbol: t.symbol }}
-            balance={fmtXtz(bal?.tokens[t.address.toLowerCase()] ?? '0', 2, 2)}
+            balance={tokenText(t.address)}
             hidden={hidden}
             onPress={() => ctx.nav.push('tokens')}
           />

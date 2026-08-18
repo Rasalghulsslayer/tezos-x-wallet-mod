@@ -2,19 +2,25 @@
  * Import — bring an existing account onto the device (mirrors the design's
  * ImportScreen). Tezos imports toggle between a BIP-39 mnemonic and a raw edsk
  * secret key via RuntimeToggle; EVM imports take a 0x/64-hex private key. A
- * single secret field plus a vault password + confirm; validation is minimal
- * (mock only) and finishOnboarding hands control back on the fixed acc id.
+ * single secret field plus a vault password + confirm; the secret is validated
+ * live (mnemonic checksum / edsk shape / 64-hex key) and the CTA stays
+ * disabled until it parses.
  */
 
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { formatError } from '@tezosx/wallet-core/domain/error';
+import { isValidEdsk, isValidMnemonic } from '@tezosx/wallet-core/domain/validation';
 import { colors, fontSize, font, radius, space } from '../theme';
 import { useWallet } from '../wallet/context';
 import { Btn } from '../ui/tx/Btn';
 import { ErrorInline } from '../ui/tx/ErrorInline';
 import { RuntimeToggle } from '../ui/tx/RuntimeToggle';
 import { TopBar } from '../ui/tx/TopBar';
+
+// Shape check only — the keyring's key derivation normalises the 0x prefix
+// and rejects the rare out-of-secp256k1-range key with a precise error.
+const EVM_PRIVKEY_RE = /^(0x)?[0-9a-fA-F]{64}$/;
 
 export function Import({ params }: { params: Record<string, unknown> }): React.JSX.Element {
   const ctx = useWallet();
@@ -27,18 +33,25 @@ export function Import({ params }: { params: Record<string, unknown> }): React.J
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const trimmed = secret.trim();
+  const secretValid = isEvm
+    ? EVM_PRIVKEY_RE.test(trimmed)
+    : mode === 'mnemonic'
+      ? isValidMnemonic(trimmed.toLowerCase())
+      : isValidEdsk(trimmed);
+
   const submit = (): void => {
     if (busy) return;
     setErr(null);
     const value = secret.trim();
-    if (value.length < 8) { setErr(isEvm ? 'Enter a valid private key' : 'Enter your recovery phrase'); return; }
+    if (!secretValid) { setErr(isEvm ? 'Enter a valid private key' : 'Enter a valid recovery phrase or secret key'); return; }
     if (pwd.length < 8) { setErr('Password must be at least 8 characters'); return; }
     if (pwd !== confirm) { setErr('Passwords do not match'); return; }
     setBusy(true);
     void (async () => {
       try {
         if (isEvm) await ctx.importWallet({ source: 'evm-privkey', privateKey: value, password: pwd });
-        else if (mode === 'mnemonic') await ctx.importWallet({ source: 'mnemonic', mnemonic: value, password: pwd });
+        else if (mode === 'mnemonic') await ctx.importWallet({ source: 'mnemonic', mnemonic: value.toLowerCase(), password: pwd });
         else await ctx.importWallet({ source: 'edsk', edsk: value, password: pwd });
         // Flow complete (the Gate re-scopes to the unlocked shell) — drop every
         // secret-bearing reference now rather than at fiber GC.
@@ -74,6 +87,7 @@ export function Import({ params }: { params: Record<string, unknown> }): React.J
               onChange={(v) => {
                 setMode(v === 'l1' ? 'mnemonic' : 'edsk');
                 setSecret('');
+                setErr(null);
               }}
               l1Label="Recovery phrase"
               l2Label="Private key"
@@ -93,6 +107,15 @@ export function Import({ params }: { params: Record<string, unknown> }): React.J
           textAlignVertical="top"
         />
         <Text style={styles.hint}>Your secret never leaves this device.</Text>
+        {trimmed.length > 0 && !secretValid && (
+          <Text style={[styles.hint, styles.hintInvalid]}>
+            {isEvm
+              ? 'Not a valid key yet — expected 64 hex characters (0x optional).'
+              : mode === 'mnemonic'
+                ? 'Not a valid recovery phrase yet — check the words and the word count.'
+                : 'Not a valid secret key yet — expected edsk…'}
+          </Text>
+        )}
 
         <View style={styles.fields}>
           <View>
@@ -124,7 +147,7 @@ export function Import({ params }: { params: Record<string, unknown> }): React.J
       </ScrollView>
 
       <View style={styles.actionBar}>
-        <Btn variant="accent" full loading={busy} onPress={submit}>
+        <Btn variant="accent" full loading={busy} disabled={!secretValid} onPress={submit}>
           Import wallet
         </Btn>
       </View>
@@ -138,6 +161,7 @@ const styles = StyleSheet.create({
   lead: { fontSize: fontSize.md, color: colors.fgMuted, marginBottom: space[4], lineHeight: 22 },
   toggle: { marginBottom: space[4] },
   hint: { fontSize: fontSize.xs, color: colors.fgSubtle, marginTop: space[2] },
+  hintInvalid: { color: colors.danger },
   fields: { gap: space[4] - 2, marginTop: space[5] },
   fieldLabel: { fontSize: fontSize.sm, color: colors.fgMuted, marginBottom: space[2] },
   input: {

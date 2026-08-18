@@ -18,7 +18,11 @@ export type VaultStateUnlocked =
       kind:      'tezos';
       accountId: string;
       tz1:       string;
-      evmAlias:  string;             // alias derived from tz1
+      // The kernel alias of the tz1. null until the background resolution
+      // lands (first unlock of an account, or offline) — the mapping lives on
+      // the node and unlock must never wait for it. UI shows a resolving
+      // placeholder while null.
+      evmAlias:  string | null;
       accounts:  AccountSummary[];   // every account in the vault, sorted by createdAt ASC
       hasSeed?:  boolean;            // wallet-level seed present → derived accounts available
     }

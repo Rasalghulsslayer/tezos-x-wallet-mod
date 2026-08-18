@@ -7,6 +7,41 @@ TypeScript source over the npm-workspace symlink (no build step), by both the
 Chrome extension (`@tezosx/wallet`) and the React Native app
 (`@tezosx/wallet-mobile`).
 
+## [0.7.0] — 2026-08-18
+
+### Changed
+- **`getState` is now network-free.** Unlocking is a local vault decrypt, and
+  its state read no longer performs any RPC: the EVM alias of a Tezos account
+  is read from the new in-memory `EvmAliasCache` and reported as
+  `evmAlias: string | null` (null until the background resolution lands —
+  first unlock of an account, or offline). Account summaries carry
+  `secondaryAddress` only once resolved. Previously `getState` awaited one
+  `tez_getTezosEthereumAddress` RPC per Tezos account on the unlock critical
+  path, which made unlock fail without network.
+- `Keyring.listAccountSummaries()` is a pure, synchronous projection of the
+  vault: the keyring owns session and secret state and no longer reaches for
+  the network to decorate summaries — that decoration moved into `getState`.
+- The `dispatch` catch-all preserves a numeric `code` carried by a thrown
+  error (e.g. the relayer's 4900 on network failures) instead of flattening
+  everything to -32603, and state refreshes are awaited inside the guard —
+  a rejected refresh previously escaped `dispatch` without a response
+  envelope at all.
+- The alias cache deliberately survives lock (aliases are immutable public
+  kernel mappings, not key material), so a relock → unlock cycle completes
+  fully offline; it is cleared on wallet reset.
+
+### Added
+- `shared/evm-alias-cache.ts` — `EvmAliasCache`, the tz1 → alias map with a
+  single-flight `backfill(tz1s, derive)` that resolves missing entries in the
+  background, swallows individual failures, and reports whether anything new
+  landed so shells can refresh their UI.
+- `isAuthError(err)` in `domain/error.ts` — true only for credential failures
+  (wrong password, unlock throttle, missing vault); the unlock screens use it
+  to decide whether clearing the password field is legitimate.
+- Error taxonomy: React Native's fetch failure string ("Network request
+  failed") now maps to the network-unreachable copy, and EIP-1193 code 4900
+  resolves to it directly.
+
 ## [0.6.0] — 2026-08-10
 
 ### Added

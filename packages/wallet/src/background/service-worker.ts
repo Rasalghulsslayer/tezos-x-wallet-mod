@@ -15,6 +15,7 @@ import type { PersistentPorts } from '@tezosx/wallet-core/ports/container';
 import { ContainerCache } from '@tezosx/wallet-core/composition/container-cache';
 import { ensureContainerFor } from '@tezosx/wallet-core/composition/container-builder';
 import { dispatch, type SwState, type SwDeps } from '@tezosx/wallet-core/composition/sw-wiring';
+import { EvmAliasCache } from '@tezosx/wallet-core/shared/evm-alias-cache';
 import type { ContentPush } from '@tezosx/wallet-core/shared/messages';
 import {
   AUTO_LOCK_ALARM_NAME,
@@ -27,8 +28,11 @@ import {
 
 const state: SwState = {
   container: null,
-  evmAlias:  null,
 };
+
+// tz1 → EVM alias entries. In-memory only (rebuilt after MV3 eviction via the
+// background backfill); survives lock, cleared on wallet reset by dispatch.
+const aliasCache = new EvmAliasCache();
 
 // The extension shell owns the platform adapters and injects them into the
 // shared core (keyring, container, dispatch). A mobile shell would build its
@@ -74,7 +78,6 @@ async function rebuildContainer(): Promise<void> {
   const unlocked = keyring.getUnlocked();
   if (unlocked == null) {
     state.container = null;
-    state.evmAlias  = null;
     await broadcastEvent({ type: 'WALLET_ROLE', routesViaRelayer: false });
     return;
   }
@@ -92,6 +95,7 @@ const deps: SwDeps = {
   approvalQueue: queue,
   persistentPorts,
   state,
+  aliasCache,
   containerCache,
   rebuildContainer,
   broadcastEvent,
@@ -121,7 +125,6 @@ function autoLock(reason: string): void {
   keyring.lock();
   queue.rejectAll(reason);
   state.container = null;
-  state.evmAlias  = null;
   containerCache.clear();
   void broadcastEvent({ type: 'WALLET_ROLE', routesViaRelayer: false });
   console.info('[TezosX Wallet] auto-locked:', reason);

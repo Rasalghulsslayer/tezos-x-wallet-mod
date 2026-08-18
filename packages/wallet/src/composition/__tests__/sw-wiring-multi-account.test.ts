@@ -1,8 +1,16 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { Keyring } from '@tezosx/wallet-core/keyring';
 import { WebCryptoPort } from '../../adapters/crypto/web-crypto-port';
 import { ApprovalQueue } from '@tezosx/wallet-core/approval-queue';
 import { ContainerCache } from '@tezosx/wallet-core/composition/container-cache';
+import { EvmAliasCache } from '@tezosx/wallet-core/shared/evm-alias-cache';
+
+// dispatch kicks a fire-and-forget alias backfill after state refreshes; stub
+// the RPC-backed derivation so the suite never touches the network.
+vi.mock('@tezosx/relayer/utils/derive', () => ({
+  deriveEvmAlias:      async () => '0x' + 'ab'.repeat(20),
+  resolveTezosAddress: async () => 'tz1MockResolvedAddress0000000000000',
+}));
 import { dispatch, type SwDeps } from '@tezosx/wallet-core/composition/sw-wiring';
 import type { ContentPush, PopupRequest, AccountSummary } from '@tezosx/wallet-core/shared/messages';
 import type { VaultStore, EncryptedVault } from '@tezosx/wallet-core/ports/vault-store';
@@ -90,7 +98,8 @@ async function setupHarness(): Promise<Harness> {
     keyring,
     approvalQueue:  new ApprovalQueue(stubNotifications, stubPresenter),
     persistentPorts: { vaultStore: new MemoryVault(), sessionStore, tokenStore: new MemoryTokens(), contactStore: new MemoryContacts(), notifications: stubNotifications },
-    state:          { container: null, evmAlias: null },
+    state:          { container: null },
+    aliasCache:     new EvmAliasCache(),
     containerCache: new ContainerCache(),
     rebuildContainer: async () => { rebuilds++; },
     broadcastEvent:   async (push) => { broadcasts.push(push); },

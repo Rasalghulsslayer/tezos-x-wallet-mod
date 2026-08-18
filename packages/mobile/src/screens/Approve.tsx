@@ -48,6 +48,9 @@ export function Approve(): React.JSX.Element | null {
 
   const host = hostOf(req.origin);
   const pinned = ctx.accounts.find((a) => a.id === req.accountId) ?? ctx.activeAccount;
+  // The dApp-visible face of the pinned account; null while a tz1's EVM alias
+  // is still resolving, in which case the chip shows a placeholder.
+  const pinnedAddr = pinned.kind === 'evm' ? pinned.address ?? null : pinned.evmAlias ?? null;
   const accent: 'purple' | 'cyan' = req.kind === 'transaction' ? 'purple' : 'cyan';
 
   // reject resolves the dApp's pending promise immediately; approve gates on the
@@ -97,7 +100,7 @@ export function Approve(): React.JSX.Element | null {
             >
               <PinnedChip
                 label={ctx.labelFor(pinned)}
-                addr={truncAddr(pinned.kind === 'evm' ? pinned.address : pinned.evmAlias, 8)}
+                addr={pinnedAddr != null ? truncAddr(pinnedAddr, 8) : 'Resolving EVM address…'}
                 leading={<Identicon seed={pinned.identitySeed} size={34} />}
               />
               <Body req={req} host={host} />

@@ -14,7 +14,9 @@ export interface ViewAccount {
   label: string;
   createdAt: number;
   tz1?: string;
-  evmAlias?: string;      // '' until the alias resolves
+  // null while the kernel alias of a tz1 is still resolving (first unlock, or
+  // offline) — screens render a resolving placeholder and disable copy.
+  evmAlias?: string | null;
   address?: string;
   identitySeed: string;   // the account's address — stable identicon seed
 }
@@ -23,7 +25,7 @@ export interface ViewAccount {
 export function summaryToView(s: AccountSummary): ViewAccount {
   const label = s.label != null && s.label.trim() !== '' ? s.label : '';
   return s.kind === 'tezos'
-    ? { id: s.id, kind: 'tezos', label, createdAt: s.createdAt, tz1: s.primaryAddress, evmAlias: s.secondaryAddress ?? '', identitySeed: s.primaryAddress }
+    ? { id: s.id, kind: 'tezos', label, createdAt: s.createdAt, tz1: s.primaryAddress, evmAlias: s.secondaryAddress ?? null, identitySeed: s.primaryAddress }
     : { id: s.id, kind: 'evm', label, createdAt: s.createdAt, address: s.primaryAddress, identitySeed: s.primaryAddress };
 }
 

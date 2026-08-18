@@ -10,6 +10,5 @@ export interface ListAccountsDeps {
 }
 
 export async function listAccounts(deps: ListAccountsDeps): Promise<AccountSummary[]> {
-  const summaries = await deps.keyring.listAccountSummaries();
-  return summaries.slice().sort((a, b) => a.createdAt - b.createdAt);
+  return deps.keyring.listAccountSummaries().sort((a, b) => a.createdAt - b.createdAt);
 }

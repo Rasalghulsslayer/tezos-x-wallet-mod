@@ -9,6 +9,7 @@
 import { Identicon } from './Identicon';
 import { Icon } from './Icon';
 import { toast } from './Toast';
+import { RESOLVING_EVM_ADDRESS } from './utils';
 import { shortAddr } from '@tezosx/wallet-core/shared/format';
 import type { VaultStateUnlocked } from '@tezosx/wallet-core/shared/messages';
 
@@ -80,7 +81,16 @@ export function AccountHeader({
   );
 }
 
-function AddrRow({ chain, addr, copyLabel }: { chain: 'l1' | 'l2'; addr: string; copyLabel: string }) {
+/** `addr` is null while the EVM alias backfill has not landed yet: the row shows the resolving placeholder and offers no copy. */
+function AddrRow({ chain, addr, copyLabel }: { chain: 'l1' | 'l2'; addr: string | null; copyLabel: string }) {
+  if (addr == null) {
+    return (
+      <div className="ah-addr" aria-disabled="true" style={{ cursor: 'default' }}>
+        <span className={`badge ${chain}`}>{chain.toUpperCase()}</span>
+        <span className="addr-val" style={{ color: 'var(--tx-fg-muted)', fontFamily: 'inherit' }}>{RESOLVING_EVM_ADDRESS}</span>
+      </div>
+    );
+  }
   const copy = () => {
     void navigator.clipboard.writeText(addr);
     toast(`${copyLabel} address copied`);

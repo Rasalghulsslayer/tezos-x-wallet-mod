@@ -41,7 +41,7 @@ export function InputStep(props: InputStepProps) {
           {isCreate && (
             <p className="sub">
               {isTezos
-                ? "Write it down somewhere offline. Anyone with these words owns this account — TezosX can't recover it."
+                ? "Write it down somewhere offline. Anyone with these words owns this account — Tezos X can't recover it."
                 : '256 bits as a 64-character hex string. Anyone with it owns this account.'}
             </p>
           )}

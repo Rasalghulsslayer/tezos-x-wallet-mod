@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatError } from '../error';
+import { formatError, isAuthError } from '../error';
 
 describe('formatError — sanity', () => {
   it('formats a known Tezos RPC error family', () => {
@@ -21,5 +21,31 @@ describe('formatError — sanity', () => {
     const out = formatError(new TypeError('Failed to fetch'));
     expect(out.title).toBeTruthy();
     expect(out.detail).toBeTruthy();
+  });
+
+  it("classifies React Native's fetch failure string as network-unreachable", () => {
+    const out = formatError(new TypeError('Network request failed'));
+    expect(out.code).toBe('rpc-unreachable');
+    expect(out.title).toBe('Network unreachable');
+  });
+
+  it('maps the 4900 code the relayer rpc helper attaches to network failures', () => {
+    const err: Error & { code?: number } = new Error('Network error calling tez_getTezosEthereumAddress');
+    err.code = 4900;
+    const out = formatError(err);
+    expect(out.title).toBe('Network unreachable');
+  });
+});
+
+describe('isAuthError — only credential failures may clear a password field', () => {
+  it('is true for wrong password and unlock throttle', () => {
+    expect(isAuthError(new Error('Incorrect password'))).toBe(true);
+    expect(isAuthError(new Error('Too many attempts. Try again in 5s.'))).toBe(true);
+  });
+
+  it('is false for network and internal failures', () => {
+    expect(isAuthError(new TypeError('Network request failed'))).toBe(false);
+    expect(isAuthError(new TypeError('Failed to fetch'))).toBe(false);
+    expect(isAuthError(new Error('Internal error'))).toBe(false);
   });
 });

@@ -5,6 +5,49 @@ The Tezos X wallet for iOS/Android (React Native, Expo bare). Format follows
 shared `@tezosx/wallet-core` over the workspace; only platform adapters
 (storage, secure RNG, biometrics) and the UI live here.
 
+## [0.5.0] — 2026-08-18
+
+### Security
+- **Auto-lock always arms after a successful unlock.** A failure in the
+  post-unlock tail (network state read, WalletConnect boot) used to reject
+  the unlock flow after the vault was already decrypted: the UI stayed on the
+  lock screen while the keyring sat unlocked in memory, and the auto-lock
+  (background + idle) never armed — decrypted key material was retained
+  indefinitely. The tail is now reject-proof once the decrypt succeeds, and
+  the view transitions from keyring truth.
+
+### Fixed
+- **Unlock works offline.** The password path surfaced a generic "Operation
+  failed" (React Native's network failure string wasn't classified) and the
+  biometric path failed in complete silence — Face ID succeeded, the vault
+  decrypted, and nothing happened. Unlock now completes with no network;
+  biometric failures other than user cancel are surfaced through the standard
+  error card; onboarding create/import no longer strands the user offline.
+- A failed balance read renders '—' — never "0 XTZ", which reported a false
+  balance.
+- Create flow, EVM path: Back from "Set password" landed on a screen titled
+  "Private key" showing a Tezos recovery-phrase grid, and the step dots
+  overflowed. Navigation is now driven by a per-kind stage list, so dots and
+  stages cannot disagree.
+- The seed-confirmation quiz picks proportional word positions from the
+  actual phrase length (shared core helper) instead of the fixed positions
+  3/7/11, which verified nothing beyond word 11 on longer phrases.
+- Import validates input for real (BIP-39 mnemonic / edsk / 64-hex private
+  key, matching the extension) instead of accepting anything over 8
+  characters.
+
+### Changed
+- The EVM alias is read from the shared in-memory alias cache and reported as
+  null until the background resolution lands; screens show a "Resolving EVM
+  address…" placeholder (Receive withholds the QR rather than encoding a
+  wrong address). The cache survives lock — aliases are immutable public
+  mappings — and clears on wallet reset. The separate network-free boot read
+  (`read-state.ts`) is gone: core `getState` now is that read, and boot gains
+  real account summaries.
+
+### Compatibility
+- Requires `@tezosx/wallet-core` 0.7.0 and `@tezosx/relayer` 0.7.1.
+
 ## [0.4.0] — 2026-08-10
 
 ### Added

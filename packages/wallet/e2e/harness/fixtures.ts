@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { test as base, type BrowserContext, type Worker } from '@playwright/test';
 
 import { launchExtensionContext, closeExtensionContext, type ExtensionHandles } from './extension';
-import { installMockRouter } from './network/mock-router';
+import { installMockRouter, installNetworkDownRouter } from './network/mock-router';
 import { OverrideStore, type OverrideResponse } from './network/override-store';
 import { installDappRoute } from './pages/dapp-page';
 
@@ -75,6 +75,18 @@ function makeMockBuilder(store: OverrideStore): MockBuilder {
   };
 }
 
+export interface HarnessOptions {
+  /**
+   * Opt-in per spec via `test.use({ networkDown: true })`: the context comes
+   * up with every http(s) request aborted (net::ERR_INTERNET_DISCONNECTED)
+   * from the very start, simulating a machine with no internet access. The
+   * record/replay mock router and the local test-dapp route are NOT installed
+   * — an offline spec has no network fixtures and RECORD=1 is a no-op for it.
+   * The `mock` builder is inert under this option.
+   */
+  networkDown: boolean;
+}
+
 export interface ExtensionFixtures {
   overrideStore:    OverrideStore;
   mock:             MockBuilder;
@@ -85,7 +97,9 @@ export interface ExtensionFixtures {
   testVault:        EncryptedVaultFixture;
 }
 
-export const test = base.extend<ExtensionFixtures>({
+export const test = base.extend<ExtensionFixtures & HarnessOptions>({
+  networkDown: [false, { option: true }],
+
   overrideStore: async ({}, use) => {
     await use(new OverrideStore());
   },
@@ -94,13 +108,17 @@ export const test = base.extend<ExtensionFixtures>({
     await use(makeMockBuilder(overrideStore));
   },
 
-  extensionContext: async ({ overrideStore }, use, testInfo) => {
+  extensionContext: async ({ overrideStore, networkDown }, use, testInfo) => {
     const handles: ExtensionHandles = await launchExtensionContext();
-    await installMockRouter(handles.context, {
-      specSlug:  specSlugOf(testInfo.file),
-      overrides: overrideStore,
-    });
-    await installDappRoute(handles.context);
+    if (networkDown) {
+      await installNetworkDownRouter(handles.context);
+    } else {
+      await installMockRouter(handles.context, {
+        specSlug:  specSlugOf(testInfo.file),
+        overrides: overrideStore,
+      });
+      await installDappRoute(handles.context);
+    }
     await use(handles.context);
     await closeExtensionContext(handles);
   },

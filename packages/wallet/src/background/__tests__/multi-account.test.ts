@@ -176,7 +176,7 @@ describe('renameAccount use case', () => {
 });
 
 describe('listAccounts use case', () => {
-  it('returns AccountSummary[] sorted by createdAt ASC, with secondaryAddress for Tezos accounts', async () => {
+  it('returns AccountSummary[] sorted by createdAt ASC, network-free', async () => {
     const { keyring, tokenStore } = await setupWithOneTezosAccount();
     await addAccount({ kind: 'evm',   source: { source: 'fresh' } }, { keyring, tokenStore });
     await addAccount({ kind: 'tezos', source: { source: 'fresh' } }, { keyring, tokenStore });
@@ -184,8 +184,10 @@ describe('listAccounts use case', () => {
 
     expect(summaries).toHaveLength(3);
     expect(summaries.map(s => s.kind)).toEqual(['tezos', 'evm', 'tezos']);
-    expect(summaries[0].secondaryAddress).toMatch(/^0x/);   // Tezos → alias
-    expect(summaries[1].secondaryAddress).toBeUndefined();  // EVM   → none
+    // The keyring projection carries no EVM alias: it is a public read-model
+    // resolved over RPC, decorated by getState from the EvmAliasCache so the
+    // account list stays available offline.
+    expect(summaries.every(s => s.secondaryAddress === undefined)).toBe(true);
     // createdAt ASC
     expect(summaries[0].createdAt).toBeLessThanOrEqual(summaries[1].createdAt);
     expect(summaries[1].createdAt).toBeLessThanOrEqual(summaries[2].createdAt);

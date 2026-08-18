@@ -27,6 +27,20 @@ export function newMnemonic(): string {
 export const ENGLISH_WORDLIST = englishWordlist;
 
 /**
+ * Three 1-indexed positions (strictly increasing, ~20/50/80% of the phrase)
+ * to challenge in the seed-confirmation step. Proportional rather than fixed
+ * so the check scales with the phrase: hardcoded positions verify nothing
+ * beyond word 11 on 15/18/21/24-word mnemonics. Consumers look words up with
+ * `words[position - 1]`.
+ */
+export function pickConfirmPositions(wordCount: number): [number, number, number] {
+  const a = Math.max(1, Math.floor(wordCount * 0.2));
+  const b = Math.max(a + 1, Math.floor(wordCount * 0.5));
+  const c = Math.max(b + 1, Math.floor(wordCount * 0.8));
+  return [a, b, c];
+}
+
+/**
  * Derive the tz1 identity (address + public key + encoded secret key) at
  * `index` from a mnemonic. Uses SLIP-10 ed25519 derivation under
  * `tezosDerivationPath(index)`; the default index 0 is the historical

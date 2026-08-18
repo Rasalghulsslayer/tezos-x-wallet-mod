@@ -84,6 +84,12 @@ const KNOWN_ERRORS: Record<string, Handler> = {
     title:  'Method not supported',
     detail: `${e.method ?? 'This method'} isn't available on the Tezos X relayer.`,
   }),
+  // 4900 (disconnected): the relayer's rpc helper attaches it to any fetch
+  // failure, so this is the code-based route to the network copy.
+  'eip1193:4900': () => ({
+    title:  'Network unreachable',
+    detail: "The Tezos X RPC didn't respond. Check your connection or try again.",
+  }),
   'eip1193:-32601': () => ({
     title:  'Unknown method',
     detail: "The dApp called a method the wallet doesn't recognize.",
@@ -160,6 +166,17 @@ function parseTezosRpc(raw: string): FormattedError | null {
   return null;
 }
 
+/**
+ * True when the failure is about the credential itself (wrong password,
+ * unlock throttle, missing vault) — the only cases where a login form should
+ * clear the password field. A network or internal failure must keep the
+ * user's typing: wiping it there reads as "wrong password".
+ */
+export function isAuthError(err: unknown): boolean {
+  const raw = err instanceof Error ? err.message : String(err);
+  return /Incorrect password|bad decrypt|Too many attempts|No wallet found/i.test(raw);
+}
+
 export function formatError(err: unknown, ctx?: { method?: string }): FormattedError {
   if (typeof err === 'object' && err !== null && 'title' in err && 'detail' in err) {
     return err as FormattedError;
@@ -179,7 +196,9 @@ export function formatError(err: unknown, ctx?: { method?: string }): FormattedE
     if (KNOWN_ERRORS[key]) return fromKey(key, raw, ctx ?? {});
   }
 
-  if (/Failed to fetch|NetworkError|ECONNREFUSED|TypeError.*fetch/i.test(raw)) return fromKey('rpc-unreachable', raw);
+  // "Network request failed" is React Native's fetch failure string — the RN
+  // shell never produces "Failed to fetch".
+  if (/Failed to fetch|Network request failed|NetworkError|ECONNREFUSED|TypeError.*fetch/i.test(raw)) return fromKey('rpc-unreachable', raw);
   if (/timeout|aborted/i.test(raw))                                            return fromKey('rpc-timeout',     raw);
   if (/^L1 RPC 5\d\d|EVM RPC 5\d\d|HTTP 5\d\d/i.test(raw))                     return fromKey('rpc-5xx',         raw);
 

@@ -6,6 +6,41 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.17.0] — 2026-08-18
+
+### Fixed
+- **Unlock works offline.** The vault decrypt was always local, but the state
+  read that followed performed network RPCs and its failure was presented as
+  an unlock failure: the password field was wiped and an error shown, and
+  reopening the popup while the service worker was still unlocked rendered a
+  terminal "Wallet can't reach its service worker" screen — a wrong diagnosis
+  that only a reload cleared. Unlock now completes with no network at all; the
+  EVM alias resolves in the background and the popup re-polls (bounded, via
+  the shared poller) until it lands.
+- The root Gate distinguishes a live service worker answering with an error
+  (retryable inline error with a Retry action, cleared on the next successful
+  read) from a real transport failure (the fatal screen, reserved for that
+  case), and its error state resets on recovery instead of sticking forever.
+- The unlock screen clears the password field only for credential errors
+  (wrong password, throttle); a network or internal failure keeps the typing.
+- While the EVM alias of a Tezos account is unresolved, Home, Send, Receive,
+  Settings, the account card and the account header render a "Resolving EVM
+  address…" placeholder with copy/QR affordances disabled — never an empty
+  string, a broken explorer link, or a QR of a wrong address. ERC-20 balance
+  reads are skipped until the alias lands and re-run automatically when it
+  does.
+- Shipped strings spell the brand "Tezos X" (two AddAccount strings read
+  "TezosX").
+
+### Added
+- An offline end-to-end spec family (`e2e/specs/offline/`): onboarding,
+  unlock, and popup reopen are exercised with every network route aborted,
+  locking the offline guarantees into the CI gate.
+
+### Compatibility
+- Requires `@tezosx/wallet-core` 0.7.0 (network-free `getState`, nullable
+  `evmAlias`) and `@tezosx/relayer` 0.7.1.
+
 ## [0.16.0] — 2026-08-10
 
 ### Added

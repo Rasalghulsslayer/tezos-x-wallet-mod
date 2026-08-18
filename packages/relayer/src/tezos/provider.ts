@@ -74,17 +74,20 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
       });
     }
 
-    // Restore session if Temple already has an active account (page reload)
-    void this.beacon.getActiveAccount().then((account) => {
-      if (account == null) return;
-      void deriveEvmAlias(account.address).then((evmAlias) => {
-        void this.tezlink.getChainId().then((chainId) => {
-          this.session = { tz1Address: account.address, evmAlias, chainId };
-          this.emit('accountsChanged', [evmAlias]);
-          this.emit('connect', { chainId } satisfies ProviderConnectInfo);
-        });
-      });
-    });
+    // Restore session if Temple already has an active account (page reload).
+    // Best-effort: without network (alias/chainId RPCs) the session simply
+    // stays null and is re-established by the next request — an uncaught
+    // rejection here would otherwise fire on every offline construction.
+    void this.beacon.getActiveAccount()
+      .then(async (account) => {
+        if (account == null) return;
+        const evmAlias = await deriveEvmAlias(account.address);
+        const chainId  = await this.tezlink.getChainId();
+        this.session = { tz1Address: account.address, evmAlias, chainId };
+        this.emit('accountsChanged', [evmAlias]);
+        this.emit('connect', { chainId } satisfies ProviderConnectInfo);
+      })
+      .catch(() => { /* offline / RPC down — session restore retried lazily */ });
 
     // Forward Temple account changes (user switches account in wallet)
     this.beacon.setAccountChangeHandler((tz1) => {
@@ -94,11 +97,13 @@ export class RelayerProvider extends EventEmitter implements EIP1193Provider {
         this.emit('disconnect', rpcError(EIP1193_UNAUTHORIZED, 'Wallet disconnected'));
         return;
       }
-      void deriveEvmAlias(tz1).then((evmAlias) => {
-        if (this.session?.evmAlias === evmAlias) return;
-        this.session = { ...this.session!, tz1Address: tz1, evmAlias };
-        this.emit('accountsChanged', [evmAlias]);
-      });
+      void deriveEvmAlias(tz1)
+        .then((evmAlias) => {
+          if (this.session?.evmAlias === evmAlias) return;
+          this.session = { ...this.session!, tz1Address: tz1, evmAlias };
+          this.emit('accountsChanged', [evmAlias]);
+        })
+        .catch(() => { /* offline — the session keeps its previous account */ });
     });
   }
 

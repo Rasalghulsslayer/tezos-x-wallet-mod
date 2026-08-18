@@ -48,6 +48,28 @@ export async function installMockRouter(context: BrowserContext, options: MockRo
   });
 }
 
+/**
+ * Network-down mode: simulates a machine with no internet access by aborting
+ * every http(s) request from the extension context with
+ * net::ERR_INTERNET_DISCONNECTED. Installed INSTEAD OF the record/replay
+ * router (see the `networkDown` option in `harness/fixtures.ts`): an offline
+ * spec has no network fixtures by construction, so the replay router's
+ * fail-loud fixture-miss path (and RECORD=1's real fetches) must never engage.
+ * The route matcher is a URL predicate on the protocol — scheme-prefixed glob
+ * patterns ("http://**") silently fail to match, and the predicate also
+ * guarantees `chrome-extension://` documents (popup, approve window, SW) are
+ * never intercepted.
+ */
+export async function installNetworkDownRouter(context: BrowserContext): Promise<void> {
+  const abortOffline = async (route: Route): Promise<void> => {
+    try { await route.abort('internetdisconnected'); } catch { /* context closed mid-abort */ }
+  };
+  await context.route(
+    (url) => url.protocol === 'http:' || url.protocol === 'https:',
+    abortOffline,
+  );
+}
+
 async function dispatch(route: Route, request: Request, mode: MockMode, fixturesDir: string, overrides: OverrideStore): Promise<void> {
   const url   = new URL(request.url());
   const host  = url.hostname;

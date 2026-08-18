@@ -1,7 +1,8 @@
 /**
  * WalletContext — the app's composition root behind the single seam every screen
- * consumes via useWallet(). It owns the real VaultState (boot via readState,
- * transitions via the keyring use-cases in vault-actions), derives the active
+ * consumes via useWallet(). It owns the real VaultState (boot via the network-
+ * free core getState, transitions via the keyring use-cases in vault-actions),
+ * derives the active
  * account + summaries as ViewAccounts, wires auto-lock, and exposes navigation +
  * overlay state. Screens/components stay pure presentation: they read this
  * context and call its actions; all keyring/container I/O lives below the seam.
@@ -98,7 +99,7 @@ export interface WalletContextValue {
   resolveTx: (syntheticHash: string) => Promise<ResolveTxResult>;
 }
 
-const EMPTY_ACCOUNT: ViewAccount = { id: '', kind: 'tezos', label: '', createdAt: 0, tz1: '', evmAlias: '', identitySeed: '' };
+const EMPTY_ACCOUNT: ViewAccount = { id: '', kind: 'tezos', label: '', createdAt: 0, tz1: '', evmAlias: null, identitySeed: '' };
 
 const WalletContext = createContext<WalletContextValue | null>(null);
 
@@ -142,7 +143,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
   const approve = approveId != null ? approvalQueue.get(approveId) ?? null : null;
 
   const refresh = useCallback(async (): Promise<void> => {
-    setVaultState(await getState({ keyring, evmAliasCache }));
+    setVaultState(await getState({ keyring, aliasCache: evmAliasCache }));
   }, []);
 
   const reloadSessions = useCallback(async (): Promise<void> => {
@@ -153,8 +154,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
     setContacts(await vaultActions.loadContacts());
   }, []);
 
-  // Boot: instant network-free read, then (if unlocked) warm the container +
-  // fill summaries/alias so the account-data effect has a live container.
+  // Boot: instant network-free read, then (if rehydrating an unlocked keyring)
+  // warm the container and backfill any alias still missing from the cache.
   useEffect(() => {
     let live = true;
     void (async () => {
@@ -162,7 +163,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
       if (!live) return;
       setVaultState(s);
       setBioAvailable(await vaultActions.biometricsAvailable());
-      if (s.status === 'unlocked') { await deps.rebuildContainer(); await refresh(); }
+      if (s.status === 'unlocked') {
+        await deps.rebuildContainer();
+        vaultActions.kickAliasBackfill(() => { void refresh(); });
+      }
       if (live) setBooted(true);
     })();
     return () => { live = false; };
@@ -240,17 +244,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
       const target = s.accounts.find((a) => a.id === id);
       if (target == null) return;
       // Instant switch: the account set is unchanged (only the active pointer
-      // moves) and the target's EVM alias is already resolved in its summary, so
-      // the UI re-scopes with zero network/crypto. The keyring's active pointer
-      // flips synchronously in memory (a send stays bound to the right account);
-      // the disk re-seal that persists it (a PBKDF2 re-encrypt — now cheap on the
-      // native crypto port) is flushed off the tap in the background below, so the
-      // selection survives a lock without the switch itself ever stalling.
-      const alias = target.kind === 'tezos' ? (target.secondaryAddress ?? null) : target.primaryAddress;
-      evmAliasCache.value = alias;
+      // moves) and the target's EVM alias — when already resolved — is in its
+      // summary, so the UI re-scopes with zero network/crypto. The alias cache
+      // is fed by derive results only, never written here. The keyring's active
+      // pointer flips synchronously in memory (a send stays bound to the right
+      // account); the disk re-seal that persists it (a PBKDF2 re-encrypt — now
+      // cheap on the native crypto port) is flushed off the tap in the
+      // background below, so the selection survives a lock without the switch
+      // itself ever stalling.
       keyring.activateInMemory(id);
       setVaultState(target.kind === 'tezos'
-        ? { status: 'unlocked', kind: 'tezos', accountId: id, tz1: target.primaryAddress, evmAlias: target.secondaryAddress ?? '', accounts: s.accounts, hasSeed: s.hasSeed }
+        ? { status: 'unlocked', kind: 'tezos', accountId: id, tz1: target.primaryAddress, evmAlias: target.secondaryAddress ?? null, accounts: s.accounts, hasSeed: s.hasSeed }
         // An EVM summary's primaryAddress is always a 0x address (the account's own).
         : { status: 'unlocked', kind: 'evm', accountId: id, address: target.primaryAddress as `0x${string}`, accounts: s.accounts, hasSeed: s.hasSeed });
       void (async () => {
@@ -277,14 +281,29 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
       setOnboardingOverride(false);
       setVaultState({ status: 'empty' });
     },
-    unlock: async (password) => { enterUnlocked(await vaultActions.unlockWithPassword(password)); await refresh(); },
+    // Each unlock flow re-kicks the backfill with a refresh callback: the kick
+    // inside afterUnlocked has no UI seam, and the cache's single-flight makes
+    // the second kick attach to the same in-flight run — so a resolved alias
+    // reaches the UI without user action.
+    unlock: async (password) => {
+      enterUnlocked(await vaultActions.unlockWithPassword(password));
+      vaultActions.kickAliasBackfill(() => { void refresh(); });
+    },
     unlockBiometric: async () => {
       const s = await vaultActions.unlockWithBiometrics();
       if (s == null) return false;
-      enterUnlocked(s); await refresh(); return true;
+      enterUnlocked(s);
+      vaultActions.kickAliasBackfill(() => { void refresh(); });
+      return true;
     },
-    createTezosWallet: async (mnemonic, password) => { enterUnlocked(await vaultActions.createTezosWallet(mnemonic, password)); await refresh(); },
-    importWallet: async (req) => { enterUnlocked(await vaultActions.importWallet(req)); await refresh(); },
+    createTezosWallet: async (mnemonic, password) => {
+      enterUnlocked(await vaultActions.createTezosWallet(mnemonic, password));
+      vaultActions.kickAliasBackfill(() => { void refresh(); });
+    },
+    importWallet: async (req) => {
+      enterUnlocked(await vaultActions.importWallet(req));
+      vaultActions.kickAliasBackfill(() => { void refresh(); });
+    },
     resetToWelcome: () => { setOnboardingOverride(true); setStack([]); },
     openSwitcher: () => setSwitcherOpen(true),
     closeSwitcher: () => setSwitcherOpen(false),
@@ -328,6 +347,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
     addAccount: async (req) => {
       const { state, result } = await vaultActions.addAccount(req);
       setVaultState(state);
+      // Same single-flight re-kick as the unlock flows: the new tz1's alias is
+      // unknown at creation and must reach the UI once derived.
+      vaultActions.kickAliasBackfill(() => { void refresh(); });
       return result;
     },
     removeAccount: async (id, password) => {

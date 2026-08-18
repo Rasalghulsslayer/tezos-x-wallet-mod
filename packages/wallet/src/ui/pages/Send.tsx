@@ -132,7 +132,10 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
   const [saveBusy,  setSaveBusy]  = useState(false);
   const [contactSaved, setContactSaved] = useState(false);
 
-  // Kind-dependent address resolution for ERC-20 balance reads.
+  // Kind-dependent address resolution for ERC-20 balance reads. The alias is
+  // only a balance-read holder here — a tz1 → 0x send signs against the NAC
+  // gateway without needing the sender's own alias — so a still-resolving
+  // alias (null) just skips the ERC-20 reads until a state re-poll delivers it.
   const fromAddr = signingSourceAddress(state);
   const evmAddr  = state.kind === 'tezos' ? state.evmAlias : state.address;
 
@@ -153,7 +156,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
           ? fetchL1XtzBalance(state.tz1).then(mutezToXtz)
           : fetchXtzBalance(state.address).then(weiToXtz);
 
-        const tokenPromises = registered.map((t) =>
+        const tokenPromises = evmAddr == null ? [] : registered.map((t) =>
           fetchErc20Balance(t.address, evmAddr).then((hex) => [t.address.toLowerCase(), formatTokenAmount(hex, t.decimals)] as const),
         );
 

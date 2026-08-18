@@ -64,7 +64,10 @@ export function useAccountData(active: VaultStateUnlocked | null, nonce: number)
 
     let live = true;
     const accountId = active.accountId;
-    const holder = active.kind === 'tezos' ? active.evmAlias : active.address;
+    // The EVM-side balance holder: a tz1's kernel alias, or the 0x itself.
+    // null while the alias is still resolving — ERC-20 reads are skipped (not
+    // fetched with a bogus holder) and re-run when the alias lands (see deps).
+    const holder: string | null = active.kind === 'tezos' ? active.evmAlias : active.address;
 
     // Tokens + balances: the registry is fetched first so we know which ERC-20
     // balances to read; a failing token balance falls back to '0' without
@@ -83,7 +86,7 @@ export function useAccountData(active: VaultStateUnlocked | null, nonce: number)
         const xtz = active.kind === 'tezos' ? mutezToXtz(rawXtz) : weiToXtz(rawXtz);
 
         const tokenBalances: Record<string, string> = {};
-        if (holder !== '') {
+        if (holder != null) {
           await Promise.all(list.map(async (t) => {
             try {
               tokenBalances[t.address.toLowerCase()] = formatTokenAmount(
@@ -130,10 +133,13 @@ export function useAccountData(active: VaultStateUnlocked | null, nonce: number)
     }
 
     return () => { live = false; };
-    // Addresses are invariant for a given (accountId, kind); re-scope only on
-    // account switch or an explicit refresh, not on every getState identity churn.
+    // Addresses are invariant for a given (accountId, kind) except the EVM
+    // alias, which flips exactly once from null to its resolved value — that
+    // flip must re-run the reads so the skipped ERC-20 balances load. Beyond
+    // it, re-scope only on account switch or an explicit refresh, not on every
+    // getState identity churn.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active?.accountId, active?.kind, nonce]);
+  }, [active?.accountId, active?.kind, active?.kind === 'tezos' ? active.evmAlias : null, nonce]);
 
   return { balances, tokens, activity };
 }

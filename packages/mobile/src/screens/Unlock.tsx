@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { formatError, type FormattedError } from '@tezosx/wallet-core/domain/error';
+import { formatError, isAuthError, type FormattedError } from '@tezosx/wallet-core/domain/error';
 import { colors, fontSize, radius, space } from '../theme';
 import { useWallet } from '../wallet/context';
 import { Btn } from '../ui/tx/Btn';
@@ -28,9 +28,15 @@ export function Unlock(): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [recover, setRecover] = useState(false);
 
-  // Prompt biometrics on mount when a sealed secret is available.
+  // Prompt biometrics on mount when a sealed secret is available. A user
+  // cancel (or unusable hardware) surfaces as `false` — the Keychain adapter
+  // returns null instead of rejecting there — and stays silent: password entry
+  // is the fallback. A real rejection (unlock throttle, corrupted vault) must
+  // be shown, not swallowed.
   useEffect(() => {
-    if (ctx.biometricsAvailable) void ctx.unlockBiometric().catch(() => { /* fall back to password */ });
+    if (ctx.biometricsAvailable) {
+      void ctx.unlockBiometric().catch((e: unknown) => setErr(formatError(e)));
+    }
   }, [ctx.biometricsAvailable]);
 
   const submit = (): void => {
@@ -45,7 +51,10 @@ export function Unlock(): React.JSX.Element {
         setPwd('');
       } catch (e) {
         setErr(formatError(e));
-        setPwd('');
+        // Clear the field only when the password itself was refused. On a
+        // network/internal failure wiping the typing would read as "wrong
+        // password" and cost the user a re-type for nothing.
+        if (isAuthError(e)) setPwd('');
       } finally {
         setBusy(false);
       }
@@ -84,7 +93,17 @@ export function Unlock(): React.JSX.Element {
             Unlock
           </Btn>
           {ctx.biometricsAvailable && (
-            <Btn variant="ghost" full disabled={busy} onPress={() => void ctx.unlockBiometric().catch(() => {})}>
+            <Btn
+              variant="ghost"
+              full
+              disabled={busy}
+              // Cancel resolves false (silent — password entry remains); a real
+              // rejection is shown like a failed password unlock would be.
+              onPress={() => {
+                setErr(null);
+                void ctx.unlockBiometric().catch((e: unknown) => setErr(formatError(e)));
+              }}
+            >
               <Icon name="lock" size={15} color={colors.fgMuted} />
               <Text style={styles.bioText}>Use biometrics</Text>
             </Btn>

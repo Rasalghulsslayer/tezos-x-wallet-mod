@@ -3,9 +3,11 @@
  * evicts cached Containers (live signers holding plaintext key material) for
  * us the way MV3 service-worker death does for the extension. Locking must
  * therefore drop every reference to a Container synchronously: the container
- * cache, the warm active-container slot, and the alias caches. These tests pin
- * that contract with a real ContainerCache and a fake Container standing in
- * for a signer that holds key material.
+ * cache and the warm active-container slot. These tests pin that contract
+ * with a real ContainerCache and a fake Container standing in for a signer
+ * that holds key material. The EVM alias cache is the deliberate exception:
+ * it holds an immutable public mapping, not key material, and must survive
+ * lock so a relock → unlock cycle stays offline-capable.
  *
  * Honest limit: JS strings cannot be zeroized in place, so "no key material
  * referenced" means unreachable-then-GC'd, not overwritten. The keyring's own
@@ -16,6 +18,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ContainerCache } from '@tezosx/wallet-core/composition/container-cache';
+import { EvmAliasCache } from '@tezosx/wallet-core/shared/evm-alias-cache';
 import type { Container } from '@tezosx/wallet-core/ports/container';
 
 const h = vi.hoisted(() => {
@@ -27,25 +30,28 @@ const h = vi.hoisted(() => {
     containerCache: null as unknown, // a real ContainerCache, injected per test
     rebuildContainer: vi.fn(async () => {}),
     broadcastEvent: vi.fn(async () => {}),
-    state: { container: null as Container | null, evmAlias: null as string | null },
+    state: { container: null as Container | null },
     persistentPorts: {},
   };
-  return { keyring, approvalQueue, deps, evmAliasCache: { value: null as string | null } };
+  return { keyring, approvalQueue, deps, evmAliasCache: null as unknown };
 });
 
-vi.mock('../../composition/wiring', () => ({
-  keyring: h.keyring,
-  tokenStore: {},
-  unlockSecret: {},
-  evmAliasCache: h.evmAliasCache,
-  deps: h.deps,
-  approvalQueue: h.approvalQueue,
-  sessionStore: {},
-}));
+vi.mock('../../composition/wiring', async () => {
+  const { EvmAliasCache } = await import('@tezosx/wallet-core/shared/evm-alias-cache');
+  h.evmAliasCache = new EvmAliasCache();
+  return {
+    keyring: h.keyring,
+    tokenStore: {},
+    unlockSecret: {},
+    evmAliasCache: h.evmAliasCache,
+    deps: h.deps,
+    approvalQueue: h.approvalQueue,
+    sessionStore: {},
+  };
+});
 vi.mock('../../composition/approval-ui', () => ({
   approvalUi: { get: () => null, subscribe: () => () => {} },
 }));
-vi.mock('../../composition/read-state', () => ({ readState: vi.fn() }));
 vi.mock('../../composition/walletconnect-connect', () => ({
   startWalletConnect: vi.fn(),
   connect: vi.fn(),
@@ -57,6 +63,9 @@ vi.mock('../../transport/walletconnect', () => ({
 }));
 
 import { lockWallet, resolveTx } from '../vault-actions';
+
+// The real EvmAliasCache instance, installed by the wiring mock factory above.
+const aliasCache = h.evmAliasCache as EvmAliasCache;
 
 /** Stands in for a wired Container: the signer field is the key-material holder. */
 function fakeContainer(secret: string): Container {
@@ -73,8 +82,8 @@ describe('lockWallet', () => {
     cache.put('acc-b', fakeContainer('edsk-b'));
     h.deps.containerCache = cache;
     h.deps.state.container = fakeContainer('edsk-a');
-    h.deps.state.evmAlias = '0xSomeAlias';
-    h.evmAliasCache.value = '0xSomeAlias';
+    aliasCache.clear();
+    aliasCache.set('tz1ActiveAccount', '0xSomeAlias');
   });
 
   it('locks the keyring and flushes pending approvals', () => {
@@ -92,13 +101,17 @@ describe('lockWallet', () => {
 
     // Every composition-level reference a caller could follow to a signer is
     // gone before lockWallet returns: the cache no longer resolves any
-    // account, the warm container slot and both alias caches are nulled.
+    // account and the warm container slot is nulled.
     expect(cache.size()).toBe(0);
     expect(cache.get('acc-a')).toBeUndefined();
     expect(cache.get('acc-b')).toBeUndefined();
     expect(h.deps.state.container).toBeNull();
-    expect(h.deps.state.evmAlias).toBeNull();
-    expect(h.evmAliasCache.value).toBeNull();
+  });
+
+  it('keeps the alias cache — a public mapping, so relock → unlock stays offline-capable', () => {
+    lockWallet();
+
+    expect(aliasCache.get('tz1ActiveAccount')).toBe('0xSomeAlias');
   });
 
   it('drops the warm container in the same tick, not on a scheduled rebuild', () => {

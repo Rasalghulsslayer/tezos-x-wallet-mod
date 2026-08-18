@@ -16,7 +16,6 @@ import {
 } from '../shared/seed';
 import { deriveEvmAccount, deriveEvmFromMnemonic } from '../shared/evm-signing/index';
 import { isValidEdsk, isValidMnemonic } from '../domain/validation';
-import { deriveEvmAlias } from '@tezosx/relayer/utils/derive';
 import type { Account, AccountId, EvmAccount, TezosAccount, AccountSummary, AddAccountSource } from '../domain/account';
 import {
   type AccountSecret,
@@ -493,22 +492,29 @@ export class Keyring {
     return { account, secretKey };
   }
 
-  async listAccountSummaries(): Promise<AccountSummary[]> {
+  /**
+   * Pure, synchronous projection of the vault's accounts. Deliberately
+   * network-free: the keyring owns session and secret state only, so the EVM
+   * alias of a tz1 account (a public read-model resolved over RPC) is NOT
+   * populated here — getState decorates `secondaryAddress` from the
+   * EvmAliasCache. Gating this projection on the network was what made
+   * unlock fail offline.
+   */
+  listAccountSummaries(): AccountSummary[] {
     const secrets = this.unlocked?.payload.secrets ?? {};
     const indexOf = (id: AccountId): number | undefined => {
       const secret = secrets[id];
       return secret?.kind === 'derived' ? secret.index : undefined;
     };
-    return Promise.all(this.listAccounts().map(async (a) => {
+    return this.listAccounts().map((a) => {
       if (a.kind === 'tezos') {
         return {
-          id:               a.id,
-          kind:             a.kind,
-          label:            a.label,
-          primaryAddress:   a.tz1,
-          secondaryAddress: await deriveEvmAlias(a.tz1),
-          createdAt:        a.createdAt,
-          derivationIndex:  indexOf(a.id),
+          id:              a.id,
+          kind:            a.kind,
+          label:           a.label,
+          primaryAddress:  a.tz1,
+          createdAt:       a.createdAt,
+          derivationIndex: indexOf(a.id),
         } satisfies AccountSummary;
       }
       return {
@@ -519,7 +525,7 @@ export class Keyring {
         createdAt:       a.createdAt,
         derivationIndex: indexOf(a.id),
       } satisfies AccountSummary;
-    }));
+    });
   }
 
   private async initialiseVault(

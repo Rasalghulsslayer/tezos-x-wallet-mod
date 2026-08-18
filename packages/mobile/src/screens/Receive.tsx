@@ -20,7 +20,11 @@ export function Receive(_props: { params?: Record<string, unknown> } = {}): Reac
   const acc = ctx.activeAccount;
   const isEvm = acc.kind === 'evm';
   const [runtime, setRuntime] = useState<'l1' | 'l2'>('l1');
-  const addr = (isEvm ? acc.address : runtime === 'l1' ? acc.tz1 : acc.evmAlias) ?? '';
+  // null only on the l2 face of a tz1 account while its kernel alias is still
+  // resolving: nothing truthful can be shown or copied yet, so the QR and copy
+  // are withheld rather than encoding an empty/false deposit address.
+  const addr: string | null = (isEvm ? acc.address : runtime === 'l1' ? acc.tz1 : acc.evmAlias) ?? null;
+  const resolving = addr == null;
 
   return (
     <View style={styles.screen}>
@@ -32,17 +36,19 @@ export function Receive(_props: { params?: Record<string, unknown> } = {}): Reac
           </View>
         )}
 
-        <QrCode value={addr} />
+        <QrCode value={addr ?? ''} />
 
         <View style={styles.addrBlock}>
           <Text style={styles.kicker}>
             {isEvm ? 'EVM address' : runtime === 'l1' ? 'tz1 address' : '0x address'}
           </Text>
-          <Text style={styles.addr}>{addr}</Text>
+          {resolving
+            ? <Text style={styles.resolving}>Resolving EVM address…</Text>
+            : <Text style={styles.addr}>{addr}</Text>}
         </View>
 
         <View style={styles.actions}>
-          <Btn variant="outline" full onPress={() => ctx.copy(addr)}>
+          <Btn variant="outline" full disabled={resolving} onPress={() => { if (addr != null) ctx.copy(addr); }}>
             <Icon name="copy" size={15} color={colors.fg} />
             <Text style={styles.copyLabel}>Copy</Text>
           </Btn>
@@ -80,6 +86,13 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     paddingHorizontal: 12,
     letterSpacing: -0.1,
+  },
+  resolving: {
+    fontSize: fontSize.sm,
+    color: colors.fgMuted,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    lineHeight: 22,
   },
   actions: { flexDirection: 'row', gap: 10, marginTop: 20, width: '100%' },
   copyLabel: { fontSize: fontSize.md, fontWeight: '600', color: colors.fg },

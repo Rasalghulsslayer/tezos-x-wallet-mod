@@ -22,6 +22,11 @@ describe('summaryToView', () => {
     const s: AccountSummary = { id: 'a3', kind: 'tezos', label: '   ', primaryAddress: 'tz1x', createdAt: 0 };
     expect(summaryToView(s).label).toBe('');
   });
+
+  it('maps a missing secondaryAddress to a null alias (still resolving) — never a sentinel string', () => {
+    const s: AccountSummary = { id: 'a4', kind: 'tezos', primaryAddress: 'tz1unresolved', createdAt: 5 };
+    expect(summaryToView(s).evmAlias).toBeNull();
+  });
 });
 
 describe('activeToView', () => {
@@ -41,5 +46,13 @@ describe('activeToView', () => {
       accounts: [{ id: 'a2', kind: 'evm', primaryAddress: '0xevm', createdAt: 20 }],
     };
     expect(activeToView(state)).toMatchObject({ id: 'a2', kind: 'evm', address: '0xevm', identitySeed: '0xevm' });
+  });
+
+  it('carries a still-null alias through untouched (offline / first unlock)', () => {
+    const state: VaultStateUnlocked = {
+      status: 'unlocked', kind: 'tezos', accountId: 'a1', tz1: 'tz1abc', evmAlias: null,
+      accounts: [{ id: 'a1', kind: 'tezos', primaryAddress: 'tz1abc', createdAt: 10 }],
+    };
+    expect(activeToView(state).evmAlias).toBeNull();
   });
 });

@@ -13,6 +13,7 @@ import { ApprovalQueue } from '@tezosx/wallet-core/approval-queue';
 import { ContainerCache } from '@tezosx/wallet-core/composition/container-cache';
 import { ensureContainerFor } from '@tezosx/wallet-core/composition/container-builder';
 import type { SwState, SwDeps } from '@tezosx/wallet-core/composition/sw-wiring';
+import { EvmAliasCache } from '@tezosx/wallet-core/shared/evm-alias-cache';
 import type { PersistentPorts } from '@tezosx/wallet-core/ports/container';
 import type { ContentPush } from '@tezosx/wallet-core/shared/messages';
 import { QuickCryptoPort } from '../adapters/quick-crypto-port';
@@ -38,9 +39,11 @@ export const unlockSecret  = new KeychainUnlockSecret();
 
 export const keyring = new Keyring(vaultStore, cryptoPort, new MmkvUnlockGuardStore(mmkv));
 
-/** Mutable holder for the resolved EVM alias, mirroring the SW's evmAliasCache
- *  (getState fills it on the first unlocked read). Cleared on lock. */
-export const evmAliasCache: { value: string | null } = { value: null };
+/** tz1 → EVM alias entries, mirroring the extension SW's cache. In-memory
+ *  (rebuilt by the background backfill after an app restart); survives lock —
+ *  aliases are immutable public mappings, not key material — and is cleared
+ *  on wallet reset. */
+export const evmAliasCache = new EvmAliasCache();
 
 // ── dApp routing composition (SwDeps) ─────────────────────────────────────────
 // The same shape the extension service worker builds, so the WalletConnect
@@ -60,7 +63,7 @@ export const approvalPresenter = new MobileApprovalPresenter();
 export const approvalQueue     = new ApprovalQueue(notifications, approvalPresenter);
 const containerCache           = new ContainerCache();
 
-const state: SwState = { container: null, evmAlias: null };
+const state: SwState = { container: null };
 
 async function broadcastEvent(push: ContentPush): Promise<void> {
   await emitProviderEvent(push);
@@ -73,7 +76,6 @@ async function rebuildContainer(): Promise<void> {
   const unlocked = keyring.getUnlocked();
   if (unlocked == null) {
     state.container = null;
-    state.evmAlias  = null;
     return;
   }
   state.container = await ensureContainerFor(unlocked.account.id, {
@@ -89,6 +91,7 @@ export const deps: SwDeps = {
   approvalQueue,
   persistentPorts,
   state,
+  aliasCache: evmAliasCache,
   containerCache,
   rebuildContainer,
   broadcastEvent,

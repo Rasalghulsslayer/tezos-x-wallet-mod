@@ -1,17 +1,20 @@
 /**
  * getState: produces the current VaultState (empty / locked / unlocked-tezos
- * / unlocked-evm) for the popup. Resolves the EVM alias on first call after
- * a Tezos-account unlock and caches it via deps.evmAliasCache. Returns the
- * full accounts summary list so the popup can render the switcher.
+ * / unlocked-evm) for the shells. Deliberately network-free: unlocking is a
+ * local vault decrypt and its state read must never be gated on an RPC. The
+ * EVM alias of a tz1 account is an immutable kernel mapping resolved in the
+ * background (EvmAliasCache.backfill, kicked by the shells / sw-wiring);
+ * until it lands the state carries `evmAlias: null` and summaries without
+ * `secondaryAddress`, and the UI renders a resolving placeholder.
  */
 
-import { deriveEvmAlias } from '@tezosx/relayer/utils/derive';
 import type { Keyring } from '../background/keyring';
 import type { VaultState } from '../shared/messages';
+import type { EvmAliasCache } from '../shared/evm-alias-cache';
 
 export interface GetStateDeps {
-  keyring:       Keyring;
-  evmAliasCache: { value: string | null };
+  keyring:    Keyring;
+  aliasCache: EvmAliasCache;
 }
 
 export async function getState(deps: GetStateDeps): Promise<VaultState> {
@@ -22,27 +25,26 @@ export async function getState(deps: GetStateDeps): Promise<VaultState> {
   if (unlocked == null) return { status: 'locked' };
 
   const { account } = unlocked;
-  const summaries   = (await deps.keyring.listAccountSummaries())
-    .slice()
+  const summaries   = deps.keyring.listAccountSummaries()
+    .map((s) => s.kind === 'tezos'
+      ? { ...s, secondaryAddress: deps.aliasCache.get(s.primaryAddress) ?? undefined }
+      : s)
     .sort((a, b) => a.createdAt - b.createdAt);
 
   const hasSeed = deps.keyring.hasWalletSeed();
 
   if (account.kind === 'tezos') {
-    const alias = deps.evmAliasCache.value ?? await deriveEvmAlias(account.tz1);
-    deps.evmAliasCache.value = alias;
     return {
       status:    'unlocked',
       kind:      'tezos',
       accountId: account.id,
       tz1:       account.tz1,
-      evmAlias:  alias,
+      evmAlias:  deps.aliasCache.get(account.tz1),
       accounts:  summaries,
       hasSeed,
     };
   }
 
-  deps.evmAliasCache.value = account.address;
   return {
     status:    'unlocked',
     kind:      'evm',

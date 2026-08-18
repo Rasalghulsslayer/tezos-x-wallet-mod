@@ -18,6 +18,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { EvmAliasCache } from '@tezosx/wallet-core/shared/evm-alias-cache';
 import type { Container } from '@tezosx/wallet-core/ports/container';
 
 const h = vi.hoisted(() => {
@@ -39,28 +40,31 @@ const h = vi.hoisted(() => {
     containerCache: { clear: vi.fn(), evict: vi.fn() },
     rebuildContainer: vi.fn(async () => {}),
     broadcastEvent: vi.fn(async () => {}),
-    state: { container: null as Container | null, evmAlias: null as string | null },
+    state: { container: null as Container | null },
     persistentPorts: {},
   };
   return {
     keyring, unlockSecret, sessionStore, tokenStore, deps,
-    evmAliasCache: { value: null as string | null },
+    evmAliasCache: null as unknown,
   };
 });
 
-vi.mock('../../composition/wiring', () => ({
-  keyring: h.keyring,
-  tokenStore: h.tokenStore,
-  unlockSecret: h.unlockSecret,
-  evmAliasCache: h.evmAliasCache,
-  deps: h.deps,
-  approvalQueue: h.deps.approvalQueue,
-  sessionStore: h.sessionStore,
-}));
+vi.mock('../../composition/wiring', async () => {
+  const { EvmAliasCache } = await import('@tezosx/wallet-core/shared/evm-alias-cache');
+  h.evmAliasCache = new EvmAliasCache();
+  return {
+    keyring: h.keyring,
+    tokenStore: h.tokenStore,
+    unlockSecret: h.unlockSecret,
+    evmAliasCache: h.evmAliasCache,
+    deps: h.deps,
+    approvalQueue: h.deps.approvalQueue,
+    sessionStore: h.sessionStore,
+  };
+});
 vi.mock('../../composition/approval-ui', () => ({
   approvalUi: { get: () => null, subscribe: () => () => {} },
 }));
-vi.mock('../../composition/read-state', () => ({ readState: vi.fn() }));
 vi.mock('../../composition/walletconnect-connect', () => ({
   startWalletConnect: vi.fn(),
   connect: vi.fn(),
@@ -73,8 +77,12 @@ vi.mock('../../transport/walletconnect', () => ({
 
 import { changePassword, resetWallet } from '../vault-actions';
 
+// The real EvmAliasCache instance, installed by the wiring mock factory above.
+const aliasCache = h.evmAliasCache as EvmAliasCache;
+
 beforeEach(() => {
   vi.clearAllMocks();
+  aliasCache.clear();
 });
 
 describe('changePassword — biometrics after a password change', () => {
@@ -121,8 +129,7 @@ describe('changePassword — biometrics after a password change', () => {
 describe('resetWallet — the forgot-password recovery path', () => {
   beforeEach(() => {
     h.deps.state.container = { signer: {} } as unknown as Container;
-    h.deps.state.evmAlias  = '0xSomeAlias';
-    h.evmAliasCache.value  = '0xSomeAlias';
+    aliasCache.set('tz1WipedAccount', '0xSomeAlias');
   });
 
   it('wipes the keyring and clears sessions + token registries', async () => {
@@ -144,9 +151,15 @@ describe('resetWallet — the forgot-password recovery path', () => {
 
     expect(h.deps.containerCache.clear).toHaveBeenCalledTimes(1);
     expect(h.deps.state.container).toBeNull();
-    expect(h.deps.state.evmAlias).toBeNull();
-    expect(h.evmAliasCache.value).toBeNull();
     expect(h.deps.approvalQueue.rejectAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops the alias cache — the tz1s it is keyed by no longer exist', async () => {
+    // Unlike lock (where the cache survives), reset erases the accounts the
+    // entries belong to, so the mapping must go with them.
+    await resetWallet();
+
+    expect(aliasCache.get('tz1WipedAccount')).toBeNull();
   });
 
   it('a wipe failure propagates before anything platform-side is touched', async () => {

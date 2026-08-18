@@ -14,6 +14,7 @@ import { accountCardVM } from '@tezosx/wallet-core/view-models/account-card-vm';
 import { TopBar } from '../../tx/TopBar';
 import { BottomTabs } from '../../tx/BottomTabs';
 import { AccountCard } from '../../tx/AccountCard';
+import { RESOLVING_EVM_ADDRESS } from '../../tx/utils';
 import { LinkRow } from './LinkRow';
 import { RevealPicker } from './RevealPicker';
 import { RevealView } from './RevealView';
@@ -113,12 +114,7 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
           />
         ) : (
           <>
-            <LinkRow
-              icon="globe"
-              t="Blockscout (EVM)"
-              sub="EVM explorer · alias"
-              onClick={() => { window.open(`${EVM_EXPLORER}/address/${state.evmAlias}`, '_blank'); }}
-            />
+            <BlockscoutAliasRow alias={state.evmAlias} />
             <LinkRow
               icon="globe"
               t="tzkt (Michelson runtime)"
@@ -221,5 +217,21 @@ export function Settings({ state, onLock }: { state: VaultState; onLock: () => v
 
       <BottomTabs />
     </div>
+  );
+}
+
+/**
+ * Explorer link for the tz1 account's EVM alias. While the alias backfill has
+ * not landed (null), the row stays visible but inert with the resolving
+ * placeholder as its subtitle — no explorer URL can be built yet.
+ */
+function BlockscoutAliasRow({ alias }: { alias: string | null }) {
+  return (
+    <LinkRow
+      icon="globe"
+      t="Blockscout (EVM)"
+      sub={alias == null ? RESOLVING_EVM_ADDRESS : 'EVM explorer · alias'}
+      onClick={alias == null ? undefined : () => { window.open(`${EVM_EXPLORER}/address/${alias}`, '_blank'); }}
+    />
   );
 }

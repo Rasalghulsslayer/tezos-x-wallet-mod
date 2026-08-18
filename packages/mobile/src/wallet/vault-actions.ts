@@ -33,9 +33,9 @@ import type { Contact } from '@tezosx/wallet-core/domain/contact';
 import type { StoredSession } from '@tezosx/wallet-core/ports/session-store';
 import type { Container } from '@tezosx/wallet-core/ports/container';
 import { TEZLINK_EVM_RPC } from '@tezosx/relayer/constants';
+import { deriveEvmAlias } from '@tezosx/relayer/utils/derive';
 import { keyring, tokenStore, unlockSecret, evmAliasCache, deps, approvalQueue, sessionStore } from '../composition/wiring';
 import { approvalUi } from '../composition/approval-ui';
-import { readState } from '../composition/read-state';
 import { startWalletConnect, connect as wcConnect } from '../composition/walletconnect-connect';
 import {
   listSessions as listWcSessions,
@@ -43,9 +43,30 @@ import {
   subscribeSessions as subscribeWcSessions,
 } from '../transport/walletconnect';
 
-/** Network-free boot read: empty → onboarding, locked, or (rehydrated) unlocked. */
+/** Network-free boot read: empty → onboarding, locked, or (rehydrated) unlocked.
+ *  getState reads only the keyring and the in-memory alias cache, so this never
+ *  blocks on (or fails from) the network. */
 export function bootState(): Promise<VaultState> {
-  return readState();
+  return getState({ keyring, aliasCache: evmAliasCache });
+}
+
+/**
+ * Fire-and-forget resolution of the missing tz1 → alias entries, mirroring the
+ * extension SW's kick after every state read. Single-flight inside the cache:
+ * concurrent kicks share one run instead of stacking RPCs. Failures are
+ * swallowed by the cache — the entry stays missing and the next kick retries —
+ * so an offline unlock costs nothing and heals when the network returns.
+ * `onResolved` fires only when at least one new alias landed, letting the
+ * caller push the resolved alias to the UI without user action.
+ */
+export function kickAliasBackfill(onResolved?: () => void): void {
+  const tz1s = keyring.listAccounts()
+    .filter((a) => a.kind === 'tezos')
+    .map((a) => a.tz1);
+  if (tz1s.length === 0) return;
+  void evmAliasCache.backfill(tz1s, deriveEvmAlias).then((changed) => {
+    if (changed) onResolved?.();
+  });
 }
 
 /** True when a password is sealed behind biometrics and the hardware is usable. */
@@ -56,13 +77,20 @@ export async function biometricsAvailable(): Promise<boolean> {
 /**
  * Shared tail once the keyring is unlocked (by unlock/create/import): seal the
  * password behind biometrics (best-effort), warm the active-account container,
- * boot WalletConnect, and resolve the full unlocked state (alias + summaries).
+ * boot WalletConnect, kick the alias backfill, and resolve the unlocked state.
+ *
+ * NOTHING here may reject once the vault decrypt succeeded: the keyring is
+ * already unlocked in memory, so a rejecting tail would leave the React view
+ * on 'locked' — and auto-lock (armed by the unlocked view) never engages while
+ * signing keys sit reachable in memory. Every step is therefore best-effort;
+ * the container is rebuilt lazily on the next read/send if the warm fails.
  */
 async function afterUnlocked(password: string): Promise<VaultState> {
   await unlockSecret.seal(password).catch(() => { /* no biometry hardware → password-only */ });
-  await deps.rebuildContainer();
+  await deps.rebuildContainer().catch(() => { /* rebuilt lazily on next read/send */ });
   void startWalletConnect().catch(() => { /* WC boot is best-effort */ });
-  return getState({ keyring, evmAliasCache });
+  kickAliasBackfill();
+  return getState({ keyring, aliasCache: evmAliasCache });
 }
 
 export async function unlockWithPassword(password: string): Promise<VaultState> {
@@ -94,15 +122,15 @@ export function lockWallet(): void {
   // evicts these for us. The cached Containers hold live signers with
   // plaintext key material (and Taquito's InMemorySigner keeps its own
   // internal copy), so lock must drop every reference synchronously, exactly
-  // as the extension's LOCK handler does: the cache, the warm active
-  // container, and the alias caches. Scheduling the drop (a rebuild) instead
-  // would leave a window where a caller can still reach the dead container
-  // after lock returns. JS strings can't be zeroized, so unreachability —
-  // then GC — is the strongest guarantee available here.
+  // as the extension's LOCK handler does: the cache and the warm active
+  // container. Scheduling the drop (a rebuild) instead would leave a window
+  // where a caller can still reach the dead container after lock returns. JS
+  // strings can't be zeroized, so unreachability — then GC — is the strongest
+  // guarantee available here. The EVM alias cache deliberately SURVIVES lock:
+  // it holds an immutable public mapping, not key material, and keeping it
+  // makes a relock → unlock cycle offline-capable.
   deps.containerCache.clear();
   deps.state.container = null;
-  deps.state.evmAlias  = null;
-  evmAliasCache.value  = null;
 }
 
 /**
@@ -139,8 +167,9 @@ export async function resetWallet(): Promise<void> {
   deps.approvalQueue.rejectAll('wallet reset');
   deps.containerCache.clear();
   deps.state.container = null;
-  deps.state.evmAlias  = null;
-  evmAliasCache.value  = null;
+  // Reset is the one place the alias cache is dropped: the tz1s it is keyed by
+  // no longer exist. Lock keeps it (public mapping, offline relock → unlock).
+  evmAliasCache.clear();
   await unlockSecret.clear();
 }
 
@@ -152,15 +181,15 @@ export interface AddAccountOutcome {
 /**
  * Add an account to the already-unlocked vault, then make it active. Mirrors the
  * extension's ADD_ACCOUNT → SET_ACTIVE_ACCOUNT sequencing: the use-case does not
- * auto-activate, so we set-active, drop the cached alias (it must re-resolve for
- * the new account), warm its container, and return the refreshed state. The
- * caller reveals `result.secret` for a freshly generated account.
+ * auto-activate, so we set-active, kick the alias backfill (a new tz1's alias is
+ * unknown until it resolves), warm the container, and return the refreshed
+ * state. The caller reveals `result.secret` for a freshly generated account.
  */
 export async function addAccount(req: AddAccountReq): Promise<AddAccountOutcome> {
   const result = await addAccountUseCase(req, { keyring, tokenStore });
   await setActiveAccount({ accountId: result.accountId }, { keyring });
-  evmAliasCache.value = null;
-  const state = await getState({ keyring, evmAliasCache });
+  kickAliasBackfill();
+  const state = await getState({ keyring, aliasCache: evmAliasCache });
   // Warm the new account's container in the background — creation must not block
   // (or fail) on it; read/send paths rebuild it lazily when needed.
   void deps.rebuildContainer().catch(() => { /* rebuilt lazily on next read/send */ });
@@ -186,10 +215,11 @@ export async function removeAccount(accountId: string, password: string): Promis
   deps.containerCache.evict(accountId);
   await Promise.all(orphaned.map((s) => disconnectDapp(s.origin).catch(() => { /* best-effort */ })));
   if (wasActive) {
-    evmAliasCache.value = null;
+    // The alias cache needs no invalidation: it is keyed by tz1, and the
+    // replacement account's entry (if resolved) is still valid.
     await deps.rebuildContainer();
   }
-  return getState({ keyring, evmAliasCache });
+  return getState({ keyring, aliasCache: evmAliasCache });
 }
 
 function activeAccountId(): string {

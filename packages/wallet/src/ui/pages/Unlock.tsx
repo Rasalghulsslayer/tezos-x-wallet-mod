@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { sendPopupRequest } from '@/shared/messaging';
-import { formatError } from '@tezosx/wallet-core/domain/error';
+import { formatError, isAuthError } from '@tezosx/wallet-core/domain/error';
 import { Button } from '../tx/Button';
 import { ErrorCard } from '../tx/ErrorCard';
 import { ErrorInline } from '../tx/ErrorInline';
@@ -33,7 +33,9 @@ export function Unlock({ onDone }: { onDone: () => void }) {
       navigate('/', { replace: true });
     } catch (e) {
       setErr(e);
-      setPwd('');
+      // Clear the field only when the credential itself was refused; wiping it
+      // on a network or internal failure reads as "wrong password".
+      if (isAuthError(e)) setPwd('');
     } finally {
       setLd(false);
     }

@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import type { VaultState } from '@tezosx/wallet-core/shared/messages';
 import { sendPopupRequest, SW_SESSION_LOST_EVENT } from '../shared/messaging';
-import { makeError } from '@tezosx/wallet-core/domain/error';
+import { makeError, formatError } from '@tezosx/wallet-core/domain/error';
+import { startPoller } from '@tezosx/wallet-core/shared/poller';
 import { Welcome }     from './pages/Welcome';
 import { Create }      from './pages/Create';
 import { Import }      from './pages/Import';
@@ -20,6 +21,15 @@ import { Contacts }    from './pages/Contacts';
 import { ToastHost }   from './tx/Toast';
 import { ExperimentalBanner } from './tx/ExperimentalBanner';
 import { FatalScreen } from './tx/FatalScreen';
+import { ErrorCard }   from './tx/ErrorCard';
+import { Button }      from './tx/Button';
+
+// Cadence of the GET_STATE re-poll while the active tz1 account's EVM alias is
+// still resolving: the SW backfills in the background with no push channel to
+// the popup, so the Gate polls until the alias lands (or gives up quietly —
+// the next natural refresh picks it up).
+const ALIAS_POLL_MS         = 1_500;
+const ALIAS_POLL_TIMEOUT_MS = 60_000;
 
 export function App() {
   return (
@@ -35,19 +45,40 @@ export function App() {
 
 function Gate() {
   const [state, setState] = useState<VaultState | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
   const navigate          = useNavigate();
 
   const refresh = async () => {
     try {
       const s = await sendPopupRequest<VaultState>({ type: 'GET_STATE' });
       setState(s);
+      setError(null);
     } catch (e) {
-      setError((e as Error).message);
+      // Keep the Error object: its numeric `code` (when present) is what
+      // distinguishes "the SW answered with a failure" from "the SW is dead".
+      setError(e instanceof Error ? e : new Error(String(e)));
     }
   };
 
   useEffect(() => { void refresh(); }, []);
+
+  // The active tz1 account's EVM alias resolves through a background backfill
+  // in the SW, with no push channel back to the popup. Re-poll GET_STATE until
+  // the alias lands, the state leaves unlocked-tezos, or the poll times out.
+  const aliasResolving =
+    state != null && state.status === 'unlocked' && state.kind === 'tezos' && state.evmAlias === null;
+
+  useEffect(() => {
+    if (!aliasResolving) return;
+    const handle = startPoller<VaultState>({
+      intervalMs: ALIAS_POLL_MS,
+      timeoutMs:  ALIAS_POLL_TIMEOUT_MS,
+      fetch:      () => sendPopupRequest<VaultState>({ type: 'GET_STATE' }),
+      onUpdate:   setState,
+      isDone:     (s) => !(s.status === 'unlocked' && s.kind === 'tezos' && s.evmAlias === null),
+    });
+    return () => handle.stop();
+  }, [aliasResolving]);
 
   // The SW restarts on its own schedule (MV3 idle eviction, long-running calls
   // like cross-runtime sign + resolve). When it comes back its keyring is
@@ -74,7 +105,22 @@ function Gate() {
   }, [state?.status]);
 
   if (error != null) {
-    return <FatalScreen error={makeError('sw-unreachable')} onReload={() => window.location.reload()} />;
+    // A numeric `code` on the rejection means the SW answered — it is alive,
+    // the request itself failed (e.g. 4900 while the network is down). That is
+    // retryable, not fatal: FatalScreen's "service worker unreachable"
+    // diagnosis is reserved for rejections with no code (transport failure).
+    const code = (error as Error & { code?: unknown }).code;
+    if (typeof code !== 'number') {
+      return <FatalScreen error={makeError('sw-unreachable')} onReload={() => window.location.reload()} />;
+    }
+    return (
+      <div className="tx-page" style={{ padding: 16, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 12 }}>
+        <ErrorCard error={formatError(error)} />
+        <Button variant="accent" full onClick={() => void refresh()}>
+          Retry
+        </Button>
+      </div>
+    );
   }
 
   if (state == null) {

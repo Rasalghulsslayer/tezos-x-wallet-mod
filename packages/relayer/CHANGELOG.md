@@ -6,6 +6,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.7.1] — 2026-08-18
+
+### Fixed
+- The `RelayerProvider` constructor's best-effort session restore (active
+  account → alias → chain id) and the account-change alias resolution now
+  carry rejection handlers. Without network, every provider construction
+  previously fired an unhandled promise rejection; the session now simply
+  stays unset and is re-established by the next request.
+
 ## [0.7.0] — 2026-07-12
 
 ### Added

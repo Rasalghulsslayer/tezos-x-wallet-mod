@@ -57,11 +57,12 @@ import { listContacts }            from '../use-cases/list-contacts';
 import { changePassword }          from '../use-cases/change-password';
 import { resetWallet }             from '../use-cases/reset-wallet';
 import { TEZLINK_EVM_RPC }         from '@tezosx/relayer/constants';
+import { deriveEvmAlias }          from '@tezosx/relayer/utils/derive';
+import type { EvmAliasCache }      from '../shared/evm-alias-cache';
 import { buildTezosToEvmCall, UnknownSelectorError, SubMutezPrecisionError, InvalidDestinationError } from '@tezosx/relayer/use-cases/build-tezos-to-evm-call';
 
 export interface SwState {
   container: Container | null;
-  evmAlias:  string | null;
 }
 
 export interface SwDeps {
@@ -69,9 +70,28 @@ export interface SwDeps {
   approvalQueue:    ApprovalQueue;
   persistentPorts:  PersistentPorts;
   state:            SwState;
+  // tz1 → alias entries survive lock (immutable public mapping, not key
+  // material) so a relock → unlock cycle stays offline-capable. Cleared on
+  // wallet reset only.
+  aliasCache:       EvmAliasCache;
   containerCache:   ContainerCache;
   rebuildContainer: () => Promise<void>;
   broadcastEvent:   (push: ContentPush) => Promise<void>;
+}
+
+/**
+ * Fire-and-forget resolution of the missing tz1 → alias entries. Runs after
+ * the state answer is already on its way — the popup is never gated on the
+ * network — and single-flights inside the cache. The shells re-poll GET_STATE
+ * while an alias is still null, so a completed backfill reaches the UI on the
+ * next poll without needing a push channel.
+ */
+function kickAliasBackfill(deps: SwDeps): void {
+  const tz1s = deps.keyring.listAccounts()
+    .filter((a) => a.kind === 'tezos')
+    .map((a) => a.tz1);
+  if (tz1s.length === 0) return;
+  void deps.aliasCache.backfill(tz1s, deriveEvmAlias);
 }
 
 const EIP_UNAUTHORIZED       = 4100;
@@ -118,23 +138,25 @@ export async function dispatch(
 // ── Popup dispatch ────────────────────────────────────────────────────────────
 
 async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<WalletResponse> {
-  const aliasCache = { value: deps.state.evmAlias };
-  const stateDeps  = { keyring: deps.keyring, evmAliasCache: aliasCache };
+  const stateDeps = { keyring: deps.keyring, aliasCache: deps.aliasCache };
+  // Callers must `return await refreshState()` (not bare `return`): inside the
+  // try block, only an awaited rejection reaches the catch-all envelope — a
+  // returned promise would escape dispatch entirely, unenveloped.
   const refreshState = async (): Promise<WalletResponse> => {
     const data = await getState(stateDeps);
-    deps.state.evmAlias = aliasCache.value;
+    kickAliasBackfill(deps);
     return { ok: true, data };
   };
 
   try {
     switch (msg.type) {
       case 'GET_STATE':
-        return refreshState();
+        return await refreshState();
 
       case 'CREATE_WALLET': {
         await createAccount({ mnemonic: msg.mnemonic, password: msg.password }, { keyring: deps.keyring });
         await deps.rebuildContainer();
-        return refreshState();
+        return await refreshState();
       }
 
       case 'IMPORT_WALLET': {
@@ -143,7 +165,7 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
           { keyring: deps.keyring },
         );
         await deps.rebuildContainer();
-        return refreshState();
+        return await refreshState();
       }
 
       case 'IMPORT_SECRET_KEY': {
@@ -152,7 +174,7 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
           { keyring: deps.keyring },
         );
         await deps.rebuildContainer();
-        return refreshState();
+        return await refreshState();
       }
 
       case 'IMPORT_EVM_PRIVKEY': {
@@ -161,19 +183,21 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
           { keyring: deps.keyring },
         );
         await deps.rebuildContainer();
-        return refreshState();
+        return await refreshState();
       }
 
       case 'UNLOCK': {
         await unlockVault({ password: msg.password }, { keyring: deps.keyring, tokenStore: deps.persistentPorts.tokenStore });
         await deps.rebuildContainer();
-        return refreshState();
+        return await refreshState();
       }
 
       case 'LOCK': {
         lockVault({ keyring: deps.keyring, approvalQueue: deps.approvalQueue });
         deps.state.container = null;
-        deps.state.evmAlias  = null;
+        // deps.aliasCache deliberately survives lock: aliases are immutable
+        // public mappings, and keeping them lets a relock → unlock cycle
+        // complete fully offline.
         deps.containerCache.clear();
         return { ok: true };
       }
@@ -254,25 +278,23 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
         // operation must not disclose or re-point another origin's account.
         await disconnectRemovedAccountSessions(msg.accountId, deps);
         if (wasActive) {
-          aliasCache.value = null;
           await deps.rebuildContainer();
-          return refreshState();
+          return await refreshState();
         }
-        return refreshState();
+        return await refreshState();
       }
 
       case 'SET_ACTIVE_ACCOUNT': {
         const unlocked = deps.keyring.getUnlocked();
         if (unlocked == null) return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
-        if (unlocked.account.id === msg.accountId) return refreshState();
+        if (unlocked.account.id === msg.accountId) return await refreshState();
         await setActiveAccount({ accountId: msg.accountId }, { keyring: deps.keyring });
-        aliasCache.value = null;
         await deps.rebuildContainer();
         // No accountsChanged broadcast: switching the active account (for the
         // user's own Send/Receive) does not change what any connected dApp
         // sees — each origin stays bound to the account it connected with.
         // Broadcasting the new active alias to every origin was the SEC-1 leak.
-        return refreshState();
+        return await refreshState();
       }
 
       case 'RENAME_ACCOUNT': {
@@ -280,7 +302,7 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
           return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
         }
         await renameAccount({ accountId: msg.accountId, label: msg.label }, { keyring: deps.keyring });
-        return refreshState();
+        return await refreshState();
       }
 
       case 'LIST_ACCOUNTS': {
@@ -390,7 +412,9 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
         });
         deps.approvalQueue.rejectAll('wallet reset');
         deps.state.container = null;
-        deps.state.evmAlias  = null;
+        // Reset is the one place the alias cache goes too: it enumerates the
+        // vault's tz1s, and the vault they belong to no longer exists.
+        deps.aliasCache.clear();
         deps.containerCache.clear();
         return { ok: true };
       }
@@ -399,7 +423,12 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
         return { ok: false, code: JSON_RPC_METHOD_NOT_FOUND, message: `Unknown popup request type` };
     }
   } catch (err) {
-    return { ok: false, code: JSON_RPC_INTERNAL, message: (err as Error).message };
+    // Preserve a numeric code carried by the error (e.g. 4900 from the
+    // relayer's rpc helper on a network failure) — flattening everything to
+    // -32603 was defeating code-based error handling in the UI.
+    const thrown = err as { code?: unknown; message?: string };
+    const code   = typeof thrown.code === 'number' ? thrown.code : JSON_RPC_INTERNAL;
+    return { ok: false, code, message: (err as Error).message };
   }
 }
 

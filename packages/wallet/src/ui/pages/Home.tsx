@@ -52,7 +52,10 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
     const tokens = await sendPopupRequest<RegisteredToken[]>({ type: 'LIST_REGISTERED_TOKENS' }).catch(() => [] as RegisteredToken[]);
     setCustomTokens(tokens);
 
-    const tokenFetches = tokens.map((t) =>
+    // The EVM alias of a tz1 account may still be resolving (first unlock, or
+    // offline). Skip the EVM-side ERC-20 reads until it lands — the rows show
+    // a dash — and let the effect below re-run when a state re-poll delivers it.
+    const tokenFetches = evmAddress == null ? [] : tokens.map((t) =>
       fetchErc20Balance(t.address, evmAddress).then((hex) => [t.address.toLowerCase(), hex] as const),
     );
 
@@ -82,8 +85,12 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
     }
   };
 
+  const activeKind = state.status === 'unlocked' ? state.kind : null;
+  // The alias term makes the balances re-fetch when the background backfill
+  // resolves it (null → 0x…) and the Gate's re-poll delivers the new state.
+  const activeEvmAlias = state.status === 'unlocked' && state.kind === 'tezos' ? state.evmAlias : null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { void refresh(); }, [state.status, state.status === 'unlocked' ? state.kind : null]);
+  useEffect(() => { void refresh(); }, [state.status, activeKind, activeEvmAlias]);
 
   const lock = async () => {
     await sendPopupRequest({ type: 'LOCK' });
@@ -99,8 +106,10 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
   const activeLabel    = activeSummary?.label?.trim()
     || (activeSummary != null ? `Account ${activeIdx + 1}` : 'Account');
 
-  const xtzNum     = xtz != null ? parseFloat(xtz) || 0 : 0;
   const fmtBalance = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+  // '—' is the failed-fetch sentinel: it must render as-is, never be parsed
+  // into a false "0.00" balance. null = still loading.
+  const xtzDisplay = xtz == null || xtz === '—' ? '—' : fmtBalance(parseFloat(xtz) || 0);
   const isEvm      = state.kind === 'evm';
 
   const setActive = async (id: AccountId) => {
@@ -199,7 +208,7 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
         <div className="tx-home-balance">
           <div className="kicker">Balance</div>
           <div className="num">
-            <span>{balanceHidden ? '••••••' : (xtz != null ? fmtBalance(xtzNum) : '—')}</span>
+            <span>{balanceHidden ? '••••••' : xtzDisplay}</span>
             <span className="unit">XTZ</span>
           </div>
           <button
@@ -240,7 +249,7 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
 
         <AssetRow
           vm={assetRowVM(isEvm ? XTZ_L2_ASSET : XTZ_L1_ASSET, null)}
-          displayBalance={balanceHidden ? '••••' : (xtz != null ? fmtBalance(xtzNum) : '—')}
+          displayBalance={balanceHidden ? '••••' : xtzDisplay}
         />
 
         {customTokens.map((t) => {

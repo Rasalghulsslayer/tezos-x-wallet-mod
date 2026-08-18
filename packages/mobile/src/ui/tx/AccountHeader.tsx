@@ -55,7 +55,7 @@ export function AccountHeader({
         ) : (
           <>
             <AddrRow chain="l1" addr={account.tz1 ?? ''} copyAddr={copyAddr} />
-            <AddrRow chain="l2" addr={account.evmAlias ?? ''} copyAddr={copyAddr} />
+            <AddrRow chain="l2" addr={account.evmAlias ?? null} copyAddr={copyAddr} />
           </>
         )}
       </View>

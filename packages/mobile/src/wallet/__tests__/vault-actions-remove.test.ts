@@ -11,6 +11,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { EvmAliasCache } from '@tezosx/wallet-core/shared/evm-alias-cache';
 
 const h = vi.hoisted(() => {
   const keyring = { getUnlocked: vi.fn() };
@@ -19,14 +20,14 @@ const h = vi.hoisted(() => {
     containerCache: { evict: vi.fn(), clear: vi.fn() },
     rebuildContainer: vi.fn(async () => {}),
     broadcastEvent: vi.fn(async () => {}),
-    state: { container: null, evmAlias: null },
+    state: { container: null },
     approvalQueue: { rejectAll: vi.fn() },
     persistentPorts: {},
   };
   return {
     keyring,
     deps,
-    evmAliasCache: { value: null as string | null },
+    evmAliasCache: null as unknown,
     removeAccountUseCase: vi.fn(async () => {}),
     getState: vi.fn(),
     sessionList: vi.fn(async () => [] as { origin: string; accountId?: string }[]),
@@ -36,19 +37,22 @@ const h = vi.hoisted(() => {
   };
 });
 
-vi.mock('../../composition/wiring', () => ({
-  keyring: h.keyring,
-  tokenStore: {},
-  unlockSecret: {},
-  evmAliasCache: h.evmAliasCache,
-  deps: h.deps,
-  approvalQueue: h.deps.approvalQueue,
-  sessionStore: { list: h.sessionList, remove: vi.fn() },
-}));
+vi.mock('../../composition/wiring', async () => {
+  const { EvmAliasCache } = await import('@tezosx/wallet-core/shared/evm-alias-cache');
+  h.evmAliasCache = new EvmAliasCache();
+  return {
+    keyring: h.keyring,
+    tokenStore: {},
+    unlockSecret: {},
+    evmAliasCache: h.evmAliasCache,
+    deps: h.deps,
+    approvalQueue: h.deps.approvalQueue,
+    sessionStore: { list: h.sessionList, remove: vi.fn() },
+  };
+});
 vi.mock('../../composition/approval-ui', () => ({
   approvalUi: { get: () => null, subscribe: () => () => {} },
 }));
-vi.mock('../../composition/read-state', () => ({ readState: vi.fn() }));
 vi.mock('../../composition/walletconnect-connect', () => ({
   startWalletConnect: vi.fn(),
   connect: vi.fn(),
@@ -64,6 +68,9 @@ vi.mock('@tezosx/wallet-core/use-cases/disconnect-origin', () => ({ disconnectOr
 
 import { removeAccount } from '../vault-actions';
 
+// The real EvmAliasCache instance, installed by the wiring mock factory above.
+const aliasCache = h.evmAliasCache as EvmAliasCache;
+
 const REMAINING_STATE = {
   status: 'unlocked', kind: 'tezos', accountId: 'acc-b',
   tz1: 'tz1RemainingAccount', evmAlias: '0xAliasOfRemaining', accounts: [],
@@ -71,7 +78,9 @@ const REMAINING_STATE = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  h.evmAliasCache.value = '0xAliasOfActive';
+  aliasCache.clear();
+  aliasCache.set('tz1ActiveAccount', '0xAliasOfActive');
+  aliasCache.set('tz1RemainingAccount', '0xAliasOfRemaining');
   h.keyring.getUnlocked.mockReturnValue({ account: { id: 'acc-a' } });
   h.getState.mockResolvedValue(REMAINING_STATE);
   h.sessionList.mockResolvedValue([]);
@@ -85,7 +94,6 @@ describe('removeAccount — non-active account', () => {
     expect(h.deps.containerCache.evict).toHaveBeenCalledWith('acc-x');
     expect(h.deps.rebuildContainer).not.toHaveBeenCalled();
     expect(h.deps.broadcastEvent).not.toHaveBeenCalled();
-    expect(h.evmAliasCache.value).toBe('0xAliasOfActive');
     expect(state).toBe(REMAINING_STATE);
   });
 });
@@ -95,9 +103,14 @@ describe('removeAccount — active account', () => {
     await removeAccount('acc-a', 'pw');
     expect(h.deps.containerCache.evict).toHaveBeenCalledWith('acc-a');
     expect(h.deps.rebuildContainer).toHaveBeenCalledTimes(1);
-    expect(h.evmAliasCache.value).toBeNull();
     // No global accountsChanged broadcast (that was the SEC-1 leak).
     expect(h.deps.broadcastEvent).not.toHaveBeenCalled();
+  });
+
+  it('leaves the alias cache alone — tz1-keyed entries stay valid across removals', async () => {
+    await removeAccount('acc-a', 'pw');
+    expect(aliasCache.get('tz1ActiveAccount')).toBe('0xAliasOfActive');
+    expect(aliasCache.get('tz1RemainingAccount')).toBe('0xAliasOfRemaining');
   });
 });
 
