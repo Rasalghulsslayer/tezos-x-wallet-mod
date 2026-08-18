@@ -13,6 +13,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import NetInfo from '@react-native-community/netinfo';
 import type { VaultState, VaultStateUnlocked, PendingRequest } from '@tezosx/wallet-core/shared/messages';
 import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
 import type { Contact } from '@tezosx/wallet-core/domain/contact';
@@ -49,6 +50,10 @@ export interface WalletNav {
 export interface WalletContextValue {
   booted: boolean;
   vault: VaultView;
+  /** Connectivity hint from NetInfo. false = definitely offline; screens use it
+   *  to pick copy and to fail Send fast. The degraded-data truth (cached values,
+   *  stale bands) stays failure-driven — this never gates a read. */
+  online: boolean;
   biometricsAvailable: boolean;
   accounts: ViewAccount[];
   activeAccount: ViewAccount;
@@ -122,6 +127,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
   const [sessions, setSessions] = useState<StoredSession[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [online, setOnline] = useState(true);
+  const onlineRef = useRef(true);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoLock = useRef<AutoLockHandle | null>(null);
 
@@ -170,6 +177,24 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
       if (live) setBooted(true);
     })();
     return () => { live = false; };
+  }, [refresh]);
+
+  // Single NetInfo subscription for the whole app. Only a definite "not
+  // connected" counts as offline (unknown stays online — the reads decide).
+  // Regaining the connection is a revalidation trigger: re-kick the alias
+  // backfill and re-run the account reads so stale bands clear on their own.
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const next = state.isConnected !== false;
+      const was = onlineRef.current;
+      onlineRef.current = next;
+      setOnline(next);
+      if (!was && next) {
+        vaultActions.kickAliasBackfill(() => { void refresh(); });
+        setDataNonce((n) => n + 1);
+      }
+    });
+    return unsubscribe;
   }, [refresh]);
 
   const toast = useCallback((msg: string): void => {
@@ -228,7 +253,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
   }, []);
 
   const value = useMemo<WalletContextValue>(() => ({
-    booted, vault, biometricsAvailable: bioAvailable,
+    booted, vault, online, biometricsAvailable: bioAvailable,
     accounts, activeAccount, accountCard, activeId: activeState?.accountId ?? '',
     hasSeed: activeState?.hasSeed ?? false,
     sessions, contacts, approve, switcherOpen, toastMsg, stack, navDir, nav,
@@ -360,9 +385,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }): Rea
     },
     sendTransfer: (req) => vaultActions.sendTransfer(req),
     resolveTx: (syntheticHash) => vaultActions.resolveTx(syntheticHash),
-  }), [booted, vault, bioAvailable, accounts, activeAccount, accountCard, accountData, activeState, approve, sessions,
-      contacts, switcherOpen, toastMsg, stack, navDir, nav, labelFor, toast, copy, lock, enterUnlocked, refresh,
-      reloadSessions, reloadContacts]);
+  }), [booted, vault, online, bioAvailable, accounts, activeAccount, accountCard, accountData, activeState, approve,
+      sessions, contacts, switcherOpen, toastMsg, stack, navDir, nav, labelFor, toast, copy, lock, enterUnlocked,
+      refresh, reloadSessions, reloadContacts]);
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }

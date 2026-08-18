@@ -91,6 +91,8 @@ export class TezlinkClient {
    * eth_getCode, eth_getLogs, etc.).
    */
   async proxy(method: string, params: unknown[] = []): Promise<unknown> {
-    return jsonRpc<unknown>(this.rpcUrl, method, params);
+    // The catch-all may carry write methods (eth_sendRawTransaction from a
+    // dApp): no deadline — aborting after a broadcast is worse than waiting.
+    return jsonRpc<unknown>(this.rpcUrl, method, params, { timeoutMs: null });
   }
 }

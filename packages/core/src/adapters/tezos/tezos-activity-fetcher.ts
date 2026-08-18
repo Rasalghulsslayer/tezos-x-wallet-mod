@@ -4,7 +4,8 @@
  * Blockscout's kernel-synthesized mirror) happens in the listActivity use case.
  */
 
-import { TZKT_API_BASE, TEZOS_EXPLORER, EVM_EXPLORER } from '../../shared/constants';
+import { TZKT_API_BASE, TEZOS_EXPLORER, EVM_EXPLORER, RPC_READ_TIMEOUT_MS } from '../../shared/constants';
+import { fetchWithDeadline } from '../../shared/fetch-with-deadline';
 import { NAC_CONTRACT } from '@tezosx/relayer/constants';
 import type {
   ActivityFetcher,
@@ -99,7 +100,7 @@ export class TezosActivityFetcher implements ActivityFetcher {
     }
 
     const url = `${this.tzktBase}/v1/accounts/${args.holder}/operations?${params.toString()}`;
-    const res = await fetch(url);
+    const res = await fetchWithDeadline(url, undefined, RPC_READ_TIMEOUT_MS);
     if (!res.ok) throw new Error(`TzKT HTTP ${res.status}`);
     const raw = await res.json() as TzktOperation[];
 

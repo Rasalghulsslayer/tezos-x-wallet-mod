@@ -461,11 +461,19 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
           </View>
         </ScrollView>
 
+        {!ctx.online && (
+          <View style={styles.offlineNote}>
+            <Icon name="info" size={15} color={colors.warning} />
+            <Text style={styles.offlineNoteText}>You're offline — sending needs the network.</Text>
+          </View>
+        )}
         <View style={styles.actionBar}>
           <Btn variant="outline" onPress={back}>
             Cancel
           </Btn>
-          <Btn variant="accent" full loading={submitting} disabled={insufficient} onPress={submit}>
+          {/* Fail fast while offline: the broadcast can only fail, so the CTA is
+              disabled before the biometric prompt ever fires. */}
+          <Btn variant="accent" full loading={submitting} disabled={insufficient || !ctx.online} onPress={submit}>
             Confirm &amp; send
           </Btn>
         </View>
@@ -866,6 +874,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
   },
+
+  // Same amber band pattern as the Activity/Home stale bands.
+  offlineNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(255,184,76,0.07)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,184,76,0.18)',
+  },
+  offlineNoteText: { flex: 1, fontSize: fontSize.xs, color: colors.fgMuted },
 
   // asset sheet
   sheetBody: { paddingBottom: 8 },

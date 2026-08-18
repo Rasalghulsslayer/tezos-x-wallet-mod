@@ -6,7 +6,7 @@ export type IconName =
   | 'copy' | 'eye' | 'eye-off' | 'lock' | 'home' | 'send' | 'activity'
   | 'settings' | 'plus' | 'qr' | 'link' | 'shield' | 'alert' | 'info'
   | 'globe' | 'scan' | 'wallet' | 'refresh' | 'dots' | 'help' | 'bell'
-  | 'logout' | 'sidebar' | 'external-link';
+  | 'logout' | 'sidebar' | 'external-link' | 'seed' | 'key' | 'paste' | 'offline';
 
 export function Icon({
   name,
@@ -57,6 +57,10 @@ export function Icon({
     case 'qr':              return S(<><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><path d="M14 14h3v3h-3zM20 14v3M14 20h3M20 20h1" /></>);
     case 'link':            return S(<><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1" /><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" /></>);
     case 'shield':          return S(<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" />);
+    case 'seed':            return S(<g><path d="M12 21v-7" /><path d="M12 14c0-4.4 2.9-8 7-8 0 4.4-2.9 8-7 8z" /><path d="M12 14c0-3.6-2.2-6.5-5.5-6.5 0 3.6 2.2 6.5 5.5 6.5z" /></g>);
+    case 'key':             return S(<g><circle cx="8.5" cy="8.5" r="4" /><path d="M11.4 11.4 20 20M17 17l-2 2-2-2 2-2" /></g>);
+    case 'paste':           return S(<g><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4.5V3.6A1.6 1.6 0 0 1 10.6 2h2.8A1.6 1.6 0 0 1 15 3.6v.9" /><path d="M8.5 12h7M8.5 16h4.5" /></g>);
+    case 'offline':         return S(<g><path d="M3 3l18 18" /><path d="M5 12.5a9 9 0 0 1 3.2-2.2M12 6c2.6 0 5 1 6.8 2.6M8.8 16.2A4.5 4.5 0 0 1 12 15c1.2 0 2.3.5 3.2 1.2" /><path d="M12 20h.01" /></g>);
     case 'alert':           return S(<><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16.5h.01" /></>);
     case 'info':            return S(<><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 7.5h.01" /></>);
     case 'globe':           return S(<><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></>);

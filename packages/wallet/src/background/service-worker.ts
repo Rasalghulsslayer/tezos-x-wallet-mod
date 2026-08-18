@@ -11,6 +11,8 @@ import { classifyChromeSender } from '../adapters/chrome/chrome-message-source';
 import { ChromeApprovalPresenter } from '../adapters/chrome/chrome-approval-presenter';
 import { ChromeUnlockGuardStore } from '../adapters/chrome/chrome-unlock-guard-store';
 import { ChromePendingOpsStore } from '../adapters/chrome/chrome-pending-ops-store';
+import { ChromeAliasStore } from '../adapters/chrome/chrome-alias-store';
+import { ChromeSnapshotStore } from '../adapters/chrome/chrome-snapshot-store';
 import type { PersistentPorts } from '@tezosx/wallet-core/ports/container';
 import { ContainerCache } from '@tezosx/wallet-core/composition/container-cache';
 import { ensureContainerFor } from '@tezosx/wallet-core/composition/container-builder';
@@ -30,9 +32,14 @@ const state: SwState = {
   container: null,
 };
 
-// tz1 → EVM alias entries. In-memory only (rebuilt after MV3 eviction via the
-// background backfill); survives lock, cleared on wallet reset by dispatch.
-const aliasCache = new EvmAliasCache();
+// tz1 → EVM alias entries, persisted through the alias store so they survive
+// MV3 eviction (an alias is resolved at most once per tz1 per wallet lifetime).
+// Survives lock; cleared on wallet reset by dispatch. The boot-time hydrate is
+// fire-and-forget: it's race-safe with the backfill (which awaits it) and a
+// GET_STATE that beats it just sees a null alias for one poll cycle.
+const aliasStore = new ChromeAliasStore();
+const aliasCache = new EvmAliasCache(aliasStore);
+void aliasCache.hydrate();
 
 // The extension shell owns the platform adapters and injects them into the
 // shared core (keyring, container, dispatch). A mobile shell would build its
@@ -42,6 +49,8 @@ const persistentPorts: PersistentPorts = {
   sessionStore:  new ChromeSessionStore(),
   tokenStore:    new ChromeTokenStore(),
   contactStore:  new ChromeContactStore(),
+  aliasStore,
+  snapshotStore: new ChromeSnapshotStore(),
   notifications: new ChromeNotificationPort(),
   pendingOpsStore: (accountId) => new ChromePendingOpsStore(accountId),
 };

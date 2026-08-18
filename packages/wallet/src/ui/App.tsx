@@ -4,6 +4,7 @@ import type { VaultState } from '@tezosx/wallet-core/shared/messages';
 import { sendPopupRequest, SW_SESSION_LOST_EVENT } from '../shared/messaging';
 import { makeError, formatError } from '@tezosx/wallet-core/domain/error';
 import { startPoller } from '@tezosx/wallet-core/shared/poller';
+import { useOnline } from './hooks/use-online';
 import { Welcome }     from './pages/Welcome';
 import { Create }      from './pages/Create';
 import { Import }      from './pages/Import';
@@ -61,6 +62,11 @@ function Gate() {
   };
 
   useEffect(() => { void refresh(); }, []);
+
+  // Reconnect: re-run GET_STATE as soon as connectivity returns — the SW kicks
+  // its alias backfill on every state read, so this is what heals a
+  // still-resolving alias after an offline unlock.
+  useOnline(() => { void refresh(); });
 
   // The active tz1 account's EVM alias resolves through a background backfill
   // in the SW, with no push channel back to the popup. Re-poll GET_STATE until

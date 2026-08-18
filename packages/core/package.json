@@ -34,7 +34,7 @@
     "@taquito/rpc": "^24.3.0",
     "@taquito/signer": "^24.3.0",
     "@taquito/taquito": "^24.3.0",
-    "@tezosx/relayer": "^0.7.1",
+    "@tezosx/relayer": "^0.8.0",
     "buffer": "^6.0.3",
     "eventemitter3": "^5.0.4"
   },

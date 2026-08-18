@@ -55,6 +55,11 @@ export const CONTAINER_CACHE_SIZE      = 16;
 export const MAX_TOKENS_PER_ACCOUNT    = 30;
 export const TOKEN_METADATA_TIMEOUT_MS = 5_000;
 
+/** Deadline for read-path RPC/REST calls (balances, activity). Signing and
+ *  injection paths are deliberately excluded — aborting after broadcast is
+ *  worse than waiting. */
+export const RPC_READ_TIMEOUT_MS       = 15_000;
+
 /** Address-book cap (wallet-global — contacts are the user's, not an account's). */
 export const MAX_CONTACTS              = 50;
 

@@ -1,12 +1,18 @@
+/**
+ * KindCard: a runtime-picker card — accent-ringed when selected, tap-to-go
+ * when used as a navigation card (Welcome's selectable pair, AddAccount's
+ * hero and runtime screens).
+ */
 export function KindCard({
-  accent, chain, title, detail, selected, onClick,
+  accent, chain, title, detail, selected = false, disabled = false, onClick,
 }: {
-  accent:   'purple' | 'cyan';
-  chain:    'tz1' | '0x';
-  title:    string;
-  detail:   string;
-  selected: boolean;
-  onClick:  () => void;
+  accent:    'purple' | 'cyan';
+  chain:     'tz1' | '0x';
+  title:     string;
+  detail:    string;
+  selected?: boolean;
+  disabled?: boolean;
+  onClick:   () => void;
 }) {
   const ring = selected
     ? `inset 0 0 0 1.5px var(--tx-${accent})`
@@ -14,6 +20,7 @@ export function KindCard({
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       className="tx-btn"
       style={{
         height: 'auto',

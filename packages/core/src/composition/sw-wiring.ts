@@ -219,12 +219,19 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
         return { ok: true, data: await listSessions({ sessionStore: deps.persistentPorts.sessionStore }) };
 
       case 'LIST_ACTIVITY': {
-        if (deps.state.container == null) {
+        const unlocked = deps.keyring.getUnlocked();
+        if (deps.state.container == null || unlocked == null) {
           return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
         }
+        const account = unlocked.account;
         const result = await listActivity(
           { cursor: msg.cursor, limit: msg.limit, filter: msg.filter },
-          { container: deps.state.container },
+          {
+            container:     deps.state.container,
+            evmAlias:      account.kind === 'tezos' ? deps.aliasCache.get(account.tz1) : account.address,
+            snapshotStore: deps.persistentPorts.snapshotStore,
+            accountId:     account.id,
+          },
         );
         return { ok: true, data: result };
       }
@@ -270,8 +277,13 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
         const unlocked = deps.keyring.getUnlocked();
         if (unlocked == null) return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
         const wasActive = unlocked.account.id === msg.accountId;
+        const removed   = deps.keyring.listAccounts().find((a) => a.id === msg.accountId);
         await removeAccount({ accountId: msg.accountId, password: msg.password }, { keyring: deps.keyring });
         deps.containerCache.evict(msg.accountId);
+        // Hygiene: the alias map enumerates tz1s and the snapshots hold that
+        // account's read models — both outlive their account otherwise.
+        if (removed?.kind === 'tezos') deps.aliasCache.remove(removed.tz1);
+        void deps.persistentPorts.snapshotStore.clearAccount(msg.accountId).catch(() => { /* best-effort */ });
         // A dApp connected with the removed account loses its account: drop
         // that per-origin session and tell only that origin (accountsChanged
         // []). Origins bound to other accounts are untouched — an account
@@ -412,9 +424,12 @@ async function handlePopupRequest(msg: PopupRequest, deps: SwDeps): Promise<Wall
         });
         deps.approvalQueue.rejectAll('wallet reset');
         deps.state.container = null;
-        // Reset is the one place the alias cache goes too: it enumerates the
-        // vault's tz1s, and the vault they belong to no longer exists.
+        // Reset is the one place the alias cache (and its persisted map) goes
+        // too: it enumerates the vault's tz1s, and the vault they belong to
+        // no longer exists. Snapshots die with their accounts for the same
+        // reason.
         deps.aliasCache.clear();
+        await deps.persistentPorts.snapshotStore.clear().catch(() => { /* best-effort */ });
         deps.containerCache.clear();
         return { ok: true };
       }

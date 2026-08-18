@@ -43,7 +43,13 @@ export function Receive(_props: { params?: Record<string, unknown> } = {}): Reac
             {isEvm ? 'EVM address' : runtime === 'l1' ? 'tz1 address' : '0x address'}
           </Text>
           {resolving
-            ? <Text style={styles.resolving}>Resolving EVM address…</Text>
+            ? (
+              <Text style={styles.resolving}>
+                {ctx.online
+                  ? 'Resolving EVM address…'
+                  : "You're offline — the EVM address resolves when the connection returns."}
+              </Text>
+            )
             : <Text style={styles.addr}>{addr}</Text>}
         </View>
 

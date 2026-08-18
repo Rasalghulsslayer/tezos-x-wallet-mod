@@ -8,6 +8,7 @@
 
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { timeAgo } from '@tezosx/wallet-core/shared/format';
 import { colors, fontSize, radius, space } from '../theme';
 import { fmtXtz } from '../ui/format';
 import { Icon } from '../ui/icon';
@@ -37,6 +38,15 @@ export function Home(): React.JSX.Element {
     const v = bal?.tokens[address.toLowerCase()];
     return v != null ? fmtXtz(v, 2, 2) : '—';
   };
+  // Cached values are never shown as if they were live: whenever the numbers
+  // come from the persisted snapshot (`stale` set), a band labels them with
+  // their age — offline copy when NetInfo says so, unreachable copy when the
+  // live read failed while online, a plain freshness stamp while revalidating.
+  const cached = balances.stale;
+  const cachedStrong =
+    !ctx.online              ? "You're offline"
+    : balances.error != null ? "Can't reach the Tezos X network"
+    :                          null;
 
   return (
     <View style={styles.screen}>
@@ -52,6 +62,21 @@ export function Home(): React.JSX.Element {
           <IconBtn name="lock" label="Lock" onPress={ctx.lock} />
         </View>
       </View>
+
+      {cached != null && (
+        <View style={styles.staleBand}>
+          <Icon name="info" size={15} color={colors.warning} />
+          <Text style={styles.staleText}>
+            {cachedStrong != null ? (
+              <>
+                <Text style={styles.staleStrong}>{cachedStrong}</Text> · updated {timeAgo(cached.fetchedAt)}
+              </>
+            ) : (
+              <>Updated {timeAgo(cached.fetchedAt)}</>
+            )}
+          </Text>
+        </View>
+      )}
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         <AccountHeader account={acc} label={ctx.labelFor(acc)} onOpen={() => ctx.openSwitcher()} copyAddr={ctx.copy} />
@@ -79,7 +104,7 @@ export function Home(): React.JSX.Element {
           )}
         </View>
 
-        {balances.error != null && (
+        {balances.error != null && cached == null && (
           <View style={styles.errWrap}>
             <ErrorCard title={balances.error.title} detail={balances.error.detail} />
           </View>
@@ -164,6 +189,20 @@ const styles = StyleSheet.create({
   grow: { flex: 1 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   scroll: { flex: 1, minHeight: 0 },
+
+  // Same amber band pattern as the Activity screen's stale band.
+  staleBand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(255,184,76,0.07)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,184,76,0.18)',
+  },
+  staleText: { flex: 1, fontSize: fontSize.xs, color: colors.fgMuted },
+  staleStrong: { color: colors.fg, fontWeight: '600' },
 
   balance: { paddingTop: 22, paddingHorizontal: space[5], paddingBottom: 6, alignItems: 'center' },
   balLoading: { height: 66, alignItems: 'center', justifyContent: 'center' },

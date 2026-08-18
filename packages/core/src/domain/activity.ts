@@ -88,6 +88,10 @@ export interface ActivityPage {
   cursor?:   string;
   staleness: 'fresh' | 'partial' | 'cached-only';
   errors?:   ActivityFetchError[];
+  /** Epoch ms of the data's origin: now for live reads, the snapshot's
+   *  timestamp when serving the persisted fallback ('cached-only' with
+   *  items). Lets the UI render "updated X ago" honestly. */
+  fetchedAt?: number;
 }
 
 /**

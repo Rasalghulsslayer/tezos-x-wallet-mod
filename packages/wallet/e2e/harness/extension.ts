@@ -40,6 +40,33 @@ export async function launchExtensionContext(): Promise<ExtensionHandles> {
   return { context, serviceWorker, extensionId, userDataDir };
 }
 
+/**
+ * Stop the extension's service worker over CDP — real MV3 eviction semantics.
+ * Chrome respawns a fresh instance on the next extension event (e.g. the
+ * popup's first chrome.runtime.sendMessage), and the replacement re-runs the
+ * SW top level, so a spec can inject storage first and then exercise the boot
+ * path against it (e.g. the boot-time alias-cache hydration, which reads
+ * chrome.storage once, at startup). Note that chrome.runtime.reload() is NOT
+ * usable for this — it permanently unloads a --load-extension extension
+ * instead of reloading it.
+ */
+export async function evictServiceWorker(context: BrowserContext, current: Worker): Promise<void> {
+  const browser = context.browser();
+  if (browser == null) throw new Error('No Browser handle available for a CDP session');
+
+  const session = await browser.newBrowserCDPSession();
+  try {
+    const { targetInfos } = (await session.send('Target.getTargets')) as {
+      targetInfos: Array<{ targetId: string; type: string; url: string }>;
+    };
+    const swTarget = targetInfos.find((t) => t.type === 'service_worker' && t.url === current.url());
+    if (swTarget == null) throw new Error(`No service_worker target found for ${current.url()}`);
+    await session.send('Target.closeTarget', { targetId: swTarget.targetId });
+  } finally {
+    await session.detach().catch(() => {});
+  }
+}
+
 export async function closeExtensionContext(handles: ExtensionHandles): Promise<void> {
   await handles.context.close();
   rmSync(handles.userDataDir, { recursive: true, force: true });

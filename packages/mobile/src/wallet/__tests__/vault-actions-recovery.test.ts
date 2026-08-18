@@ -32,8 +32,9 @@ const h = vi.hoisted(() => {
     seal: vi.fn(async () => {}),
     clear: vi.fn(async () => {}),
   };
-  const sessionStore = { clear: vi.fn(async () => {}), list: vi.fn(async () => []) };
-  const tokenStore   = { clear: vi.fn(async () => {}) };
+  const sessionStore  = { clear: vi.fn(async () => {}), list: vi.fn(async () => []) };
+  const tokenStore    = { clear: vi.fn(async () => {}) };
+  const snapshotStore = { clear: vi.fn(async () => {}), clearAccount: vi.fn(async () => {}) };
   const deps = {
     keyring,
     approvalQueue: { rejectAll: vi.fn() },
@@ -41,10 +42,10 @@ const h = vi.hoisted(() => {
     rebuildContainer: vi.fn(async () => {}),
     broadcastEvent: vi.fn(async () => {}),
     state: { container: null as Container | null },
-    persistentPorts: {},
+    persistentPorts: { snapshotStore },
   };
   return {
-    keyring, unlockSecret, sessionStore, tokenStore, deps,
+    keyring, unlockSecret, sessionStore, tokenStore, snapshotStore, deps,
     evmAliasCache: null as unknown,
   };
 });
@@ -162,11 +163,25 @@ describe('resetWallet — the forgot-password recovery path', () => {
     expect(aliasCache.get('tz1WipedAccount')).toBeNull();
   });
 
+  it('clears the snapshot store — cached balances/activity die with their accounts', async () => {
+    await resetWallet();
+
+    expect(h.snapshotStore.clear).toHaveBeenCalledTimes(1);
+  });
+
+  it('a snapshot-store failure does not fail the reset — the vault is already gone', async () => {
+    h.snapshotStore.clear.mockRejectedValueOnce(new Error('storage unavailable'));
+
+    await expect(resetWallet()).resolves.toBeUndefined();
+    expect(h.unlockSecret.clear).toHaveBeenCalledTimes(1);
+  });
+
   it('a wipe failure propagates before anything platform-side is touched', async () => {
     h.keyring.wipe.mockRejectedValueOnce(new Error('storage unavailable'));
 
     await expect(resetWallet()).rejects.toThrow('storage unavailable');
     expect(h.unlockSecret.clear).not.toHaveBeenCalled();
     expect(h.deps.containerCache.clear).not.toHaveBeenCalled();
+    expect(h.snapshotStore.clear).not.toHaveBeenCalled();
   });
 });

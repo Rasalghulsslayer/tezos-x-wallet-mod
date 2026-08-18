@@ -20,6 +20,7 @@ import { startPoller } from '@tezosx/wallet-core/shared/poller';
 import { e2eConfig } from '@tezosx/wallet-core/shared/e2e';
 import type { TxStatus } from '@tezosx/wallet-core/domain/tx-status';
 import { signingSourceAddress } from '@tezosx/wallet-core/view-models/account-card-vm';
+import { useOnline } from '../hooks/use-online';
 import { Button } from '../tx/Button';
 import { Icon } from '../tx/Icon';
 import { TopBar } from '../tx/TopBar';
@@ -131,6 +132,10 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
   const [saveErr,   setSaveErr]   = useState<unknown>(null);
   const [saveBusy,  setSaveBusy]  = useState(false);
   const [contactSaved, setContactSaved] = useState(false);
+  // Hint-gate only: navigator.onLine === false is a certain "no network route",
+  // so confirming would only burn the user's time. The real failure path (RPC
+  // unreachable while the flag says online) stays as is.
+  const online = useOnline();
 
   // Kind-dependent address resolution for ERC-20 balance reads. The alias is
   // only a balance-read holder here — a tz1 → 0x send signs against the NAC
@@ -497,10 +502,17 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
             <Icon name="info" size={14} color="var(--tx-fg-subtle)" />
             <span>{reviewCopy}</span>
           </div>
+
+          {!online && (
+            <div style={{ fontSize: 12, color: 'var(--tx-warning)', padding: '4px 4px 8px', display: 'flex', gap: 8, alignItems: 'center' }} role="status">
+              <Icon name="info" size={14} color="var(--tx-warning)" />
+              <span>You&apos;re offline — sending needs the network.</span>
+            </div>
+          )}
         </div>
         <div className="tx-action-bar" style={{ gap: 8 }}>
           <Button variant="outline" onClick={back}>Cancel</Button>
-          <Button variant="accent" full onClick={submit}>Confirm & send</Button>
+          <Button variant="accent" full disabled={!online} onClick={submit}>Confirm & send</Button>
         </div>
       </div>
     );

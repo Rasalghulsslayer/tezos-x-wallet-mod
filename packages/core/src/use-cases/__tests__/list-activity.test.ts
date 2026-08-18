@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { listActivity } from '../list-activity';
+import { listActivity, type ListActivityDeps } from '../list-activity';
+import type { SnapshotStore } from '../../ports/snapshot-store';
 import type {
   ActivityItem,
   ActivityTransferItem,
@@ -15,9 +16,7 @@ import { XTZ_L1_ASSET, XTZ_L2_ASSET } from '../../domain/asset';
 vi.mock('@tezosx/relayer/use-cases/build-synthetic-receipt', () => ({
   l1OpHashToEvmHash: (l1: string) => `0xsynth${l1}`,
 }));
-vi.mock('@tezosx/relayer/utils/derive', () => ({
-  deriveEvmAlias: async () => '0xaliasforTZ1HOLDER',
-}));
+
 
 const TZ1 = 'tz1Holder';
 const EVM = '0xaliasforTZ1HOLDER';
@@ -108,11 +107,29 @@ function evmAccountContainer(evm: ActivityFetcher): Container {
   };
 }
 
+// listActivity no longer derives the alias itself — it is a dep, and the
+// snapshot store backs the offline fallback (stubbed empty here; the
+// fallback behavior has its own suite below).
+function snapshotStub(): SnapshotStore {
+  return {
+    loadBalances: async () => null,
+    saveBalances: async () => {},
+    loadActivity: async () => null,
+    saveActivity: async () => {},
+    clearAccount: async () => {},
+    clear:        async () => {},
+  };
+}
+
+function deps(container: Container, evmAlias: string | null = EVM): ListActivityDeps {
+  return { container, evmAlias, snapshotStore: snapshotStub(), accountId: 'acc-1' };
+}
+
 describe('listActivity', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
   it('1. both sources empty', async () => {
-    const out = await listActivity({}, { container: tezosContainer(mockFetcher([]), mockFetcher([])) });
+    const out = await listActivity({}, deps(tezosContainer(mockFetcher([]), mockFetcher([]))));
     expect(out.items).toEqual([]);
     expect(out.staleness).toBe('fresh');
     expect(out.cursor).toBeUndefined();
@@ -123,7 +140,7 @@ describe('listActivity', () => {
     const t2 = tzTransfer({ id: 'l1:2', timestamp: 3000 });
     const e1 = evmTransfer({ id: 'l2:e1', timestamp: 2000 });
     const e2 = evmTransfer({ id: 'l2:e2', timestamp: 4000 });
-    const out = await listActivity({}, { container: tezosContainer(mockFetcher([t1, t2]), mockFetcher([e1, e2])) });
+    const out = await listActivity({}, deps(tezosContainer(mockFetcher([t1, t2]), mockFetcher([e1, e2]))));
     expect(out.items.map((i) => i.id)).toEqual(['l2:e2', 'l1:2', 'l2:e1', 'l1:1']);
     expect(out.staleness).toBe('fresh');
   });
@@ -132,7 +149,7 @@ describe('listActivity', () => {
     const tz   = tzCrossRuntime('opABC', 2000);
     const synth = '0xsynthopABC';
     const evmMatch = evmTransfer({ id: `l2:${synth}`, timestamp: 2500 });
-    const out = await listActivity({}, { container: tezosContainer(mockFetcher([tz]), mockFetcher([evmMatch])) });
+    const out = await listActivity({}, deps(tezosContainer(mockFetcher([tz]), mockFetcher([evmMatch]))));
     expect(out.items).toHaveLength(1);
     const merged = out.items[0];
     expect(merged.id).toBe('x:opABC');
@@ -149,7 +166,7 @@ describe('listActivity', () => {
 
   it('4. tz1→0x without mirror is rendered as cross-runtime/unresolved', async () => {
     const tz = tzCrossRuntime('opXYZ', 1000);
-    const out = await listActivity({}, { container: tezosContainer(mockFetcher([tz]), mockFetcher([])) });
+    const out = await listActivity({}, deps(tezosContainer(mockFetcher([tz]), mockFetcher([]))));
     expect(out.items).toHaveLength(1);
     const it0 = out.items[0];
     expect(it0.kind).toBe('transfer');
@@ -160,9 +177,7 @@ describe('listActivity', () => {
 
   it('5. TzKT failure surfaces as partial staleness with EVM items intact', async () => {
     const e1 = evmTransfer({ id: 'l2:e1', timestamp: 1000 });
-    const out = await listActivity({}, {
-      container: tezosContainer(failingFetcher('TzKT HTTP 503'), mockFetcher([e1])),
-    });
+    const out = await listActivity({}, deps(tezosContainer(failingFetcher('TzKT HTTP 503'), mockFetcher([e1]))));
     expect(out.items.map((i) => i.id)).toEqual(['l2:e1']);
     expect(out.staleness).toBe('partial');
     expect(out.errors?.[0].source).toBe('tezos');
@@ -170,9 +185,7 @@ describe('listActivity', () => {
   });
 
   it('6. both sources failed → cached-only with empty items', async () => {
-    const out = await listActivity({}, {
-      container: tezosContainer(failingFetcher('tz fail'), failingFetcher('evm fail')),
-    });
+    const out = await listActivity({}, deps(tezosContainer(failingFetcher('tz fail'), failingFetcher('evm fail'))));
     expect(out.items).toEqual([]);
     expect(out.staleness).toBe('cached-only');
     expect(out.errors).toHaveLength(2);
@@ -183,9 +196,7 @@ describe('listActivity', () => {
     const pending = [
       { l1OpHash: 'opPENDING', evmAlias: EVM, to: '0xRecipient', fromBlock: '0x1', broadcastedAt: 6000 },
     ];
-    const out = await listActivity({}, {
-      container: tezosContainer(mockFetcher([tz]), mockFetcher([]), () => pending),
-    });
+    const out = await listActivity({}, deps(tezosContainer(mockFetcher([tz]), mockFetcher([]), () => pending)));
     expect(out.items).toHaveLength(1);
     expect(out.items[0].id).toBe('x:opPENDING');
   });
@@ -194,9 +205,7 @@ describe('listActivity', () => {
     const pending = [
       { l1OpHash: 'opFRESH', evmAlias: EVM, to: '0xRecipient', fromBlock: '0x1', broadcastedAt: 9_999_999_999_999 },
     ];
-    const out = await listActivity({}, {
-      container: tezosContainer(mockFetcher([]), mockFetcher([]), () => pending),
-    });
+    const out = await listActivity({}, deps(tezosContainer(mockFetcher([]), mockFetcher([]), () => pending)));
     expect(out.items).toHaveLength(1);
     const it0 = out.items[0];
     expect(it0.id).toBe('x:opFRESH');
@@ -209,7 +218,7 @@ describe('listActivity', () => {
   it('9. AliasForwarder self-transfer is dropped by default', async () => {
     const self = tzCrossRuntime('opSELF', 1000);
     self.counterparty = EVM;  // sending to my own alias
-    const out = await listActivity({}, { container: tezosContainer(mockFetcher([self]), mockFetcher([])) });
+    const out = await listActivity({}, deps(tezosContainer(mockFetcher([self]), mockFetcher([]))));
     expect(out.items).toHaveLength(0);
   });
 
@@ -218,16 +227,14 @@ describe('listActivity', () => {
     self.counterparty = EVM;
     const out = await listActivity(
       { filter: { includeAliasSelfTransfers: true } },
-      { container: tezosContainer(mockFetcher([self]), mockFetcher([])) },
+      deps(tezosContainer(mockFetcher([self]), mockFetcher([]))),
     );
     expect(out.items).toHaveLength(1);
   });
 
   it('10. limit:3 with 5 items truncates and emits a cursor', async () => {
     const items = [1, 2, 3, 4, 5].map((n) => tzTransfer({ id: `l1:${n}`, timestamp: n * 1000 }));
-    const out = await listActivity({ limit: 3 }, {
-      container: tezosContainer(mockFetcher(items, '999'), mockFetcher([])),
-    });
+    const out = await listActivity({ limit: 3 }, deps(tezosContainer(mockFetcher(items, '999'), mockFetcher([]))));
     expect(out.items).toHaveLength(3);
     expect(out.cursor).toBeDefined();
   });
@@ -251,17 +258,76 @@ describe('listActivity', () => {
       links:        { primary: { explorer: 'blockscout', url: 'https://blockscout/tx/0xprecall' } },
       crossRuntime: { direction: 'evm-to-tezos', l1OpHash: '', l2TxHash: '0xprecall', evmEffectStatus: 'confirmed' },
     };
-    const out = await listActivity({}, {
-      container: tezosContainer(mockFetcher([]), mockFetcher([evmPrecompile])),
-    });
+    const out = await listActivity({}, deps(tezosContainer(mockFetcher([]), mockFetcher([evmPrecompile]))));
     expect(out.items).toHaveLength(1);
     expect(out.items[0].id).toBe('l2:0xprecall');
   });
 
   it('EVM-only container (no TzKT) returns EVM rows for an EVM-native account', async () => {
     const e1 = evmTransfer({ id: 'l2:e1', timestamp: 1000 });
-    const out = await listActivity({}, { container: evmAccountContainer(mockFetcher([e1])) });
+    const out = await listActivity({}, deps(evmAccountContainer(mockFetcher([e1]))));
     expect(out.items.map((i) => i.id)).toEqual(['l2:e1']);
     expect(out.staleness).toBe('fresh');
+  });
+});
+
+class MemorySnapshotStore implements SnapshotStore {
+  activity: { data: ActivityItem[]; fetchedAt: number } | null = null;
+  async loadBalances() { return null; }
+  async saveBalances() {}
+  async loadActivity() { return this.activity; }
+  async saveActivity(_id: string, entry: { data: ActivityItem[]; fetchedAt: number }) { this.activity = entry; }
+  async clearAccount() { this.activity = null; }
+  async clear() { this.activity = null; }
+}
+
+describe('listActivity — snapshot fallback and write-back', () => {
+  it('serves the persisted first page as cached-only when every live source fails', async () => {
+    const store = new MemorySnapshotStore();
+    store.activity = { data: [tzTransfer({ id: 'l1:cached' })], fetchedAt: 1_699_000_000_000 };
+    const out = await listActivity({}, {
+      container:     tezosContainer(failingFetcher('tz down'), failingFetcher('evm down')),
+      evmAlias:      EVM,
+      snapshotStore: store,
+      accountId:     'acc-1',
+    });
+    expect(out.staleness).toBe('cached-only');
+    expect(out.items.map((i) => i.id)).toEqual(['l1:cached']);
+    expect(out.fetchedAt).toBe(1_699_000_000_000);
+    expect(out.cursor).toBeUndefined();      // no pagination without live sources
+    expect(out.errors).toHaveLength(2);
+  });
+
+  it('writes a fully fresh first page back; a partial page never overwrites it', async () => {
+    const store = new MemorySnapshotStore();
+    const fresh = tzTransfer({ id: 'l1:fresh' });
+    await listActivity({}, {
+      container: tezosContainer(mockFetcher([fresh]), mockFetcher([])),
+      evmAlias: EVM, snapshotStore: store, accountId: 'acc-1',
+    });
+    await new Promise((r) => setTimeout(r, 0));  // write-back is fire-and-forget
+    expect(store.activity?.data.map((i) => i.id)).toEqual(['l1:fresh']);
+
+    const before = store.activity;
+    await listActivity({}, {
+      container: tezosContainer(failingFetcher('tz down'), mockFetcher([evmTransfer({ id: 'l2:only' })])),
+      evmAlias: EVM, snapshotStore: store, accountId: 'acc-1',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(store.activity).toBe(before);     // partial → not persisted
+  });
+
+  it('a Tezos account with an unresolved alias degrades to partial instead of rejecting', async () => {
+    const tz  = tzTransfer({ id: 'l1:t' });
+    const out = await listActivity({}, {
+      container:     tezosContainer(mockFetcher([tz]), mockFetcher([evmTransfer({ id: 'l2:x' })])),
+      evmAlias:      null,
+      snapshotStore: new MemorySnapshotStore(),
+      accountId:     'acc-1',
+    });
+    // The EVM fetcher is never consulted without a holder; the tz side flows.
+    expect(out.items.map((i) => i.id)).toEqual(['l1:t']);
+    expect(out.staleness).toBe('partial');
+    expect(out.errors?.some((e) => e.source === 'evm')).toBe(true);
   });
 });

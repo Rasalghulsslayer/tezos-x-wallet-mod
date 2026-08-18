@@ -14,7 +14,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EvmAliasCache } from '@tezosx/wallet-core/shared/evm-alias-cache';
 
 const h = vi.hoisted(() => {
-  const keyring = { getUnlocked: vi.fn() };
+  const keyring = { getUnlocked: vi.fn(), listAccounts: vi.fn(() => [] as { id: string; kind: string; tz1?: string }[]) };
+  const snapshotStore = { clear: vi.fn(async () => {}), clearAccount: vi.fn(async () => {}) };
   const deps = {
     keyring,
     containerCache: { evict: vi.fn(), clear: vi.fn() },
@@ -22,10 +23,11 @@ const h = vi.hoisted(() => {
     broadcastEvent: vi.fn(async () => {}),
     state: { container: null },
     approvalQueue: { rejectAll: vi.fn() },
-    persistentPorts: {},
+    persistentPorts: { snapshotStore },
   };
   return {
     keyring,
+    snapshotStore,
     deps,
     evmAliasCache: null as unknown,
     removeAccountUseCase: vi.fn(async () => {}),
@@ -82,6 +84,10 @@ beforeEach(() => {
   aliasCache.set('tz1ActiveAccount', '0xAliasOfActive');
   aliasCache.set('tz1RemainingAccount', '0xAliasOfRemaining');
   h.keyring.getUnlocked.mockReturnValue({ account: { id: 'acc-a' } });
+  h.keyring.listAccounts.mockReturnValue([
+    { id: 'acc-a', kind: 'tezos', tz1: 'tz1ActiveAccount' },
+    { id: 'acc-b', kind: 'tezos', tz1: 'tz1RemainingAccount' },
+  ]);
   h.getState.mockResolvedValue(REMAINING_STATE);
   h.sessionList.mockResolvedValue([]);
   h.listWcSessions.mockReturnValue([]);
@@ -107,10 +113,19 @@ describe('removeAccount — active account', () => {
     expect(h.deps.broadcastEvent).not.toHaveBeenCalled();
   });
 
-  it('leaves the alias cache alone — tz1-keyed entries stay valid across removals', async () => {
+  it('drops only the removed account\'s alias entry — the others stay valid', async () => {
+    // The alias map enumerates the vault's tz1s: the removed account's entry
+    // must not outlive it, while the remaining accounts' entries (keyed by
+    // their own tz1) are untouched.
     await removeAccount('acc-a', 'pw');
-    expect(aliasCache.get('tz1ActiveAccount')).toBe('0xAliasOfActive');
+    expect(aliasCache.get('tz1ActiveAccount')).toBeNull();
     expect(aliasCache.get('tz1RemainingAccount')).toBe('0xAliasOfRemaining');
+  });
+
+  it('drops the removed account\'s snapshots', async () => {
+    await removeAccount('acc-a', 'pw');
+    expect(h.snapshotStore.clearAccount).toHaveBeenCalledWith('acc-a');
+    expect(h.snapshotStore.clear).not.toHaveBeenCalled();
   });
 });
 
@@ -135,10 +150,12 @@ describe('removeAccount — dApp sessions bound to the removed account', () => {
 });
 
 describe('removeAccount — vault rejections propagate untouched', () => {
-  it('wrong password: nothing is evicted and the error surfaces', async () => {
+  it('wrong password: nothing is evicted or dropped and the error surfaces', async () => {
     h.removeAccountUseCase.mockRejectedValueOnce(new Error('Incorrect password'));
-    await expect(removeAccount('acc-x', 'bad')).rejects.toThrow('Incorrect password');
+    await expect(removeAccount('acc-a', 'bad')).rejects.toThrow('Incorrect password');
     expect(h.deps.containerCache.evict).not.toHaveBeenCalled();
+    expect(h.snapshotStore.clearAccount).not.toHaveBeenCalled();
+    expect(aliasCache.get('tz1ActiveAccount')).toBe('0xAliasOfActive');
   });
 
   it('last account: the guard error surfaces', async () => {

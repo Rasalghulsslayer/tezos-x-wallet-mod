@@ -17,6 +17,9 @@ import type { VaultStore, EncryptedVault } from '@tezosx/wallet-core/ports/vault
 import type { SessionStore, StoredSession } from '@tezosx/wallet-core/ports/session-store';
 import type { TokenStore } from '@tezosx/wallet-core/ports/token-store';
 import type { ContactStore } from '@tezosx/wallet-core/ports/contact-store';
+import type { AliasStore } from '@tezosx/wallet-core/ports/alias-store';
+import type { BalancesSnapshotData, SnapshotEntry, SnapshotStore } from '@tezosx/wallet-core/ports/snapshot-store';
+import type { ActivityItem } from '@tezosx/wallet-core/domain/activity';
 import type { NotificationPort } from '@tezosx/wallet-core/ports/notification-port';
 import type { ClassifiedSource } from '@tezosx/wallet-core/ports/message-source';
 import type { ApprovalPresenter } from '@tezosx/wallet-core/ports/approval-presenter';
@@ -52,6 +55,22 @@ class MemoryContacts implements ContactStore {
   async remove(address: string) { this.map.delete(address); }
   async clear() { this.map.clear(); }
 }
+class MemoryAliases implements AliasStore {
+  private map: Record<string, string> = {};
+  async load() { return { ...this.map }; }
+  async save(entries: Record<string, string>) { this.map = { ...entries }; }
+  async clear() { this.map = {}; }
+}
+class MemorySnapshots implements SnapshotStore {
+  private balances = new Map<string, SnapshotEntry<BalancesSnapshotData>>();
+  private activity = new Map<string, SnapshotEntry<ActivityItem[]>>();
+  async loadBalances(id: string) { return this.balances.get(id) ?? null; }
+  async saveBalances(id: string, entry: SnapshotEntry<BalancesSnapshotData>) { this.balances.set(id, entry); }
+  async loadActivity(id: string) { return this.activity.get(id) ?? null; }
+  async saveActivity(id: string, entry: SnapshotEntry<ActivityItem[]>) { this.activity.set(id, entry); }
+  async clearAccount(id: string) { this.balances.delete(id); this.activity.delete(id); }
+  async clear() { this.balances.clear(); this.activity.clear(); }
+}
 
 const stubNotifications: NotificationPort = { async setPendingCount() {} };
 // dispatch is chrome-free and the queue takes an injected presenter, so this
@@ -67,7 +86,7 @@ async function setupHarness() {
   const deps: SwDeps = {
     keyring,
     approvalQueue:   new ApprovalQueue(stubNotifications, stubPresenter),
-    persistentPorts: { vaultStore: new MemoryVault(), sessionStore: new MemorySessions(), tokenStore: new MemoryTokens(), contactStore: new MemoryContacts(), notifications: stubNotifications },
+    persistentPorts: { vaultStore: new MemoryVault(), sessionStore: new MemorySessions(), tokenStore: new MemoryTokens(), contactStore: new MemoryContacts(), aliasStore: new MemoryAliases(), snapshotStore: new MemorySnapshots(), notifications: stubNotifications },
     state:           { container: null },
     aliasCache:      new EvmAliasCache(),
     containerCache:  new ContainerCache(),

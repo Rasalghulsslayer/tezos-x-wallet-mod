@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Icon } from '../../tx/Icon';
+import { Ack } from '../../tx/Ack';
 import { copySecretWithAutoClear } from '@/shared/clipboard';
 import type { Pick } from './types';
 
@@ -28,8 +29,8 @@ export function CreatePane({
   const copy = () => {
     if (valueToCopy === '') return;
     copySecretWithAutoClear(valueToCopy);
+    // Stays "Copied" — the point of the state is the auto-clear note beside it.
     setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
   };
 
   return (
@@ -67,42 +68,33 @@ export function CreatePane({
         </div>
 
         {revealed && (
+          // The acks live inside the card, below the secret: you cannot
+          // promise to have written down something you have not seen.
           <div className="tx-add-reveal-ack">
-            <label className={`${ack1 ? 'on' : ''}${isTezos ? '' : ' l2'}`}>
-              <span className="cb">{ack1 && <Icon name="check" size={10} />}</span>
-              <span onClick={() => setAck1(!ack1)}>
-                I've copied or written it down <strong>somewhere offline</strong>.
-              </span>
-              <input type="checkbox" checked={ack1} onChange={(e) => setAck1(e.target.checked)} style={{ display: 'none' }} />
-            </label>
-            <label className={`${ack2 ? 'on' : ''}${isTezos ? '' : ' l2'}`}>
-              <span className="cb">{ack2 && <Icon name="check" size={10} />}</span>
-              <span onClick={() => setAck2(!ack2)}>
-                I understand that <strong>losing this {isTezos ? 'phrase' : 'key'} means losing the account</strong> — Tezos X can't recover it.
-              </span>
-              <input type="checkbox" checked={ack2} onChange={(e) => setAck2(e.target.checked)} style={{ display: 'none' }} />
-            </label>
+            <Ack accent={isTezos ? 'purple' : 'cyan'} checked={ack1} onToggle={() => setAck1(!ack1)}>
+              I've copied or written it down <strong>somewhere offline</strong>.
+            </Ack>
+            <Ack accent={isTezos ? 'purple' : 'cyan'} checked={ack2} onToggle={() => setAck2(!ack2)}>
+              I understand that <strong>losing this {isTezos ? 'phrase' : 'key'} means losing the account</strong> — Tezos X can't recover it.
+            </Ack>
           </div>
         )}
       </div>
 
       {revealed && (
         <div className="tx-add-reveal-meta">
-          <button type="button" className={`copy-bar${copied ? ' done' : ''}`} onClick={copy}>
+          <button type="button" className="tx-btn ghost xs" onClick={copy}>
             <Icon name={copied ? 'check' : 'copy'} size={11} />
             {copied ? 'Copied' : 'Copy'}
           </button>
-          <button
-            type="button"
-            onClick={regenerate}
-            style={{
-              background: 'transparent', border: 0, cursor: 'pointer',
-              color: 'var(--tx-fg-subtle)', fontSize: 10.5,
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-            }}
-          >
-            <Icon name="refresh" size={10} /> Regenerate
+          <button type="button" className="tx-btn ghost xs" style={{ color: 'var(--tx-fg-subtle)' }} onClick={regenerate}>
+            <Icon name="refresh" size={11} /> Regenerate
           </button>
+          {copied && (
+            <span style={{ marginLeft: 'auto', fontSize: 10.5, color: 'var(--tx-fg-subtle)' }}>
+              clipboard clears in 30 s
+            </span>
+          )}
         </div>
       )}
     </>

@@ -1,11 +1,14 @@
 import type { Pick, Stage } from './types';
 
 export function stageTitle(stage: Stage, pick: Pick | null): string {
-  if (stage === 'pick') return 'Add account';
-  if (pick == null)     return 'Add account';
-  const op = pick.source === 'fresh' ? 'New' : 'Import';
-  const k  = pick.kind === 'tezos' ? 'Tezos' : 'EVM';
-  if (stage === 'input')   return `${op} ${k} account`;
+  if (stage === 'choose')  return 'Add account';
+  if (stage === 'runtime') return 'Choose runtime';
+  if (pick == null)        return 'Add account';
+  if (stage === 'input') {
+    const op = pick.source === 'fresh' ? 'New' : 'Import';
+    const k  = pick.kind === 'tezos' ? 'Michelson' : 'EVM';
+    return `${op} ${k} account`;
+  }
   return pick.source === 'import' ? 'Confirm import' : 'Confirm new account';
 }
 

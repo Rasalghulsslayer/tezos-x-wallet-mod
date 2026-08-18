@@ -12,7 +12,8 @@
  * suppressed (the Transfer row is the meaningful one).
  */
 
-import { BLOCKSCOUT_API_BASE, EVM_EXPLORER, TEZOS_EXPLORER } from '../../shared/constants';
+import { BLOCKSCOUT_API_BASE, EVM_EXPLORER, TEZOS_EXPLORER, RPC_READ_TIMEOUT_MS } from '../../shared/constants';
+import { fetchWithDeadline } from '../../shared/fetch-with-deadline';
 import { NAC_PRECOMPILE_ADDR } from '@tezosx/relayer/constants';
 import type {
   ActivityFetcher,
@@ -169,7 +170,7 @@ export class EvmActivityFetcher implements ActivityFetcher {
   private async fetchTxList(holder: string, page: number, limit: number): Promise<ActivityFetcherPage> {
     const url = `${this.blockscoutBase}?module=account&action=txlist&address=${holder}`
       + `&page=${page}&offset=${limit}&sort=desc`;
-    const res = await fetch(url);
+    const res = await fetchWithDeadline(url, undefined, RPC_READ_TIMEOUT_MS);
     if (!res.ok) throw new Error(`Blockscout HTTP ${res.status}`);
     const envelope = await res.json() as BlockscoutEnvelope<BlockscoutTx>;
     if (!Array.isArray(envelope.result)) {
@@ -190,7 +191,7 @@ export class EvmActivityFetcher implements ActivityFetcher {
   ): Promise<ActivityTransferItem[]> {
     const url = `${this.blockscoutBase}?module=account&action=tokentx&address=${holder}`
       + `&page=${page}&offset=${limit}&sort=desc`;
-    const res = await fetch(url);
+    const res = await fetchWithDeadline(url, undefined, RPC_READ_TIMEOUT_MS);
     if (!res.ok) throw new Error(`Blockscout tokentx HTTP ${res.status}`);
     const envelope = await res.json() as BlockscoutEnvelope<BlockscoutTokenTx>;
     if (!Array.isArray(envelope.result)) return [];               // rate-limit envelope → silent skip; txlist still works

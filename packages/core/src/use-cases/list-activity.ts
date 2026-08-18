@@ -13,7 +13,6 @@
 // bundle. The mobile (Metro/Hermes) bundle can't resolve that; the extension
 // doesn't need it either.
 import { l1OpHashToEvmHash } from '@tezosx/relayer/use-cases/build-synthetic-receipt';
-import { deriveEvmAlias } from '@tezosx/relayer/utils/derive';
 import { ACTIVITY_PAGE_SIZE, EVM_EXPLORER, TEZOS_EXPLORER } from '../shared/constants';
 import {
   decodeActivityCursor,
@@ -27,6 +26,8 @@ import {
 import { XTZ_L1_ASSET } from '../domain/asset';
 import type { ActivityFetcher, ActivityFetcherPage } from '../ports/activity-fetcher';
 import type { Container } from '../ports/container';
+import type { SnapshotStore } from '../ports/snapshot-store';
+import type { AccountId } from '../domain/account';
 
 export interface ListActivityReq {
   cursor?: string;
@@ -36,17 +37,26 @@ export interface ListActivityReq {
 
 export interface ListActivityDeps {
   container: Container;
+  /** The active account's EVM alias from the EvmAliasCache — passed in, never
+   *  derived here, so an unresolved alias degrades the EVM source instead of
+   *  rejecting the whole feed (the pre-fetch derive was what made Activity
+   *  fail wholesale offline). null for a Tezos account = alias not yet known. */
+  evmAlias:      string | null;
+  /** First-page persistence: fresh reads are written back, and when every
+   *  live source fails the page is served from here as 'cached-only'. */
+  snapshotStore: SnapshotStore;
+  accountId:     AccountId;
 }
 
 interface ResolvedHolders {
   tezos?: string;
-  evm:    string;
+  evm?:   string;
 }
 
-async function resolveHolders(container: Container): Promise<ResolvedHolders> {
+function resolveHolders(container: Container, evmAlias: string | null): ResolvedHolders {
   const account = container.signer.account;
   if (account.kind === 'tezos') {
-    return { tezos: account.tz1, evm: await deriveEvmAlias(account.tz1) };
+    return { tezos: account.tz1, evm: evmAlias ?? undefined };
   }
   return { evm: account.address };
 }
@@ -174,8 +184,9 @@ export async function listActivity(
   const limit  = req.limit ?? ACTIVITY_PAGE_SIZE;
   const cursor = decodeActivityCursor(req.cursor);
 
-  const holders = await resolveHolders(deps.container);
-  const evmHolderLc = holders.evm.toLowerCase();
+  const account     = deps.container.signer.account;
+  const holders     = resolveHolders(deps.container, deps.evmAlias);
+  const evmHolderLc = holders.evm?.toLowerCase() ?? '';
 
   const [tz, ev] = await Promise.all([
     safeFetch(deps.container.activitySources.tezos, holders.tezos, limit, cursor.tezos != null ? String(cursor.tezos.lastId) : undefined),
@@ -189,6 +200,13 @@ export async function listActivity(
   const nextEv   = ev.ok ? ev.page.cursor : undefined;
   if (!tz.ok) errors.push({ source: 'tezos', message: tz.error.message });
   if (!ev.ok) errors.push({ source: 'evm',   message: ev.error.message });
+  // A Tezos account whose alias hasn't resolved yet: safeFetch politely
+  // returned an empty page (holder undefined), but the EVM half of the feed
+  // is genuinely unavailable — report it so the staleness is 'partial', not a
+  // false 'fresh'.
+  if (account.kind === 'tezos' && holders.evm == null) {
+    errors.push({ source: 'evm', message: 'EVM alias not resolved yet' });
+  }
 
   // Step 1: dedup tz1→0x against its kernel-synthesized EVM mirror.
   const { merged, consumedEvmIds } = mergeCrossRuntime(tzItems, evItems);
@@ -244,15 +262,48 @@ export async function listActivity(
       })
     : undefined;
 
+  const allSourcesFailed = !tz.ok && !ev.ok;
+  const isFirstPage      = req.cursor == null;
+
+  // Every live source failed on the first page: serve the persisted snapshot
+  // as an honest 'cached-only' page (its own filter re-applied, no pagination
+  // — cursors need live sources), stamped with the time it was fetched.
+  if (allSourcesFailed && isFirstPage) {
+    const snap = await deps.snapshotStore.loadActivity(deps.accountId).catch(() => null);
+    if (snap != null && snap.data.length > 0) {
+      const cachedFiltered = applyFilter(snap.data, req.filter, evmHolderLc);
+      return {
+        items:     cachedFiltered.slice(0, limit),
+        cursor:    undefined,
+        staleness: 'cached-only',
+        errors,
+        fetchedAt: snap.fetchedAt,
+      };
+    }
+  }
+
   const staleness: ActivityPage['staleness'] =
     errors.length === 0 ? 'fresh' :
-    errors.length === 1 ? 'partial' :
+    !allSourcesFailed   ? 'partial' :
                           'cached-only';
+
+  const now = Date.now();
+
+  // Write-back: a fully fresh first page becomes the offline fallback. The
+  // pre-filter merged list is stored so a later cached read can apply the
+  // request's own filter. Partial pages are not persisted — overwriting a
+  // complete snapshot with half a feed would lose data.
+  if (staleness === 'fresh' && isFirstPage) {
+    const toStore = merged.slice().sort((a, b) => b.timestamp - a.timestamp).slice(0, limit);
+    void deps.snapshotStore.saveActivity(deps.accountId, { data: toStore, fetchedAt: now })
+      .catch(() => { /* best-effort persistence */ });
+  }
 
   return {
     items:    sliced,
     cursor:   nextCursor,
     staleness,
     errors:   errors.length > 0 ? errors : undefined,
+    fetchedAt: now,
   };
 }

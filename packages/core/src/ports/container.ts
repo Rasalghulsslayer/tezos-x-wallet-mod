@@ -16,6 +16,8 @@ import type { SessionStore } from './session-store';
 import type { NotificationPort } from './notification-port';
 import type { TokenStore } from './token-store';
 import type { ContactStore } from './contact-store';
+import type { AliasStore } from './alias-store';
+import type { SnapshotStore } from './snapshot-store';
 import type { CrossRuntimeBuilderPort } from './cross-runtime-builder';
 import type { AccountId } from '../domain/account';
 
@@ -62,6 +64,10 @@ export interface PersistentPorts {
   sessionStore:  SessionStore;
   tokenStore:    TokenStore;
   contactStore:  ContactStore;
+  /** Persists the tz1 → EVM alias map behind EvmAliasCache. */
+  aliasStore:    AliasStore;
+  /** Last-known balances / first activity page, timestamped, for offline display. */
+  snapshotStore: SnapshotStore;
   notifications: NotificationPort;
   /** Optional per-account store for cross-runtime resolution state, so a
    *  tz1 account's pending synthetic→real hash mappings survive lock / switch

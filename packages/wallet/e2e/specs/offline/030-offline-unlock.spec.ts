@@ -1,4 +1,5 @@
 import { test, expect } from '../../harness/fixtures';
+import { evictServiceWorker } from '../../harness/extension';
 import { preInject } from '../../harness/storage';
 import { PopupPage } from '../../harness/pages/popup-page';
 
@@ -42,7 +43,8 @@ test('creating a wallet, relocking and reopening the popup all work offline', as
   // ── Onboarding through the real UI, network down from the very start ──
   await popup.page.getByRole('button', { name: 'Create a new wallet' }).click();
 
-  const acks = popup.page.locator('input[type="checkbox"]');
+  // The acknowledgements are role=checkbox surface rows (tx/Ack), not native inputs.
+  const acks = popup.page.getByRole('checkbox');
   await acks.nth(0).check();
   await acks.nth(1).check();
   await popup.page.getByRole('button', { name: 'Generate phrase' }).click();
@@ -114,4 +116,62 @@ test('a returning user unlocks an existing vault via the password form while off
   await expectHomeDegradedOffline(popup);
   await expect(popup.page.locator('.tx-err-inline')).toHaveCount(0);
   await expect(popup.page.getByText('Incorrect password')).toHaveCount(0);
+});
+
+// The account id sealed inside the frozen vault-v2.encrypted.json fixture —
+// snapshots are keyed per account, so the pre-injected balances must address it.
+const FIXTURE_ACCOUNT_ID = '0aa0c748-de4f-464d-9dd5-d99567eced43';
+// Any well-formed alias works: the map is a persisted cache, and offline the
+// wallet must render exactly what it persisted (there is no way to re-derive).
+const FIXTURE_ALIAS = '0x9c4a708bc27ab52b0f3e2f43a713cbf5b1a9e6d0';
+// The Home band's title when the OS still reports a network route but the
+// Tezos X endpoints don't answer — which is what Playwright's request-abort
+// simulation looks like to navigator.onLine (see hooks/use-online.ts).
+const UNREACHABLE_BAND_COPY = "Can't reach the Tezos X network";
+
+test('a warm profile unlocks offline onto cached balances and the persisted alias', async ({
+  extensionContext,
+  serviceWorker,
+  extensionId,
+  testSeed,
+  testVault,
+}) => {
+  // A wallet that has been online before: vault + resolved alias + balances
+  // snapshot are all on disk, exactly as the alias store and snapshot store
+  // persist them.
+  await preInject(serviceWorker, {
+    vault:   testVault,
+    aliases: { [testSeed.expectedTz1]: FIXTURE_ALIAS },
+    balancesSnapshots: {
+      [FIXTURE_ACCOUNT_ID]: {
+        data:      { xtz: '12.5', erc20: {} },
+        fetchedAt: Date.now() - 5 * 60_000,
+      },
+    },
+  });
+
+  // The SW hydrates the alias cache once, at boot — on a real warm profile the
+  // storage precedes the boot, so evict the SW; the popup's first message
+  // respawns it against the injected state (also proving the offline data
+  // survives MV3 eviction).
+  await evictServiceWorker(extensionContext, serviceWorker);
+
+  const popup = await PopupPage.open(extensionContext, extensionId);
+  const password = popup.page.locator('input.tx-input[type="password"]');
+  await password.waitFor({ state: 'visible', timeout: 10_000 });
+  await password.fill(testSeed.password);
+  await popup.page.getByRole('button', { name: 'Unlock' }).click();
+  await popup.waitForHome();
+
+  // The cached balance renders — labeled by the offline band — never the
+  // failed-fetch placeholder or a fabricated zero.
+  await expect(popup.page.getByText(UNREACHABLE_BAND_COPY)).toBeVisible({ timeout: 10_000 });
+  expect(await popup.readHeadlineBalance()).toMatch(/^12[.,]50$/);
+
+  // The persisted alias renders as a real address row: hydration made the
+  // network-free unlock complete, so the resolving placeholder must not show.
+  await expect(popup.page.getByText(RESOLVING_COPY)).toHaveCount(0);
+  const shortAlias = `${FIXTURE_ALIAS.slice(0, 8)}…${FIXTURE_ALIAS.slice(-6)}`;
+  await expect(popup.page.getByText(shortAlias)).toBeVisible();
+  await expect(popup.page.getByText(FATAL_COPY)).toHaveCount(0);
 });

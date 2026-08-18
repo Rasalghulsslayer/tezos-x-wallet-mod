@@ -34,13 +34,45 @@ Chrome extension (`@tezosx/wallet`) and the React Native app
 - `shared/evm-alias-cache.ts` — `EvmAliasCache`, the tz1 → alias map with a
   single-flight `backfill(tz1s, derive)` that resolves missing entries in the
   background, swallows individual failures, and reports whether anything new
-  landed so shells can refresh their UI.
+  landed so shells can refresh their UI. It optionally persists through the
+  new `AliasStore` port (chrome.storage / MMKV adapters in the shells):
+  resolved entries are written through and `hydrate()` restores them after
+  process death, so an alias is resolved at most once per tz1 per wallet
+  lifetime. Entries are dropped on account removal and the map is cleared on
+  wallet reset (it enumerates the vault's tz1s).
+- `ports/snapshot-store.ts` — `SnapshotStore`, timestamped last-known read
+  models (balances per account, first activity page) so the UI can render
+  honest cached data offline ("updated X ago") instead of a false zero or an
+  empty state. Only public chain data belongs there — never secrets, fee/gas
+  material, or pending approvals. Both stores are now required members of
+  `PersistentPorts`.
+- `view-models/add-account-flow-vm.ts` — the single source of truth for the
+  add-account wizard's step math on both shells (stages per source, kicker
+  strings, dots), replacing the per-shell hand-rolled steppers that had
+  drifted into contradiction.
+- `shared/fetch-with-deadline.ts` + `RPC_READ_TIMEOUT_MS` — an
+  AbortController deadline applied to the balance and activity fetchers'
+  reads (signing/injection paths deliberately excluded).
 - `isAuthError(err)` in `domain/error.ts` — true only for credential failures
   (wrong password, unlock throttle, missing vault); the unlock screens use it
   to decide whether clearing the password field is legitimate.
 - Error taxonomy: React Native's fetch failure string ("Network request
   failed") now maps to the network-unreachable copy, and EIP-1193 code 4900
   resolves to it directly.
+
+### Changed (activity)
+- `listActivity` no longer derives the EVM alias itself — the alias is a dep,
+  so an unresolved alias degrades the EVM source to a 'partial' page instead
+  of rejecting the whole feed (which is what made Activity fail wholesale
+  offline). A fully fresh first page is written back to the SnapshotStore,
+  and when every live source fails the first page is served from it as an
+  honest 'cached-only' with its original `fetchedAt` — the staleness value
+  finally has a cache behind it. Pages now carry `fetchedAt` so the UI can
+  say "updated X ago"; pagination is refused offline (cursors need live
+  sources).
+
+### Compatibility
+- Requires `@tezosx/relayer` 0.8.0 (jsonRpc read deadline).
 
 ## [0.6.0] — 2026-08-10
 

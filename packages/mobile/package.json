@@ -8,7 +8,7 @@
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "12.0.1",
     "@reown/walletkit": "1.5.5",
-    "@tezosx/relayer": "^0.7.1",
+    "@tezosx/relayer": "^0.8.0",
     "@tezosx/wallet-core": "^0.7.0",
     "@walletconnect/core": "2.23.9",
     "@walletconnect/react-native-compat": "2.23.9",

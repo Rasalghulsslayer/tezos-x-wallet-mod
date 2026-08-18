@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { VaultState, AccountSummary } from '@tezosx/wallet-core/shared/messages';
 import type { AccountId } from '@tezosx/wallet-core/domain/account';
@@ -8,8 +8,11 @@ import {
   fetchErc20Balance,
 } from '@tezosx/wallet-core/adapters/tezos/tezos-balance-fetcher';
 import { FAUCET_URL } from '@tezosx/wallet-core/shared/constants';
-import { mutezToXtz, weiToXtz } from '@tezosx/wallet-core/shared/format';
+import { mutezToXtz, timeAgo, weiToXtz } from '@tezosx/wallet-core/shared/format';
 import { sendPopupRequest } from '@/shared/messaging';
+import { loadBalancesSnapshot, saveBalancesSnapshot } from '@/adapters/chrome/popup-snapshot-store';
+import { unreachableTitle, useOnline } from '../hooks/use-online';
+import { ActivityStaleBand } from '../tx/ActivityStaleBand';
 import { formatError } from '@tezosx/wallet-core/domain/error';
 import { AccountHeader } from '../tx/AccountHeader';
 import { LogoMark } from '../tx/LogoMark';
@@ -39,9 +42,17 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
   const [customTokens, setCustomTokens] = useState<RegisteredToken[]>([]);
   /** Map<lowercased token address, formatted balance string>. Empty when not yet loaded. */
   const [tokenBalances, setTokenBalances] = useState<Record<string, string>>({});
+  /** Non-null when the shown balances come from the persisted snapshot (live
+   *  fetch failed): the snapshot's fetch time, rendered in the offline band. */
+  const [cachedAt, setCachedAt] = useState<number | null>(null);
+  const [bandDismissed, setBandDismissed] = useState(false);
+  // Which account already got its instant cached paint — reset per account so
+  // an alias-landing re-run of the effect doesn't repaint stale values.
+  const paintedForRef = useRef<AccountId | null>(null);
 
   const refresh = async () => {
     if (state.status !== 'unlocked') return;
+    const accountId  = state.accountId;
     const xtzAddress = state.kind === 'tezos' ? state.tz1     : state.address;
     const evmAddress = state.kind === 'tezos' ? state.evmAlias : state.address;
 
@@ -63,34 +74,88 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
       xtzFetch,
       ...tokenFetches,
     ]);
-    if (xtzRes.status === 'rejected') console.error('[Home] XTZ fetch failed', xtzRes.reason);
 
-    setXtz(xtzRes.status === 'fulfilled' ? xtzRes.value : '—');
-
-    const balances: Record<string, string> = {};
+    const liveBalances: Record<string, string> = {};
     for (const r of tokenRes) {
-      if (r.status === 'fulfilled') balances[r.value[0]] = r.value[1];
+      if (r.status === 'fulfilled') liveBalances[r.value[0]] = r.value[1];
     }
-    setTokenBalances(balances);
 
-    if (xtzRes.status === 'rejected') {
-      const e = formatError(xtzRes.reason);
-      errorToast({
-        message:   e.title,
-        secondary: e.code === 'rpc-unreachable' ? '· network'
-                 : e.code === 'rpc-timeout'     ? '· timeout'
-                 : undefined,
-        retry:     () => void refresh(),
+    if (xtzRes.status === 'fulfilled') {
+      setXtz(xtzRes.value);
+      setTokenBalances(liveBalances);
+      setCachedAt(null);
+      setBandDismissed(false);
+      // Write-back: merge the fetched ERC-20 values over the previous
+      // snapshot's map so a run with a still-null alias (ERC-20 reads skipped)
+      // doesn't erase the cached values.
+      const prev = await loadBalancesSnapshot(accountId);
+      void saveBalancesSnapshot(accountId, {
+        data:      { xtz: xtzRes.value, erc20: { ...(prev?.data.erc20 ?? {}), ...liveBalances } },
+        fetchedAt: Date.now(),
       });
+      return;
     }
+
+    console.error('[Home] XTZ fetch failed', xtzRes.reason);
+
+    // Live read failed: fall back to the persisted snapshot when one exists —
+    // last-known values labeled with their age beat a dash.
+    const snap = await loadBalancesSnapshot(accountId);
+    if (snap != null && snap.data.xtz != null) {
+      setXtz(snap.data.xtz);
+      setTokenBalances({ ...snap.data.erc20, ...liveBalances });
+      setCachedAt(snap.fetchedAt);
+      return;
+    }
+
+    setXtz('—');
+    setTokenBalances(liveBalances);
+    setCachedAt(null);
+    const e = formatError(xtzRes.reason);
+    errorToast({
+      message:   e.title,
+      secondary: e.code === 'rpc-unreachable' ? '· network'
+               : e.code === 'rpc-timeout'     ? '· timeout'
+               : undefined,
+      retry:     () => void refresh(),
+    });
   };
 
   const activeKind = state.status === 'unlocked' ? state.kind : null;
   // The alias term makes the balances re-fetch when the background backfill
   // resolves it (null → 0x…) and the Gate's re-poll delivers the new state.
-  const activeEvmAlias = state.status === 'unlocked' && state.kind === 'tezos' ? state.evmAlias : null;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { void refresh(); }, [state.status, activeKind, activeEvmAlias]);
+  const activeEvmAlias  = state.status === 'unlocked' && state.kind === 'tezos' ? state.evmAlias : null;
+  const activeAccountId = state.status === 'unlocked' ? state.accountId : null;
+  useEffect(() => {
+    if (state.status !== 'unlocked' || activeAccountId == null) return;
+    let cancelled = false;
+    void (async () => {
+      // First render for this account: paint the last persisted balances
+      // instantly, then reconcile with the live fetch (which either replaces
+      // them fresh or flags them as cached via the offline band).
+      if (paintedForRef.current !== activeAccountId) {
+        paintedForRef.current = activeAccountId;
+        setXtz(null);
+        setTokenBalances({});
+        setCachedAt(null);
+        setBandDismissed(false);
+        const snap = await loadBalancesSnapshot(activeAccountId);
+        if (cancelled) return;
+        if (snap != null) {
+          if (snap.data.xtz != null) setXtz(snap.data.xtz);
+          setTokenBalances(snap.data.erc20);
+        }
+      }
+      if (!cancelled) await refresh();
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.status, activeKind, activeEvmAlias, activeAccountId]);
+
+  // Reconnect: the 'online' event only fires on a genuine transition, so this
+  // is the "we're back" refetch (the Gate refreshes state in parallel, which
+  // kicks the SW-side alias backfill).
+  const online = useOnline(() => { void refresh(); });
 
   const lock = async () => {
     await sendPopupRequest({ type: 'LOCK' });
@@ -174,6 +239,14 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
           </>
         }
       />
+
+      {cachedAt != null && !bandDismissed && (
+        <ActivityStaleBand
+          title={unreachableTitle(online)}
+          detail={`updated ${timeAgo(cachedAt)}`}
+          onDismiss={() => setBandDismissed(true)}
+        />
+      )}
 
       <div className="tx-page-scroll">
         <div style={{ position: 'relative' }}>

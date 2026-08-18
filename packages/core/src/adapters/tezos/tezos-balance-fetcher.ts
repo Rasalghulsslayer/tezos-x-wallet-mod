@@ -8,6 +8,8 @@ import { TezlinkClient } from '@tezosx/relayer/tezlink';
 import { TEZOS_L1_RPC } from '@tezosx/relayer/constants';
 import type { BalanceFetcher } from '../../ports/balance-fetcher';
 import type { Asset } from '../../domain/asset';
+import { fetchWithDeadline } from '../../shared/fetch-with-deadline';
+import { RPC_READ_TIMEOUT_MS } from '../../shared/constants';
 
 const tezlink = new TezlinkClient();
 
@@ -18,7 +20,11 @@ function encodeAddressParam(addr: string): string {
 }
 
 export async function fetchL1XtzBalance(tz1: string): Promise<string> {
-  const res = await fetch(`${TEZOS_L1_RPC}/chains/main/blocks/head/context/contracts/${tz1}/balance`);
+  const res = await fetchWithDeadline(
+    `${TEZOS_L1_RPC}/chains/main/blocks/head/context/contracts/${tz1}/balance`,
+    undefined,
+    RPC_READ_TIMEOUT_MS,
+  );
   if (!res.ok) throw new Error(`L1 RPC ${res.status}: ${await res.text()}`);
   return (await res.json()) as string;
 }

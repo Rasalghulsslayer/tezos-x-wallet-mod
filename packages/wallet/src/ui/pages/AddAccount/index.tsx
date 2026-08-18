@@ -1,6 +1,9 @@
 /**
- * AddAccount — 3-step flow orchestrator:
- *   pick → input (CreatePane | ImportPane) → confirm
+ * AddAccount — one-decision-per-screen wizard:
+ *   choose → [runtime → input (CreatePane | ImportPane)] → confirm
+ * The derived path skips runtime+input (the choose screen's hero already
+ * carries the runtime, and there is no secret to show or paste). Step kickers
+ * and dots project from the core flow VM — never computed here.
  *
  * Discard overlay intercepts Back/Close mid-Create with revealed-but-uncommitted
  * fresh secret. Each step + its sub-pieces live in their own file under this folder.
@@ -19,18 +22,20 @@ import { formatError } from '@tezosx/wallet-core/domain/error';
 import { MAX_ACCOUNTS_PER_VAULT } from '@tezosx/wallet-core/shared/constants';
 import { toast } from '../../tx/Toast';
 
+import { addAccountFlowVM } from '@tezosx/wallet-core/view-models/add-account-flow-vm';
 import { AddAccountTopBar } from './AddAccountTopBar';
-import { PickStep } from './PickStep';
+import { ChooseStep } from './ChooseStep';
+import { RuntimeStep } from './RuntimeStep';
 import { InputStep } from './InputStep';
 import { ConfirmStep } from './ConfirmStep';
 import { DiscardOverlay } from './DiscardOverlay';
 import { stageTitle } from './helpers';
-import { STAGES, type Pick, type Preview, type Stage, type TzMode } from './types';
+import type { Kind, Pick, Preview, Stage, TzMode } from './types';
 
 export function AddAccount({ state, onChanged }: { state: VaultState; onChanged: () => void }) {
   const navigate = useNavigate();
 
-  const [stage, setStage] = useState<Stage>('pick');
+  const [stage, setStage] = useState<Stage>('choose');
   const [pick,  setPick]  = useState<Pick | null>(null);
 
   // Fresh secrets — generated lazily on input stage entry.
@@ -69,7 +74,7 @@ export function AddAccount({ state, onChanged }: { state: VaultState; onChanged:
   );
   const nextSeq = sortedAccounts.length + 1;
 
-  const stageIdx = STAGES.indexOf(stage);
+  const vm       = addAccountFlowVM(stage, pick);
   const isCreate = pick?.source === 'fresh';
   const isImport = pick?.source === 'import';
   const isTezos  = pick?.kind === 'tezos';
@@ -169,12 +174,13 @@ export function AddAccount({ state, onChanged }: { state: VaultState; onChanged:
   const armedDiscard = stage === 'input' && isCreate && revealed;
 
   const tryBack = () => {
-    if (stage === 'pick') { navigate(-1); return; }
-    if (armedDiscard)     { setDiscardOpen(true); return; }
-    if (stage === 'input')   setStage('pick');
-    // A derived pick never had an input stage — back out of confirm returns
-    // straight to the picker.
-    else if (stage === 'confirm') setStage(pick?.source === 'derived' ? 'pick' : 'input');
+    if (stage === 'choose') { navigate(-1); return; }
+    if (armedDiscard)       { setDiscardOpen(true); return; }
+    if (stage === 'runtime')      setStage('choose');
+    else if (stage === 'input')   setStage('runtime');
+    // A derived pick never had a runtime or input stage — back out of confirm
+    // returns straight to the choose screen.
+    else if (stage === 'confirm') setStage(pick?.source === 'derived' ? 'choose' : 'input');
   };
 
   const confirmDiscard = () => {
@@ -184,17 +190,31 @@ export function AddAccount({ state, onChanged }: { state: VaultState; onChanged:
     setRevealed(false);
     setAck1(false);
     setAck2(false);
-    setStage('pick');
+    setStage('runtime');
   };
 
   // ── Transitions ─────────────────────────────────────────────────────────────
 
-  const choosePick = (next: Pick) => {
-    setPick(next);
+  // The hero's runtime cards commit the whole pick at once: derived accounts
+  // have no secret to reveal or paste, so they jump straight to confirm.
+  const chooseDerived = (kind: Kind) => {
+    setPick({ kind, source: 'derived' });
     setLabel('');
-    // A derived account has no secret to reveal or paste — the input stage
-    // would be empty, so it jumps straight to naming/confirm.
-    setStage(next.source === 'derived' ? 'confirm' : 'input');
+    setStage('confirm');
+  };
+
+  // A source row only decides *how* the key arrives; the runtime screen picks
+  // the kind next. The placeholder kind is never read before it does — the
+  // flow VM only looks at `source` until the input stage.
+  const chooseSource = (source: 'import' | 'fresh') => {
+    setPick({ kind: 'tezos', source });
+    setLabel('');
+    setStage('runtime');
+  };
+
+  const chooseRuntime = (kind: Kind) => {
+    setPick((p) => (p == null ? p : { ...p, kind }));
+    setStage('input');
   };
 
   const goToConfirm = () => setStage('confirm');
@@ -293,19 +313,29 @@ export function AddAccount({ state, onChanged }: { state: VaultState; onChanged:
         title={stageTitle(stage, pick)}
         onBack={tryBack}
         onClose={tryBack}
-        stageIdx={stageIdx}
+        dots={vm.dots}
         capN={sortedAccounts.length}
         capMax={MAX_ACCOUNTS_PER_VAULT}
-        showCap={stage === 'pick'}
+        showCap={stage === 'choose'}
       />
 
-      {stage === 'pick' && (
-        <PickStep capReached={capReached} hasSeed={state.hasSeed === true} onChoose={choosePick} />
+      {stage === 'choose' && (
+        <ChooseStep
+          capReached={capReached}
+          hasSeed={state.hasSeed === true}
+          onDerived={chooseDerived}
+          onSource={chooseSource}
+        />
+      )}
+
+      {stage === 'runtime' && (
+        <RuntimeStep kicker={vm.kicker} onPick={chooseRuntime} />
       )}
 
       {stage === 'input' && pick != null && (
         <InputStep
           pick={pick}
+          kicker={vm.kicker}
           tzMnemonic={tzMnemonic}
           evmPrivkey={evmPrivkey}
           revealed={revealed} setRevealed={setRevealed}
@@ -327,6 +357,7 @@ export function AddAccount({ state, onChanged }: { state: VaultState; onChanged:
       {stage === 'confirm' && pick != null && (
         <ConfirmStep
           pick={pick}
+          kicker={vm.kicker}
           preview={preview}
           nextSeq={nextSeq}
           label={label} setLabel={setLabel}

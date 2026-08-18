@@ -1,11 +1,13 @@
 import type { AccountSummary } from '@tezosx/wallet-core/shared/messages';
 import { CreatePane } from './CreatePane';
 import { ImportPane } from './ImportPane';
+import { StepHead } from './StepHead';
 import { stageHeadline } from './helpers';
 import type { Pick, TzMode } from './types';
 
 export interface InputStepProps {
   pick:           Pick;
+  kicker:         string | null;
   tzMnemonic:     string | null;
   evmPrivkey:     string | null;
   revealed:       boolean; setRevealed: (b: boolean) => void;
@@ -25,7 +27,7 @@ export interface InputStepProps {
 }
 
 export function InputStep(props: InputStepProps) {
-  const { pick, onContinue, onBack, continueOk } = props;
+  const { pick, kicker, onContinue, onBack, continueOk } = props;
   const isCreate = pick.source === 'fresh';
   const isTezos  = pick.kind === 'tezos';
   const primaryClass = `btn primary${isTezos ? '' : ' l2'}`;
@@ -33,19 +35,17 @@ export function InputStep(props: InputStepProps) {
   return (
     <>
       <div className="tx-page-scroll">
-        <div className="tx-add-step-head" style={{ paddingBottom: 8 }}>
-          <div className="kicker">
-            Step 2 of 3 · {isCreate ? `Save your ${isTezos ? 'phrase' : 'key'}` : 'Paste a secret'}
-          </div>
-          <h2>{stageHeadline(pick)}</h2>
-          {isCreate && (
-            <p className="sub">
-              {isTezos
+        <StepHead
+          icon={isCreate ? (isTezos ? 'seed' : 'key') : 'paste'}
+          accent={isTezos ? 'purple' : 'cyan'}
+          kicker={kicker}
+          title={stageHeadline(pick)}
+          sub={isCreate
+            ? (isTezos
                 ? "Write it down somewhere offline. Anyone with these words owns this account — Tezos X can't recover it."
-                : '256 bits as a 64-character hex string. Anyone with it owns this account.'}
-            </p>
-          )}
-        </div>
+                : '256 bits as a 64-character hex string. Anyone with it owns this account.')
+            : undefined}
+        />
 
         {isCreate
           ? <CreatePane {...props} />

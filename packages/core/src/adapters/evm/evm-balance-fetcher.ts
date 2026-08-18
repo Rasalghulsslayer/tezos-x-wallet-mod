@@ -7,6 +7,8 @@
 import { TEZLINK_EVM_RPC } from '@tezosx/relayer/constants';
 import type { BalanceFetcher } from '../../ports/balance-fetcher';
 import type { Asset } from '../../domain/asset';
+import { fetchWithDeadline } from '../../shared/fetch-with-deadline';
+import { RPC_READ_TIMEOUT_MS } from '../../shared/constants';
 
 const BALANCE_OF_SELECTOR = '0x70a08231';
 
@@ -15,11 +17,11 @@ function encodeAddressParam(addr: string): string {
 }
 
 async function jsonRpc<T>(method: string, params: unknown[]): Promise<T> {
-  const res = await fetch(TEZLINK_EVM_RPC, {
+  const res = await fetchWithDeadline(TEZLINK_EVM_RPC, {
     method:  'POST',
     headers: { 'content-type': 'application/json' },
     body:    JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-  });
+  }, RPC_READ_TIMEOUT_MS);
   const json = await res.json() as { result?: T; error?: { message: string } };
   if (json.error != null) throw new Error(json.error.message);
   return json.result as T;

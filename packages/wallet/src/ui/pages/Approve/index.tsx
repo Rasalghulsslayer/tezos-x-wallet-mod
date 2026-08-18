@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { PendingRequest, VaultState } from '@tezosx/wallet-core/shared/messages';
 import { sendApproveRequest, sendPopupRequest } from '@/shared/messaging';
 import { formatError, makeError } from '@tezosx/wallet-core/domain/error';
+import { useOnline } from '../../hooks/use-online';
 import { Button } from '../../tx/Button';
 import { Icon } from '../../tx/Icon';
 import { ErrorCard } from '../../tx/ErrorCard';
@@ -34,6 +35,7 @@ export function Approve() {
   const [vault,   setVault]   = useState<VaultState | null>(null);
   const [stage,   setStage]   = useState<Stage>('request');
   const [error,   setError]   = useState<unknown>(null);
+  const online = useOnline();
 
   const requestId = useMemo(
     () => new URLSearchParams(window.location.search).get('requestId') ?? '',
@@ -135,7 +137,32 @@ export function Approve() {
     );
   }
 
-  if (pending.kind === 'connect')   return <ConnectView   pending={pending} respond={respond} ctx={accountContext} />;
-  if (pending.kind === 'signature') return <SignatureView pending={pending} respond={respond} ctx={accountContext} />;
-  return <TxView pending={pending} respond={respond} ctx={accountContext} />;
+  // Non-blocking: approving signs and broadcasts, which needs the network;
+  // rejecting resolves locally, so it stays fully enabled either way.
+  const offlineNotice = !online ? (
+    <div className="tx-status-band" role="status">
+      <span className="ico" aria-hidden>
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+          <path d="M7 1.5 12.5 11h-11L7 1.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+          <path d="M7 5.5v2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          <circle cx="7" cy="9.5" r=".55" fill="currentColor" />
+        </svg>
+      </span>
+      <span className="txt">
+        <strong>You&apos;re offline</strong> — approving will fail until the connection returns. Rejecting works offline.
+      </span>
+    </div>
+  ) : null;
+
+  const view =
+    pending.kind === 'connect'   ? <ConnectView   pending={pending} respond={respond} ctx={accountContext} /> :
+    pending.kind === 'signature' ? <SignatureView pending={pending} respond={respond} ctx={accountContext} /> :
+                                   <TxView pending={pending} respond={respond} ctx={accountContext} />;
+
+  return (
+    <>
+      {offlineNotice}
+      {view}
+    </>
+  );
 }

@@ -45,8 +45,26 @@ shared `@tezosx/wallet-core` over the workspace; only platform adapters
   (`read-state.ts`) is gone: core `getState` now is that read, and boot gains
   real account summaries.
 
+### Added
+- **Offline continuity.** The EVM alias map persists in MMKV (resolved once
+  per address, ever); balances and the first activity page are snapshotted
+  with their fetch time and rendered offline under an explicit "updated X
+  ago" band — "You're offline" (NetInfo) or "Can't reach the Tezos X
+  network" (RPC down). Activity distinguishes "No activity yet" from "Can't
+  reach the network" with a Retry; regaining connectivity triggers an
+  automatic refresh and alias backfill. Send's confirm step gates on
+  connectivity before the biometric prompt; the approval sheet announces
+  offline while keeping Reject available.
+- **A guided add-account flow**, identical decision tree to the extension:
+  hero "Recommended · Next account from your seed phrase" with the runtime
+  as the only remaining question (2-tap default), advanced paths behind
+  "More ways to add an account", step math from the shared core view-model.
+  Reaches safety parity with the extension: two acknowledgements, reveal
+  overlay, discard-unbacked-key interception, duplicate detection with
+  "Switch to it", real address preview on confirm, and the account cap.
+
 ### Compatibility
-- Requires `@tezosx/wallet-core` 0.7.0 and `@tezosx/relayer` 0.7.1.
+- Requires `@tezosx/wallet-core` 0.7.0 and `@tezosx/relayer` 0.8.0.
 
 ## [0.4.0] — 2026-08-10
 

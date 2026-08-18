@@ -167,9 +167,12 @@ export async function resetWallet(): Promise<void> {
   deps.approvalQueue.rejectAll('wallet reset');
   deps.containerCache.clear();
   deps.state.container = null;
-  // Reset is the one place the alias cache is dropped: the tz1s it is keyed by
-  // no longer exist. Lock keeps it (public mapping, offline relock → unlock).
+  // Reset is the one place the alias cache (and its persisted map) is dropped:
+  // the tz1s it is keyed by no longer exist. Lock keeps it (public mapping,
+  // offline relock → unlock). The balance/activity snapshots die with their
+  // accounts for the same reason.
   evmAliasCache.clear();
+  await deps.persistentPorts.snapshotStore.clear().catch(() => { /* best-effort */ });
   await unlockSecret.clear();
 }
 
@@ -209,14 +212,20 @@ export async function addAccount(req: AddAccountReq): Promise<AddAccountOutcome>
  */
 export async function removeAccount(accountId: string, password: string): Promise<VaultState> {
   const wasActive = activeAccountId() === accountId;
-  // Capture the sessions bound to this account before it's gone.
+  // Capture the account (for its tz1) and the sessions bound to it before
+  // the removal makes both unreachable.
+  const removed = keyring.listAccounts().find((a) => a.id === accountId);
   const orphaned = (await sessionStore.list()).filter((s) => s.accountId === accountId);
   await removeAccountUseCase({ accountId, password }, { keyring });
   deps.containerCache.evict(accountId);
+  // Hygiene, mirroring the extension's REMOVE_ACCOUNT handler: the alias map
+  // enumerates the vault's tz1s and the snapshots hold this account's read
+  // models — both would outlive their account otherwise. Other accounts'
+  // entries stay valid (the map is keyed by tz1).
+  if (removed?.kind === 'tezos') evmAliasCache.remove(removed.tz1);
+  void deps.persistentPorts.snapshotStore.clearAccount(accountId).catch(() => { /* best-effort */ });
   await Promise.all(orphaned.map((s) => disconnectDapp(s.origin).catch(() => { /* best-effort */ })));
   if (wasActive) {
-    // The alias cache needs no invalidation: it is keyed by tz1, and the
-    // replacement account's entry (if resolved) is still valid.
     await deps.rebuildContainer();
   }
   return getState({ keyring, aliasCache: evmAliasCache });

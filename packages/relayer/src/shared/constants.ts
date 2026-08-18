@@ -24,5 +24,13 @@ export const NAC_RECOMMENDED_GAS = {
  * tezos/tezos!22168.
  */
 export const NAC_HTTP_POST = 1; // url method enum (uint8 on EVM, nat on Michelson)
+
+/**
+ * Default deadline for jsonRpc round-trips. React Native's fetch has no
+ * app-level timeout (a dead-but-connected network can hang unboundedly on
+ * Android) and MV3 offers none either. Write passthroughs opt out — an abort
+ * after a broadcast is worse than waiting.
+ */
+export const RPC_TIMEOUT_MS = 15_000;
 export const NAC_TEZOS_RUNTIME_URL    = 'http://tezos/';    // EVM → Michelson (credit a tz1/KT1)
 export const NAC_ETHEREUM_RUNTIME_URL = 'http://ethereum/'; // Michelson → EVM (credit a 0x)

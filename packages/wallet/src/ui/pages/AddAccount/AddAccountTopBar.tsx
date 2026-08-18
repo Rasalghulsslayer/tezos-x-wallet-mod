@@ -1,17 +1,17 @@
 import { Icon } from '../../tx/Icon';
 import { Dots } from '../../tx/Dots';
-import { STAGES } from './types';
 
 export function AddAccountTopBar({
-  title, onBack, onClose, stageIdx, capN, capMax, showCap,
+  title, onBack, onClose, dots, capN, capMax, showCap,
 }: {
-  title:    string;
-  onBack:   () => void;
-  onClose:  () => void;
-  stageIdx: number;
-  capN:     number;
-  capMax:   number;
-  showCap:  boolean;
+  title:   string;
+  onBack:  () => void;
+  onClose: () => void;
+  /** Step dots from the flow VM — null on the choose screen (no step math there). */
+  dots:    { i: number; n: number } | null;
+  capN:    number;
+  capMax:  number;
+  showCap: boolean;
 }) {
   return (
     <div className="tx-topbar" style={{ position: 'relative' }}>
@@ -28,10 +28,10 @@ export function AddAccountTopBar({
         <span className="tx-topbar-title">{title}</span>
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <Dots i={stageIdx} n={STAGES.length} />
+        {dots != null && <Dots i={dots.i} n={dots.n} />}
         {showCap && (
-          <span className="tx-add-cap" title="Accounts in vault">
-            {capN + 1} / {capMax}
+          <span className={`tx-add-cap${capN >= capMax ? ' danger' : ''}`} title="Accounts in vault">
+            {Math.min(capN + 1, capMax)} / {capMax}
           </span>
         )}
         <button

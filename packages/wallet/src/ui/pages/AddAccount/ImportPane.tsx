@@ -3,6 +3,8 @@ import { shortAddr } from '@tezosx/wallet-core/shared/format';
 import type { AccountSummary } from '@tezosx/wallet-core/shared/messages';
 import { Identicon } from '../../tx/Identicon';
 import { Icon } from '../../tx/Icon';
+import { Ack } from '../../tx/Ack';
+import { Meta } from '../../tx/Meta';
 import type { Pick, TzMode } from './types';
 
 export function ImportPane({
@@ -50,11 +52,11 @@ export function ImportPane({
     <>
       <div className="tx-add-import-card">
         {isTezos && (
-          <div className="toggle">
-            <button type="button" className={tzMode === 'mnemonic' ? 'on' : ''} onClick={() => setTzMode('mnemonic')}>
+          <div className="tx-segmented" style={{ marginBottom: 10 }}>
+            <button type="button" aria-pressed={tzMode === 'mnemonic'} onClick={() => setTzMode('mnemonic')}>
               Recovery phrase
             </button>
-            <button type="button" className={tzMode === 'edsk' ? 'on' : ''} onClick={() => setTzMode('edsk')}>
+            <button type="button" aria-pressed={tzMode === 'edsk'} onClick={() => setTzMode('edsk')}>
               Private key (edsk)
             </button>
           </div>
@@ -68,20 +70,22 @@ export function ImportPane({
             : '0xa1c2b3d4…'}
         />
         {trimmed !== '' && (
-          <div className={`meta-line${shape ? ' valid' : showInvalid ? ' invalid' : ''}`}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             {shape ? (
-              <span className="lt"><Icon name="check" size={10} />{validLine}</span>
+              <Meta tone="ok">{validLine}</Meta>
             ) : (
-              <span className="lt"><Icon name="alert" size={10} />
+              <Meta tone="bad">
                 {isTezos
                   ? (tzMode === 'mnemonic'
                       ? 'Invalid — expected 12, 15, 18, 21 or 24 words'
                       : 'Invalid Tezos secret key')
                   : 'Expected 64 hex chars (with or without 0x prefix)'}
-              </span>
+              </Meta>
             )}
             {wordCount != null && (
-              <span style={{ color: 'var(--tx-fg-subtle)' }}>{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
+              <span style={{ fontSize: 10.5, color: 'var(--tx-fg-subtle)', marginTop: 8 }}>
+                {wordCount} {wordCount === 1 ? 'word' : 'words'}
+              </span>
             )}
           </div>
         )}
@@ -109,16 +113,14 @@ export function ImportPane({
               </div>
             </div>
             <button type="button" className="switch-btn" onClick={onSwitchToExisting}>
-              Switch to it <Icon name="arrow-right" size={9} />
+              Switch to it <Icon name="chevron-right" size={10} />
             </button>
           </div>
-          <label className={`ack${duplicateAck ? ' on' : ''}`}>
-            <span className="cb">{duplicateAck && <Icon name="check" size={10} />}</span>
-            <span onClick={() => setDuplicateAck(!duplicateAck)}>
+          <div style={{ marginTop: 10 }}>
+            <Ack accent={isTezos ? 'purple' : 'cyan'} checked={duplicateAck} onToggle={() => setDuplicateAck(!duplicateAck)}>
               Add it again anyway — I'll use it under a different label.
-            </span>
-            <input type="checkbox" checked={duplicateAck} onChange={(e) => setDuplicateAck(e.target.checked)} style={{ display: 'none' }} />
-          </label>
+            </Ack>
+          </div>
         </div>
       )}
     </>

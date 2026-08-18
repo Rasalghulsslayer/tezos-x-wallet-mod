@@ -8,6 +8,7 @@
 
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { timeAgo } from '@tezosx/wallet-core/shared/format';
 import { colors, fontSize, radius, space } from '../theme';
 import { Icon } from '../ui/icon';
 import { ActivityRow } from '../ui/tx/ActivityRow';
@@ -72,8 +73,26 @@ export function Activity(): React.JSX.Element {
   const now = Date.now();
   const groups = useMemo(() => groupByDay(items, now), [items, now]);
   const filtered = dir !== 'all' || runtimeF !== 'all';
-  const stale = activityData.data != null && activityData.data.staleness !== 'fresh';
   const loading = activityData.loading && all.length === 0;
+
+  const view = activityData.data;
+  // Cached feed: the items come from the persisted snapshot — either the hook's
+  // read-through (`stale`) or a 'cached-only' page the use-case served when
+  // every live source failed. Labeled with the snapshot's age; the copy says
+  // offline vs unreachable, or just the age while an online refresh is running.
+  const cachedFetchedAt =
+    activityData.stale?.fetchedAt ?? (view?.staleness === 'cached-only' ? view.fetchedAt : undefined);
+  const cachedBand = cachedFetchedAt != null && all.length > 0;
+  const revalidating = activityData.loading && activityData.error == null;
+  const cachedStrong =
+    !ctx.online    ? "You're offline"
+    : revalidating ? null
+    :                "Can't reach the Tezos X network";
+  // A partial page is live data with one source behind — the softer band.
+  const partialBand = view?.staleness === 'partial' && !cachedBand;
+  // 'cached-only' with zero items = every source failed and there is no
+  // snapshot to fall back on: a distinct "can't reach" state, not "no activity".
+  const unreachable = view?.staleness === 'cached-only' && all.length === 0;
 
   return (
     <View style={styles.screen}>
@@ -82,7 +101,24 @@ export function Activity(): React.JSX.Element {
         right={<IconBtn name="refresh" label="Refresh" onPress={() => ctx.refreshData()} />}
       />
 
-      {stale && !staleDismissed && (
+      {cachedBand && !staleDismissed && (
+        <View style={styles.staleBand}>
+          <Icon name="info" size={15} color={colors.warning} />
+          <Text style={styles.staleText}>
+            {cachedStrong != null ? (
+              <>
+                <Text style={styles.staleStrong}>{cachedStrong}</Text> · updated {timeAgo(cachedFetchedAt)}
+              </>
+            ) : (
+              <>Updated {timeAgo(cachedFetchedAt)}</>
+            )}
+          </Text>
+          <Pressable style={styles.staleX} onPress={() => setStaleDismissed(true)}>
+            <Icon name="x" size={14} color={colors.fgSubtle} />
+          </Pressable>
+        </View>
+      )}
+      {partialBand && !staleDismissed && (
         <View style={styles.staleBand}>
           <Icon name="info" size={15} color={colors.warning} />
           <Text style={styles.staleText}>
@@ -117,7 +153,7 @@ export function Activity(): React.JSX.Element {
         </Pressable>
       </View>
 
-      {activityData.error != null ? (
+      {activityData.error != null && activityData.stale == null ? (
         <View style={styles.stateWrap}>
           <ErrorCard title={activityData.error.title} detail={activityData.error.detail} />
         </View>
@@ -125,6 +161,17 @@ export function Activity(): React.JSX.Element {
         <View style={styles.stateWrap}>
           <Spinner />
         </View>
+      ) : unreachable ? (
+        <EmptyState
+          icon={<Icon name="alert" size={22} color={colors.warning} />}
+          title="Can't reach the network"
+          detail={
+            ctx.online
+              ? 'The Tezos X network is unreachable and nothing is cached for this account yet. Your activity will appear once the connection returns.'
+              : "You're offline and nothing is cached for this account yet. Your activity will appear once the connection returns."
+          }
+          action={{ label: 'Retry', onPress: () => ctx.refreshData() }}
+        />
       ) : items.length === 0 ? (
         <EmptyState
           icon={<Icon name="list" size={22} color={colors.fgMuted} />}

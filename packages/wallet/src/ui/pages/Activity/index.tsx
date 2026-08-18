@@ -13,6 +13,8 @@ import { ACTIVITY_AUTO_REFRESH_MS, ACTIVITY_PAGE_SIZE } from '@tezosx/wallet-cor
 import { sendPopupRequest } from '@/shared/messaging';
 import { startPoller } from '@tezosx/wallet-core/shared/poller';
 import { formatError } from '@tezosx/wallet-core/domain/error';
+import { timeAgo } from '@tezosx/wallet-core/shared/format';
+import { unreachableTitle, useOnline } from '../../hooks/use-online';
 import { TopBar } from '../../tx/TopBar';
 import { BottomTabs } from '../../tx/BottomTabs';
 import { ActivityFilters, type DirectionFilter, type RuntimeFilter } from '../../tx/ActivityFilters';
@@ -45,6 +47,9 @@ export function Activity({ state }: { state: VaultState }) {
   const [runtime,      setRuntime]      = useState<RuntimeFilter>('all');
   const [staleDismissed, setStaleDismissed] = useState(false);
   const [staleness,    setStaleness]    = useState<ActivityPage['staleness']>('fresh');
+  /** The snapshot's fetch time when the page is served from cache ('cached-only'). */
+  const [fetchedAt,    setFetchedAt]    = useState<number | null>(null);
+  const [hasErrors,    setHasErrors]    = useState(false);
 
   const filter = useMemo(() => buildFilter(direction, runtime), [direction, runtime]);
   const renderedIds = useMemo(() => new Set(items.map((i) => i.id)), [items]);
@@ -63,7 +68,11 @@ export function Activity({ state }: { state: VaultState }) {
         setItems(page.items);
         setCursor(page.cursor);
         setStaleness(page.staleness);
-        if (page.errors != null && page.errors.length > 0) {
+        setFetchedAt(page.fetchedAt ?? null);
+        setHasErrors(page.errors != null && page.errors.length > 0);
+        // 'cached-only' gets a dedicated surface (offline band over cached
+        // items, or the can't-reach empty state) — a toast on top would be noise.
+        if (page.staleness !== 'cached-only' && page.errors != null && page.errors.length > 0) {
           errorToast({ message: page.errors[0].message, secondary: '· activity' });
         }
       })
@@ -81,6 +90,8 @@ export function Activity({ state }: { state: VaultState }) {
       fetch:    () => sendPopupRequest<ActivityPage>({ type: 'LIST_ACTIVITY', limit: ACTIVITY_PAGE_SIZE, filter }),
       onUpdate: (page) => {
         setStaleness(page.staleness);
+        setFetchedAt(page.fetchedAt ?? null);
+        setHasErrors(page.errors != null && page.errors.length > 0);
         const fresh = page.items.filter((i) => !renderedIdsRef.current.has(i.id));
         if (fresh.length > 0) {
           setPending((prev) => {
@@ -97,20 +108,27 @@ export function Activity({ state }: { state: VaultState }) {
     return () => handle.stop();
   }, [state.status, filter]);
 
-  if (state.status !== 'unlocked') return null;
-
   const manualRefresh = async () => {
     try {
       const page = await sendPopupRequest<ActivityPage>({ type: 'LIST_ACTIVITY', limit: ACTIVITY_PAGE_SIZE, filter });
       setItems(page.items);
       setCursor(page.cursor);
       setStaleness(page.staleness);
+      setFetchedAt(page.fetchedAt ?? null);
+      setHasErrors(page.errors != null && page.errors.length > 0);
       setPending([]);
       setStaleDismissed(false);
     } catch (e) {
       errorToast({ message: formatError(e).title, secondary: '· activity' });
     }
   };
+
+  // Reconnect: refetch the first page as soon as connectivity returns.
+  const online = useOnline(() => {
+    if (state.status === 'unlocked') void manualRefresh();
+  });
+
+  if (state.status !== 'unlocked') return null;
 
   const loadMore = async () => {
     if (cursor == null || loadingMore) return;
@@ -141,6 +159,10 @@ export function Activity({ state }: { state: VaultState }) {
   };
 
   const showStaleBand = staleness !== 'fresh' && !staleDismissed && items.length > 0;
+  // No live source AND nothing cached: a dedicated can't-reach state with a
+  // Retry — distinct from "No activity yet", which stays for a genuinely empty
+  // fresh read.
+  const showUnreachableEmpty = staleness === 'cached-only' && items.length === 0 && hasErrors;
 
   return (
     <div className="tx-page">
@@ -154,11 +176,19 @@ export function Activity({ state }: { state: VaultState }) {
       />
 
       {showStaleBand && (
-        <ActivityStaleBand
-          title="Activity may be delayed"
-          detail={staleness === 'cached-only' ? 'both sources unreachable' : 'one source is catching up'}
-          onDismiss={() => setStaleDismissed(true)}
-        />
+        staleness === 'cached-only' ? (
+          <ActivityStaleBand
+            title={unreachableTitle(online)}
+            detail={fetchedAt != null ? `updated ${timeAgo(fetchedAt)}` : 'showing cached activity'}
+            onDismiss={() => setStaleDismissed(true)}
+          />
+        ) : (
+          <ActivityStaleBand
+            title="Activity may be delayed"
+            detail="one source is catching up"
+            onDismiss={() => setStaleDismissed(true)}
+          />
+        )
       )}
 
       <ActivityFilters
@@ -179,6 +209,26 @@ export function Activity({ state }: { state: VaultState }) {
         {loading && items.length === 0 ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--tx-fg-muted)', fontSize: 13 }}>
             Loading activity…
+          </div>
+        ) : showUnreachableEmpty ? (
+          <div className="tx-activity-empty">
+            <div className="icon-wrap">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M5 12a7 7 0 0 1 14 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M8.5 15a3.5 3.5 0 0 1 7 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <circle cx="12" cy="18" r="1" fill="currentColor" />
+                <path d="M4 4l16 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </div>
+            <h4>Can&apos;t reach the network</h4>
+            <p>Activity can&apos;t be loaded right now. Check your connection and try again.</p>
+            <button onClick={() => void manualRefresh()}>
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden>
+                <path d="M10 6a4 4 0 1 1-1.2-2.85" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                <path d="M10 1v2.5H7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Retry
+            </button>
           </div>
         ) : items.length === 0 ? (
           <div className="tx-activity-empty">

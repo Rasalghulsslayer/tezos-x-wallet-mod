@@ -26,7 +26,7 @@
     "@taquito/rpc": "^24.3.0",
     "@taquito/signer": "^24.3.0",
     "@taquito/taquito": "^24.3.0",
-    "@tezosx/relayer": "^0.7.1",
+    "@tezosx/relayer": "^0.8.0",
     "@tezosx/wallet-core": "^0.7.0",
     "buffer": "^6.0.3",
     "react": "^19.2.5",

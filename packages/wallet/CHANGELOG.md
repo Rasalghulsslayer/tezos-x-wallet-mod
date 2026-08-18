@@ -33,13 +33,71 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
   "TezosX").
 
 ### Added
-- An offline end-to-end spec family (`e2e/specs/offline/`): onboarding,
-  unlock, and popup reopen are exercised with every network route aborted,
-  locking the offline guarantees into the CI gate.
+- **Offline continuity.** The EVM alias map persists in extension storage
+  (resolved once per address, ever); the last-known balances and first
+  activity page are snapshotted with their fetch time and served offline
+  under an explicit "updated X ago" band — "You're offline" when the browser
+  knows it is, "Can't reach the Tezos X network" when the RPC is the problem.
+  Activity distinguishes "No activity yet" from "Can't reach the network"
+  (with Retry), and coming back online triggers an automatic refresh. Send's
+  confirm step and the approval window announce offline before anything is
+  signed; rejecting stays available (it is local).
+- **A guided add-account flow.** The 4-6 card source×runtime grid becomes one
+  decision per screen: with a wallet seed, the first screen leads with a
+  "Recommended · Next account from your seed phrase" hero whose only
+  remaining question is the runtime (the default path stays two taps), and
+  import / new-separate-keys live behind "More ways to add an account";
+  without a seed it degrades to two source rows then a runtime choice. Step
+  kickers and dots project from one shared core view-model, ending the
+  "Step 2 of 2" under 3-dot steppers contradictions. Card copy unifies on
+  "Michelson account" / "EVM account".
+- End-to-end spec families for both: `e2e/specs/offline/` (onboarding,
+  unlock, popup reopen, cached-balance rendering — all with every network
+  route aborted) and `e2e/specs/add-account/` (derived 2-tap path, advanced
+  disclosure, import path), locking the guarantees into the CI gate.
+
+### Changed
+- **Onboarding visual redesign** (copy, step order and step count unchanged).
+  Welcome recomposes left-aligned: the runtime choice becomes two full-width
+  rows whose selection tints the primary CTA, keeping the decision and its
+  consequence in one vertical line. Create intros carry a runtime-marked
+  header (seed / key glyph — the user knows which secret they are about to be
+  handed); the gating acknowledgements are 44px surface rows with accent
+  check fills, not naked checkboxes. The recovery phrase renders as a two-up
+  bordered word grid with a right-aligned tabular number gutter, blurred
+  under a translucent curtain that carries the shoulder-surf warning; the
+  word confirmation uses position chips with per-row correctness ticks and a
+  "doesn't match your phrase" hint that stays quiet mid-word. Imports gain a
+  live count-based validity line ("Invalid · 5 words. Expected 12, 15, 18,
+  21 or 24."), a segmented phrase/key switch, and a shield-marked trust line;
+  the create CTAs disable until the passwords actually match, with a
+  "Passwords match" confirmation. Step dots take the runtime accent and mark
+  completed steps. The mono affordance is Aspekta itself now (tabular
+  figures + tighter tracking) — the token previously pointed at a typeface
+  the wallet never shipped. The EVM private-key Copy now routes through the
+  auto-clearing clipboard helper, making the "clipboard clears in 30 s" note
+  true — it previously left the key on the clipboard indefinitely. The
+  add-account wizard follows the same language: source-marked step headers
+  (seed / key / paste glyphs), the recommended hero carries an accent border
+  and wash with a "Recommended" rule, source rows gain a spine, the runtime
+  step uses full-width rows, acknowledgements live inside the secret's card
+  (shared Ack rows), and the review failure state renders a full error card.
+  The cross-cutting states got the same treatment: the discard interception
+  becomes a blurred-backdrop dialog card whose destructive verb is outlined,
+  never a second accent; the review's unresolved alias slot keeps its badge
+  and width with a labelled spinner (paused offline, under an "Offline —
+  addresses will resolve when you reconnect" strip and an honest note that
+  the tz1 is final and the account can still be created); busy CTAs keep
+  their width and take a spinner; a failed import offers "Try again" with a
+  note that retrying is safe; the unlock screen's lock glyph turns warning
+  under throttle and the cooldown counts down live in tabular figures
+  instead of showing a stale number; and the reset checklist renders as an
+  outcome-coloured card (Recovered / Not recovered / Kept) with the
+  acknowledgement as a standard Ack row.
 
 ### Compatibility
 - Requires `@tezosx/wallet-core` 0.7.0 (network-free `getState`, nullable
-  `evmAlias`) and `@tezosx/relayer` 0.7.1.
+  `evmAlias`, alias/snapshot stores) and `@tezosx/relayer` 0.8.0.
 
 ## [0.16.0] — 2026-08-10
 

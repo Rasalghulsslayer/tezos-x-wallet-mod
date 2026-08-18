@@ -21,6 +21,8 @@ import { MmkvVaultStore } from '../adapters/mmkv-vault-store';
 import { MmkvSessionStore } from '../adapters/mmkv-session-store';
 import { MmkvTokenStore } from '../adapters/mmkv-token-store';
 import { MmkvContactStore } from '../adapters/mmkv-contact-store';
+import { MmkvAliasStore } from '../adapters/mmkv-alias-store';
+import { MmkvSnapshotStore } from '../adapters/mmkv-snapshot-store';
 import { MmkvUnlockGuardStore } from '../adapters/mmkv-unlock-guard-store';
 import { MmkvPendingOpsStore } from '../adapters/mmkv-pending-ops-store';
 import { NoopNotificationPort } from '../adapters/noop-notification-port';
@@ -34,16 +36,22 @@ export const cryptoPort    = new QuickCryptoPort();
 export const vaultStore    = new MmkvVaultStore(mmkv);
 export const sessionStore  = new MmkvSessionStore(mmkv);
 export const tokenStore    = new MmkvTokenStore(mmkv);
+export const aliasStore    = new MmkvAliasStore(mmkv);
+export const snapshotStore = new MmkvSnapshotStore(mmkv);
 export const notifications = new NoopNotificationPort();
 export const unlockSecret  = new KeychainUnlockSecret();
 
 export const keyring = new Keyring(vaultStore, cryptoPort, new MmkvUnlockGuardStore(mmkv));
 
-/** tz1 → EVM alias entries, mirroring the extension SW's cache. In-memory
- *  (rebuilt by the background backfill after an app restart); survives lock —
- *  aliases are immutable public mappings, not key material — and is cleared
- *  on wallet reset. */
-export const evmAliasCache = new EvmAliasCache();
+/** tz1 → EVM alias entries, mirroring the extension SW's cache. Backed by the
+ *  MMKV alias store: resolved entries are written through and hydrated back
+ *  after an app restart, so an alias is resolved at most once per wallet
+ *  lifetime. Survives lock — aliases are immutable public mappings, not key
+ *  material — and is cleared (with its persisted map) on wallet reset. */
+export const evmAliasCache = new EvmAliasCache(aliasStore);
+// Warm the cache from storage at module init. Race-safe: hydrate() is
+// idempotent and backfill() awaits it internally before resolving anything.
+void evmAliasCache.hydrate();
 
 // ── dApp routing composition (SwDeps) ─────────────────────────────────────────
 // The same shape the extension service worker builds, so the WalletConnect
@@ -55,6 +63,8 @@ export const persistentPorts: PersistentPorts = {
   sessionStore,
   tokenStore,
   contactStore: new MmkvContactStore(mmkv),
+  aliasStore,
+  snapshotStore,
   notifications,
   pendingOpsStore: (accountId) => new MmkvPendingOpsStore(mmkv, accountId),
 };

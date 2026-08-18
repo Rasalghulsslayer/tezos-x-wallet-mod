@@ -6,6 +6,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.8.0] — 2026-08-18
+
+### Added
+- `jsonRpc` now enforces a deadline (`RPC_TIMEOUT_MS`, 15 s) via
+  AbortController. React Native's fetch has no app-level timeout — a
+  connected-but-dead network could hang a read unboundedly on Android — and
+  MV3 offers none either. A timed-out call throws a plain "timed out" error
+  (no EIP-1193 code: a timeout is not a transport loss) so consumers route it
+  to the dedicated copy. Call sites can pass `{ timeoutMs }` to tune or
+  `{ timeoutMs: null }` to opt out — the Tezlink catch-all proxy opts out
+  because it may carry write methods, and aborting after a broadcast is worse
+  than waiting.
+
 ## [0.7.1] — 2026-08-18
 
 ### Fixed

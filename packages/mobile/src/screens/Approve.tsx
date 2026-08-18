@@ -105,11 +105,22 @@ export function Approve(): React.JSX.Element | null {
               />
               <Body req={req} host={host} />
             </ScrollView>
+            {!ctx.online && (
+              <View style={styles.offlineNote}>
+                <Icon name="info" size={15} color={colors.warning} />
+                <Text style={styles.offlineNoteText}>
+                  You're offline — approving will fail until the connection returns.
+                </Text>
+              </View>
+            )}
             <View style={styles.actionBar}>
               <Btn variant="outline" onPress={() => respond('reject')}>
                 Reject
               </Btn>
-              <Btn variant="accent" full onPress={() => respond('approve')}>
+              {/* Offline, an approval can only fail (the dApp is reached over the
+                  network) — disable it before the biometric prompt ever fires.
+                  Reject stays available: it resolves the local queue. */}
+              <Btn variant="accent" full disabled={!ctx.online} onPress={() => respond('approve')}>
                 {CONFIRM_LABEL[req.kind]}
               </Btn>
             </View>
@@ -308,4 +319,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
   },
+
+  // Same amber band pattern as the Activity/Home stale bands.
+  offlineNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(255,184,76,0.07)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,184,76,0.18)',
+  },
+  offlineNoteText: { flex: 1, fontSize: fontSize.xs, color: colors.fgMuted },
 });
