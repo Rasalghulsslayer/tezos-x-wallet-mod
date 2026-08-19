@@ -100,30 +100,9 @@ const config: Config = {
           label: 'Relayer',
         },
         {
-          type: 'docsVersionDropdown',
-          position: 'left',
-          dropdownItemsBefore: [
-            {
-              type: 'html',
-              value: '<strong class="dropdown__link" style="pointer-events:none;opacity:0.6;">Relayer docs</strong>',
-            },
-          ],
-        },
-        {
           to: '/wallet/intro',
           label: 'Wallet',
           position: 'right',
-        },
-        {
-          type: 'docsVersionDropdown',
-          docsPluginId: 'wallet',
-          position: 'right',
-          dropdownItemsBefore: [
-            {
-              type: 'html',
-              value: '<strong class="dropdown__link" style="pointer-events:none;opacity:0.6;">Wallet docs</strong>',
-            },
-          ],
         },
         {
           href: 'https://github.com/trilitech/tezos-x-wallet',
@@ -140,7 +119,7 @@ const config: Config = {
           items: [
             { label: 'Introduction', to: '/docs/intro' },
             { label: 'Architecture', to: '/docs/architecture/overview' },
-            { label: 'API Reference', to: '/docs/technical/api-reference' },
+            { label: 'SDK', to: '/docs/sdk/overview' },
             { label: 'Wallet', to: '/wallet/intro' },
             { label: 'Security Model', to: '/wallet/technical/security-model' },
           ],

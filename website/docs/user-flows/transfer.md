@@ -6,7 +6,11 @@ sidebar_position: 2
 
 # Native Transfer Flow
 
-Send XTZ from your tz1 account (through its EVM alias) to a `0x` destination on the EVM runtime.
+Send XTZ from your tz1 account (through its EVM alias) to a `0x` destination
+on the EVM runtime. A transaction with empty calldata is routed through the
+NAC gateway's generic `call` entrypoint (Michelson notation `%call`): an
+HTTP-style request POSTed to `http://ethereum/<0x>` with the operation's mutez
+amount attached.
 
 ## Sequence
 
@@ -16,14 +20,14 @@ sequenceDiagram
     participant dApp
     participant Relayer
     participant Gateway as NAC Gateway
-    participant Temple
+    participant Wallet as Wallet UI
 
     dApp->>Relayer: eth_sendTransaction({ to, value })
-    Relayer->>Relayer: Build Micheline (%call HTTP entrypoint)
-    Relayer->>Temple: Sign Michelson operation
-    Temple->>User: Confirm transaction
-    User->>Temple: Sign
-    Temple->>Gateway: operation → call(http://ethereum/&lt;0x&gt;, …)
+    Relayer->>Relayer: Build Micheline (call HTTP entrypoint)
+    Relayer->>Wallet: Sign Michelson operation
+    Wallet->>User: Confirm transaction
+    User->>Wallet: Sign
+    Wallet->>Gateway: operation → call(http://ethereum/&lt;0x&gt;, …)
     Gateway->>Gateway: Forward XTZ transfer
     Relayer->>dApp: synthetic hash
 ```
@@ -55,6 +59,20 @@ See [Send XTZ (wallet docs)](/wallet/user-flows/send-xtz) for how the wallet
 surfaces this.
 :::
 
+## Pre-signing validation
+
+Two checks run before any signing popup opens; both reject with JSON-RPC
+error `-32602`:
+
+- **`InvalidDestinationError`** — the `to` field must be a canonical `0x` +
+  40-hex-character address. The destination is embedded verbatim in the signed
+  Micheline (as the `http://ethereum/<to>` URL), so anything else — an ENS
+  name, a tz1 address, a string with path segments — is rejected. This check
+  runs first, before the transfer / contract-call branching, so it applies to
+  bare transfers exactly as it does to [contract calls](./smart-contract-call).
+- **`SubMutezPrecisionError`** — the `value` must be divisible by 10¹² wei
+  (1 mutez); see below.
+
 ## Value encoding
 
 Tezos uses mutez (1 tez = 1,000,000 mutez). The relayer converts wei → mutez internally:
@@ -70,8 +88,31 @@ by 10¹² (1 mutez) is rejected with `SubMutezPrecisionError` (JSON-RPC
 `-32602`) before any signing popup opens, so no sub-mutez remainder can be
 silently lost.
 
+### Computing the value safely
+
+Compute the wei value as **mutez × 10¹² with `BigInt`** — never as
+`parseFloat(amount) * 1e18`. Floating-point multiplication produces sub-mutez
+remainders (e.g. `0.1 * 1e18` is not an exact integer in IEEE-754), and any
+remainder means an immediate `-32602` rejection:
+
+```ts
+const WEI_PER_MUTEZ = 10n ** 12n;
+
+/** '1.5' (tez) → '0x14d1120d7b160000' — exact, max 6 decimals. */
+function tezToWeiHex(tez: string): string {
+  const [int, frac = ''] = tez.split('.');
+  if (frac.length > 6) throw new Error('XTZ has 6 decimals (1 mutez) — trim the input');
+  const mutez = BigInt(int + frac.padEnd(6, '0'));
+  return '0x' + (mutez * WEI_PER_MUTEZ).toString(16);
+}
+```
+
+Parsing the decimal string directly (rather than via `parseFloat`) keeps the
+whole pipeline in integers, so the resulting value is always mutez-aligned.
+
 ## See also
 
 - [Smart contract call flow](./smart-contract-call) — the non-empty-calldata path
-- [API Reference](../technical/api-reference) — `eth_sendTransaction` and the typed errors
-- [NAC Gateway](../architecture/nac-gateway) — how the `%call` entrypoint is built
+- [RelayerProvider](../sdk/provider) — the full `request()` surface · [typed errors](../sdk/cross-runtime#typed-errors)
+- [NAC Gateway](../architecture/nac-gateway) — how the `call` entrypoint payload is built
+- [Gotchas](/docs/gotchas) — value alignment, fee model, and other integration pitfalls

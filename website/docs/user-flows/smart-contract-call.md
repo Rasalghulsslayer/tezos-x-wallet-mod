@@ -6,7 +6,9 @@ sidebar_position: 3
 
 # Smart Contract Call Flow
 
-Call an EVM smart contract from a Tezos X EVM dApp via the NAC gateway.
+Call an EVM smart contract from a Tezos X EVM dApp via the NAC gateway. A
+transaction with non-empty calldata is routed through the gateway's
+`call_evm` entrypoint.
 
 ## Example: Counter contract
 
@@ -15,12 +17,20 @@ Call an EVM smart contract from a Tezos X EVM dApp via the NAC gateway.
 await window.ethereum.request({
   method: 'eth_sendTransaction',
   params: [{
-    to: '0x7b0e325FF8F70d21891A7494B5715C6dC3d08D7b',
+    to: '0x525982C267F4B93cCB075B9323B069A993a9DEd7',
     data: '0xd09de08a', // increment() selector
-    gas: '0x186a0',
   }]
 });
 ```
+
+:::info Gas fields are ignored
+`gas`, `gasPrice`, `maxFeePerGas` and `maxPriorityFeePerGas` are silently
+ignored on this path — the relayer reads only `to`, `value` and `data`. The
+transaction executes as a Michelson operation whose fee is denominated in
+mutez and computed when the wallet signs; there is no EVM gas market to bid
+into. Correspondingly, `eth_estimateGas` answers a constant headroom figure
+and `eth_gasPrice` answers `0x0`. See [Gotchas](/docs/gotchas).
+:::
 
 ## Function selectors (Counter)
 
@@ -32,8 +42,11 @@ await window.ethereum.request({
 | `retrieve()` | `0x2e64cec1` | Read — goes through `eth_call`, not the gateway |
 
 Only selectors on the relayer's curated allow-list can be sent via
-`eth_sendTransaction`; unknown selectors are rejected with
-`UnknownSelectorError` before any signing popup opens. See
+`eth_sendTransaction`; an unknown selector is rejected with
+`UnknownSelectorError` (JSON-RPC `-32602`) before any signing popup opens.
+Extending the list is a **code change in the relayer, not configuration** —
+each entry's text signature is embedded verbatim in the signed Micheline
+payload and is reviewed before being added. See
 [Selector resolution](../architecture/nac-gateway#selector-resolution).
 
 ## Sequence
@@ -43,17 +56,17 @@ sequenceDiagram
     actor User
     participant dApp
     participant Relayer
-    participant Temple
+    participant Wallet as Wallet UI
     participant Gateway as NAC Gateway
     participant Kernel
 
     dApp->>Relayer: eth_sendTransaction({ to: 0xContract, data: 0xd09de08a })
     Relayer->>Relayer: Detect contract call (data != 0x)
     Relayer->>Relayer: Build call_evm Micheline payload
-    Relayer->>Temple: Sign Michelson operation
-    Temple->>User: Confirm
-    User->>Temple: Sign
-    Temple->>Gateway: call_evm(Pair("0xContract", Pair("increment()", bytes)))
+    Relayer->>Wallet: Sign Michelson operation
+    Wallet->>User: Confirm
+    User->>Wallet: Sign
+    Wallet->>Gateway: call_evm(Pair("0xContract", Pair("increment()", bytes)))
     Gateway->>Kernel: Atomic forward
     Kernel->>Kernel: Execute → counter++
     Relayer->>dApp: synthetic hash
@@ -65,24 +78,34 @@ kernel-synthesized EVM hash is resolved lazily. See
 
 ## ABI encoding
 
-```js
+```ts
 // setNumber(42)
-function encodeSetNumber(value) {
-  const hex = value.toString(16).padStart(64, '0');
-  return '0x3fb5c1cb' + hex;
+function encodeSetNumber(num: bigint): string {
+  return '0x3fb5c1cb' + num.toString(16).padStart(64, '0');
 }
 
 await window.ethereum.request({
   method: 'eth_sendTransaction',
   params: [{
-    to: '0x7b0e325FF8F70d21891A7494B5715C6dC3d08D7b',
-    data: encodeSetNumber(42),
+    to: '0x525982C267F4B93cCB075B9323B069A993a9DEd7',
+    data: encodeSetNumber(42n),
   }]
 });
 ```
 
+## Attaching value
+
+A payable contract call may carry a `value`, and the same mutez-alignment
+rule as [transfers](./transfer#value-encoding) applies: the wei → mutez
+conversion runs on the `call_evm` path too, and a value not divisible by
+10¹² wei is rejected with `SubMutezPrecisionError` (`-32602`) before signing.
+Compute values as mutez × 10¹² with `BigInt`. The destination check also runs
+first on this path: a non-canonical `to` is rejected with
+`InvalidDestinationError` (`-32602`).
+
 ## See also
 
 - [Transfer flow](./transfer) — the empty-calldata path
-- [API Reference](../technical/api-reference) — `eth_sendTransaction` and the typed errors
+- [RelayerProvider](../sdk/provider) — the full `request()` surface · [typed errors](../sdk/cross-runtime#typed-errors)
 - [NAC Gateway](../architecture/nac-gateway) — `call_evm` signature and selector resolution
+- [Gotchas](/docs/gotchas) — fee model and value alignment

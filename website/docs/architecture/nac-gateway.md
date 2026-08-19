@@ -16,16 +16,21 @@ NAC is bidirectional. Each direction uses a different surface:
 
 | Direction | Surface | Used by |
 |---|---|---|
-| **EVM → Michelson** | NAC precompile at `0xff00000000000000000000000000000000000007`, via the EVM selectors `callMichelson(string,string,bytes)` (ABI calls) and the generic `call(string,(string,string)[],bytes,uint8)` (bare native transfers) | dApps running on the EVM runtime that want to invoke a Michelson contract or credit a tz1 — see [EVM entry point](../technical/evm-entry) |
-| **Michelson → EVM** | NAC gateway contract `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw` on the Michelson runtime, entrypoints `call_evm` (ABI calls) and `%call` (bare native transfers) | **The relayer** — wraps every user EVM transaction as a Michelson op |
+| **EVM → Michelson** | NAC precompile at `0xff00000000000000000000000000000000000007`, via the EVM selectors `callMichelson(string,string,bytes)` (ABI calls) and the generic `call(string,(string,string)[],bytes,uint8)` (bare native transfers) | dApps running on the EVM runtime that want to invoke a Michelson contract or credit a tz1 — see [Cross-runtime builders](../sdk/cross-runtime) |
+| **Michelson → EVM** | NAC gateway contract `KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw` on the Michelson runtime, entrypoints `call_evm` (ABI calls) and `call` (bare native transfers) | **The relayer** — wraps every user EVM transaction as a Michelson op |
+
+Entrypoint naming: this documentation writes gateway entrypoints as the code
+does — `call`, `call_evm` (Michelson notation prefixes them with `%`, as in
+`%call`; both spellings name the same entrypoint).
 
 ## What the relayer does
 
-The relayer uses the **Michelson → EVM** direction. Temple can only sign Michelson runtime
-operations, so instead of submitting an EVM transaction directly, the relayer
-wraps the user's intent into a Michelson op targeting the NAC gateway. The Tezos X
-kernel receives the op, synthesizes the corresponding EVM transaction, and
-executes it with `msg.sender` set to the user's EVM alias.
+The relayer uses the **Michelson → EVM** direction. A tz1 wallet can only
+sign Michelson runtime operations, so instead of submitting an EVM
+transaction directly, the relayer wraps the user's intent into a Michelson op
+targeting the NAC gateway. The Tezos X kernel receives the op, synthesizes
+the corresponding EVM transaction, and executes it with `msg.sender` set to
+the user's EVM alias.
 
 The builder is the `buildTezosToEvmCall` use case (exported from
 `@tezosx/relayer/tezos`). It picks the entrypoint by calldata:
@@ -68,11 +73,11 @@ For a non-empty calldata EVM transaction, `buildTezosToEvmCall` produces:
 }
 ```
 
-## Bare native transfers — the `%call` entrypoint
+## Bare native transfers — the `call` entrypoint
 
 Bare transfers (empty calldata) go through the gateway's generic HTTP
-**`%call`** entrypoint. (The old hard-coded `%default` bare-transfer helper
-was removed upstream in tezos/tezos!22168; `%call` is its replacement.) The
+**`call`** entrypoint. (The old hard-coded `%default` bare-transfer helper
+was removed upstream in tezos/tezos!22168; `call` is its replacement.) The
 entrypoint takes an HTTP-style request:
 
 ```
@@ -112,12 +117,17 @@ with `SubMutezPrecisionError` instead of being silently floored.
 
 ## Flow
 
+The diagram shows the ABI-call branch (`call_evm`); a bare native transfer
+follows the same path through the `call` entrypoint. "Wallet" is whatever
+`ITezosWalletClient` backs the provider — Temple via Beacon, or the Tezos X
+Wallet's own signer.
+
 ```mermaid
 sequenceDiagram
     autonumber
     participant dApp
     participant Relayer as Relayer<br/>(window.ethereum)
-    participant Temple
+    participant Wallet
     participant Michelson as Michelson runtime
     participant Gateway as NAC Gateway<br/>(KT18oDJJ...qsPw)
     participant Kernel as Tezos X Kernel<br/>(EVM runtime)
@@ -125,12 +135,12 @@ sequenceDiagram
     dApp->>Relayer: eth_sendTransaction({to, data, value})
     Relayer->>Relayer: buildTezosToEvmCall → Micheline
     Relayer->>Kernel: eth_blockNumber (snapshot)
-    Relayer->>Temple: requestOperation(call_evm, Pair(...))
-    Temple->>Michelson: inject signed operation
+    Relayer->>Wallet: sendContractCall(call_evm, Pair(...))
+    Wallet->>Michelson: inject signed operation
     Michelson->>Gateway: transaction(entrypoint=call_evm, Pair(...))
     Gateway->>Kernel: atomic forward
     Note over Kernel: synthesizes EVM tx<br/>msg.sender = user's 0x alias
-    Kernel-->>Relayer: Michelson opHash (via Temple)
+    Kernel-->>Relayer: Michelson opHash (via Wallet)
     Relayer-->>dApp: synthetic hash (keccak256(opHash))
     dApp->>Relayer: eth_getTransactionByHash / Receipt
     Relayer->>Kernel: scan blocks from snapshot
@@ -160,6 +170,13 @@ opens**. There is no remote lookup and no raw-hex fallback: the text
 signature is embedded verbatim in the signed Micheline payload, so every
 entry is reviewed before being added — extending the list is a code change
 in the relayer.
+
+The destination string gets the same treatment for the same reason: it is
+embedded verbatim in the signed Micheline (the `call_evm` destination field,
+or the `http://ethereum/<0x>` URL for a bare transfer). `buildTezosToEvmCall`
+therefore rejects anything that is not a canonical `0x` + 40-hex address with
+`InvalidDestinationError` before signing, so a dApp cannot slip an arbitrary
+string past a truncated approval display into what the user actually signs.
 
 Every `call_evm` build logs the resolved mapping:
 ```

@@ -4,6 +4,8 @@ const sidebars: SidebarsConfig = {
   docs: [
     'intro',
     'installation',
+    'quickstart',
+    'gotchas',
     {
       type: 'category',
       label: 'Architecture',
@@ -17,13 +19,14 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
-      label: 'Technical',
+      label: 'SDK',
       collapsed: false,
       items: [
-        'technical/build',
-        'technical/injection',
-        'technical/api-reference',
-        'technical/evm-entry',
+        'sdk/overview',
+        'sdk/provider',
+        'sdk/wallet-clients',
+        'sdk/cross-runtime',
+        'sdk/constants-and-types',
       ],
     },
     {
