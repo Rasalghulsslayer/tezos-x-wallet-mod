@@ -30,8 +30,6 @@ import { BottomTabs } from '../tx/BottomTabs';
 import { Badge } from '../tx/Badge';
 import { errorToast } from '../tx/Toast';
 
-const isSidePanel = new URLSearchParams(window.location.search).get('mode') === 'side';
-
 export function Home({ state, onChanged }: { state: VaultState; onChanged: () => void }) {
   const navigate = useNavigate();
   const [xtz, setXtz]                   = useState<string | null>(null);
@@ -216,20 +214,6 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
             <IconBtn label="Refresh" size="sm" onClick={() => void refresh()}>
               <Icon name="refresh" size={16} />
             </IconBtn>
-            {!isSidePanel && (
-              <IconBtn
-                label="Open in side panel"
-                size="sm"
-                onClick={async () => {
-                  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-                  if (tab?.windowId == null) return;
-                  await chrome.sidePanel.open({ windowId: tab.windowId });
-                  window.close();
-                }}
-              >
-                <Icon name="sidebar" size={16} />
-              </IconBtn>
-            )}
             <IconBtn label="Lock" size="sm" onClick={lock}>
               <Icon name="lock" size={16} />
             </IconBtn>

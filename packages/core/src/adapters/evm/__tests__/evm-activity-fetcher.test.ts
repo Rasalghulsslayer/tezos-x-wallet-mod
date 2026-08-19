@@ -45,6 +45,18 @@ describe('EvmActivityFetcher', () => {
     expect(it0.crossRuntime?.evmEffectStatus).toBe('confirmed');
   });
 
+  it('classifies a zero-value precompile call as a contract call, not a 0-XTZ transfer', async () => {
+    mockFetchEnvelope({ message: 'OK', result: [{ ...mixed.result[0], value: '0' }] });
+    const page = await new EvmActivityFetcher().list({ holder: HOLDER, limit: 10 });
+    const it0 = page.items[0];
+    expect(it0.kind).toBe('contract-call');
+    if (it0.kind !== 'contract-call') return;
+    expect(it0.runtime).toBe('cross-runtime');
+    expect(it0.target).toBe('tz1KqTpEZ7Yob7QbPE4Hy4Wo8fHG8LhKxZSx');
+    expect(it0.crossRuntime?.direction).toBe('evm-to-tezos');
+    expect(it0.crossRuntime?.l2TxHash).toBe(mixed.result[0].hash);
+  });
+
   it('parses a native EVM receive', async () => {
     mockFetchEnvelope({ message: 'OK', result: [mixed.result[1]] });
     const page = await new EvmActivityFetcher().list({ holder: HOLDER, limit: 10 });

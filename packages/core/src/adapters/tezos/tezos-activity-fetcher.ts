@@ -14,6 +14,7 @@ import type {
 import type {
   ActivityItem,
   ActivityContractCallItem,
+  ActivityLinks,
   ActivityTransferItem,
   ActivityUnknownItem,
 } from '../../domain/activity';
@@ -140,6 +141,38 @@ export class TezosActivityFetcher implements ActivityFetcher {
     // ── NAC gateway call (cross-runtime tezos-to-evm candidate) ───────────
     if (isNacGatewayCall(op)) {
       const counterparty = counterpartyFromNacCall(op);
+      const mutez        = op.amount ?? 0;
+      const links: ActivityLinks = {
+        primary:   { explorer: 'tzkt',       url: tzktUrl },
+        secondary: { explorer: 'blockscout', url: `${EVM_EXPLORER}/address/${counterparty}` },
+      };
+      const crossRuntime = {
+        direction:       'tezos-to-evm' as const,
+        l1OpHash:        op.hash,
+        evmEffectStatus: 'unresolved' as const,
+        tzktOperationId: op.id,
+      };
+
+      // ABI calls through the gateway (call_evm — e.g. an ERC-20 transfer)
+      // attach no XTZ; presenting them as 0-XTZ transfers reads as "−0 XTZ"
+      // in the feed. The L1 row is the call itself; any value it moves
+      // surfaces on the EVM side (token transfer rows).
+      if (mutez === 0) {
+        const item: ActivityContractCallItem = {
+          id:        `l1:${op.id}`,   // remains l1-keyed until the use case dedups
+          kind:      'contract-call',
+          direction: 'sent',
+          runtime:   'l1',
+          target:    counterparty !== '' ? counterparty : (op.target?.address ?? ''),
+          methodSig: op.parameter.entrypoint,
+          timestamp,
+          status,
+          links,
+          crossRuntime,
+        };
+        return item;
+      }
+
       const item: ActivityTransferItem = {
         id:           `l1:${op.id}`,    // remains l1-keyed until the use case dedups
         kind:         'transfer',
@@ -147,19 +180,11 @@ export class TezosActivityFetcher implements ActivityFetcher {
         runtime:      'l1',
         counterparty,
         asset:        XTZ_L1_ASSET,
-        amount:       String(op.amount ?? 0),
+        amount:       String(mutez),
         timestamp,
         status,
-        links:        {
-          primary:   { explorer: 'tzkt',       url: tzktUrl },
-          secondary: { explorer: 'blockscout', url: `${EVM_EXPLORER}/address/${counterparty}` },
-        },
-        crossRuntime: {
-          direction:       'tezos-to-evm',
-          l1OpHash:        op.hash,
-          evmEffectStatus: 'unresolved',
-          tzktOperationId: op.id,
-        },
+        links,
+        crossRuntime,
       };
       return item;
     }

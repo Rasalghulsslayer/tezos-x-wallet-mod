@@ -6,6 +6,50 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.18.0] — 2026-08-19
+
+### Changed
+- **The side panel is the default surface.** Clicking the toolbar icon now
+  opens the wallet docked as a side panel instead of the transient popup
+  (the manifest no longer declares `action.default_popup`; the service
+  worker enables `openPanelOnActionClick`). Browsers without the sidePanel
+  API fall back to the classic popup automatically. The "Open in side panel"
+  button on Home is gone — the panel no longer needs an opt-in.
+- **dApp approvals render inside the open wallet view.** When a wallet view
+  (side panel or popup) is open and visible, an incoming dApp request takes
+  over that view as a full-screen approval instead of spawning an extra
+  approve.html window; resolving it returns to the wallet, and closing the
+  view while an approval is showing rejects it (EIP-1193 4001), exactly like
+  closing the approval window. When no view is open — or the wallet sits in
+  a background tab or a minimized window, where the user could not see the
+  request — the approve.html window opens as before. Presence is tracked
+  through a long-lived port only extension pages can register on, gated on
+  the view's reported visibility; the in-view surface ignores pointer input
+  for its first moments on screen so a dApp cannot time a request to capture
+  an in-flight click. The security posture is otherwise unchanged —
+  approve.html stays out of `web_accessible_resources`, and the CSP and
+  iframe guards are untouched.
+- **Activity rows lead with the asset's real logo.** The hand-drawn 14 px
+  glyphs are replaced by the transferred asset's brand mark (the Tezos mark,
+  the Circle USDC logo, a monogram for unknown tokens) with a direction
+  badge in the corner — an ✕ on failure. The runtime ring (purple / cyan /
+  gradient, pending spinner) is unchanged. Contract calls, signed messages
+  and unknown items center a design-system stroke icon instead; the Activity
+  empty states use the shared icon set too.
+
+### Fixed
+- **The Send review screen shows the exact amount.** It went through the
+  default locale formatting (three fraction digits), so a 1-mutez transfer
+  reviewed as "Amount 0 XTZ" while every adjacent screen showed the true
+  value.
+- The transaction status timeline no longer reports inclusion or finality
+  from an unrelated TzKT operation — see `@tezosx/wallet-core` 0.8.0 for the
+  underlying fix; the wallet's "block #… · N attestations" line is now
+  backed by the operation it actually submitted.
+
+### Compatibility
+- Requires `@tezosx/wallet-core` 0.8.0.
+
 ## [0.17.0] — 2026-08-18
 
 ### Fixed

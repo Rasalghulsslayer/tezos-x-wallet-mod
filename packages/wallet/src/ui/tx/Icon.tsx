@@ -6,7 +6,8 @@ export type IconName =
   | 'copy' | 'eye' | 'eye-off' | 'lock' | 'home' | 'send' | 'activity'
   | 'settings' | 'plus' | 'qr' | 'link' | 'shield' | 'alert' | 'info'
   | 'globe' | 'scan' | 'wallet' | 'refresh' | 'dots' | 'help' | 'bell'
-  | 'logout' | 'sidebar' | 'external-link' | 'seed' | 'key' | 'paste' | 'offline';
+  | 'logout' | 'sidebar' | 'external-link' | 'seed' | 'key' | 'paste' | 'offline'
+  | 'code' | 'pen';
 
 export function Icon({
   name,
@@ -73,6 +74,8 @@ export function Icon({
     case 'logout':          return S(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></>);
     case 'sidebar':         return S(<><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M15 3v18" /><path d="m10 15-3-3 3-3" /></>);
     case 'external-link':   return S(<><path d="M14 4h6v6" /><path d="M20 4 11 13" /><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></>);
+    case 'code':            return S(<path d="m8 7-5 5 5 5M16 7l5 5-5 5" />);
+    case 'pen':             return S(<><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" /></>);
     default:                return null;
   }
 }

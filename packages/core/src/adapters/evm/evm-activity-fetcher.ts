@@ -22,9 +22,10 @@ import type {
 import type {
   ActivityContractCallItem,
   ActivityItem,
+  ActivityLinks,
   ActivityTransferItem,
 } from '../../domain/activity';
-import type { Asset, Erc20Asset } from '../../domain/asset';
+import type { Erc20Asset } from '../../domain/asset';
 import { XTZ_L2_ASSET } from '../../domain/asset';
 import type { RegisteredToken } from '../../domain/token';
 
@@ -252,29 +253,52 @@ export class EvmActivityFetcher implements ActivityFetcher {
     // ── NAC precompile call (evm-to-tezos cross-runtime) ──────────────────
     if (toLc === NAC_PRECOMPILE_ADDR.toLowerCase()) {
       const dest = decodePrecompileDestination(tx.input) ?? '';
-      const asset: Asset = XTZ_L2_ASSET;
+      const wei  = tx.value || '0';
+      const links: ActivityLinks = {
+        primary:   { explorer: 'blockscout', url: blockscoutUrl },
+        secondary: dest !== ''
+          ? { explorer: 'tzkt', url: `${TEZOS_EXPLORER}/${dest}` }
+          : undefined,
+      };
+      const crossRuntime = {
+        direction:       'evm-to-tezos' as const,
+        l1OpHash:        '',
+        l2TxHash:        tx.hash,
+        evmEffectStatus: status === 'confirmed' ? 'confirmed' as const
+                       : status === 'failed'    ? 'failed' as const
+                       :                          'pending' as const,
+      };
+
+      // A zero-value precompile call moves no XTZ (callMichelson ABI calls);
+      // rendering it as a 0-XTZ transfer reads as "−0 XTZ" in the feed.
+      if (wei === '0') {
+        const item: ActivityContractCallItem = {
+          id:        `l2:${tx.hash}`,
+          kind:      'contract-call',
+          direction: 'sent',
+          runtime:   'cross-runtime',
+          target:    dest !== '' ? dest : tx.to,
+          methodSig: tx.input.slice(0, 10),
+          timestamp,
+          status,
+          links,
+          crossRuntime,
+        };
+        return item;
+      }
+
       const item: ActivityTransferItem = {
         id:           `l2:${tx.hash}`,
         kind:         'transfer',
         direction:    fromLc === holderLc ? 'sent' : 'received',
         runtime:      'cross-runtime',
         counterparty: dest,
-        asset,
-        amount:       tx.value || '0',
+        asset:        XTZ_L2_ASSET,
+        amount:       wei,
         timestamp,
         status,
-        links:        {
-          primary:   { explorer: 'blockscout', url: blockscoutUrl },
-          secondary: dest !== ''
-            ? { explorer: 'tzkt', url: `${TEZOS_EXPLORER}/${dest}` }
-            : undefined,
-        },
-        crossRuntime: {
-          direction:       'evm-to-tezos',
-          l1OpHash:        '',
-          l2TxHash:        tx.hash,
-          evmEffectStatus: status === 'confirmed' ? 'confirmed' : status === 'failed' ? 'failed' : 'pending',
-        },
+        links,
+        crossRuntime,
       };
       return item;
     }

@@ -74,7 +74,7 @@ The wallet also locks itself without your help: after **5 minutes** without wall
 
 ## Side panel
 
-From the Home top bar, the **Open in side panel** button docks the wallet as a Chrome side panel — the same UI, filling the panel's height, that stays open while you browse. Useful when interacting with a dApp and the wallet at the same time.
+Clicking the toolbar icon opens the wallet docked as a Chrome side panel — the same UI, filling the panel's height, that stays open while you browse. Useful when interacting with a dApp and the wallet at the same time. On browsers without the side-panel API, the click falls back to the classic 360×600 popup.
 
 ## About
 

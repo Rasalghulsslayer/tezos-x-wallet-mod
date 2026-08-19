@@ -5,6 +5,27 @@ The Tezos X wallet for iOS/Android (React Native, Expo bare). Format follows
 shared `@tezosx/wallet-core` over the workspace; only platform adapters
 (storage, secure RNG, biometrics) and the UI live here.
 
+## [0.6.0] — 2026-08-19
+
+### Changed
+- **Activity rows lead with the asset's real logo**, mirroring the
+  extension: the transferred asset's brand mark (Tezos mark, Circle USDC
+  logo, monogram for unknown tokens) with a direction badge in the corner —
+  an ✕ on failure — inside the unchanged runtime ring. Contract calls,
+  signatures and unknown items center a stroke icon from the shared set.
+
+### Fixed
+- Token balances on Home were rounded to two fraction digits, so anything
+  under 0.005 displayed as "0.00". They now show up to six fraction digits,
+  like the XTZ headline.
+- Through `@tezosx/wallet-core` 0.8.0: transaction status no longer trusts
+  TzKT answers whose operation hash doesn't match the submitted one (false
+  "finalized"/"failed" reports), and zero-XTZ NAC gateway calls no longer
+  render as "−0 XTZ" transfers in Activity.
+
+### Compatibility
+- Requires `@tezosx/wallet-core` 0.8.0.
+
 ## [0.5.0] — 2026-08-18
 
 ### Security

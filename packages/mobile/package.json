@@ -1,6 +1,6 @@
 {
   "name": "@tezosx/wallet-mobile",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "main": "index.ts",
   "dependencies": {
     "@noble/ciphers": "1.2.1",
@@ -9,7 +9,7 @@
     "@react-native-community/netinfo": "12.0.1",
     "@reown/walletkit": "1.5.5",
     "@tezosx/relayer": "^0.8.0",
-    "@tezosx/wallet-core": "^0.7.0",
+    "@tezosx/wallet-core": "^0.8.0",
     "@walletconnect/core": "2.23.9",
     "@walletconnect/react-native-compat": "2.23.9",
     "@walletconnect/types": "2.23.9",

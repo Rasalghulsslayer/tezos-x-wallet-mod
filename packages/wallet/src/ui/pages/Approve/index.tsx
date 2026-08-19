@@ -1,9 +1,12 @@
 /**
- * Approve — dApp request approval popup. Fetches the pending PendingRequest
- * from the SW + the current VaultState (to derive AccountContext for the
- * AccountChip with the active-delta hint). Routes to one of three sub-views
- * per request kind. If the pinned signing account was removed between
- * enqueue and resolution, surfaces a danger card with Close-only.
+ * Approve — dApp request approval surface. ApprovalPanel is the reusable
+ * body: it fetches the pending PendingRequest from the SW + the current
+ * VaultState (to derive AccountContext for the AccountChip with the
+ * active-delta hint) and routes to one of three sub-views per request kind.
+ * If the pinned signing account was removed between enqueue and resolution,
+ * it surfaces a danger card with Close-only. Two hosts mount it: the
+ * approve.html window (Approve, requestId from the URL, closes the window)
+ * and the in-view ApprovalOverlay inside an open popup / side panel.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -31,16 +34,31 @@ export function Approve() {
     );
   }
 
+  const requestId = useMemo(
+    () => new URLSearchParams(window.location.search).get('requestId') ?? '',
+    [],
+  );
+  return <ApprovalPanel requestId={requestId} onClose={() => window.close()} />;
+}
+/* eslint-enable react-hooks/rules-of-hooks */
+
+export function ApprovalPanel({
+  requestId,
+  onClose,
+  onBusyChange,
+}: {
+  requestId:     string;
+  /** Close-intent: the window host closes itself; the overlay host advances. */
+  onClose:       () => void;
+  /** Signals the host that a resolution is in flight (signing → done) so an
+   *  in-view host keeps the panel mounted until onClose. */
+  onBusyChange?: (busy: boolean) => void;
+}) {
   const [pending, setPending] = useState<PendingRequest | null>(null);
   const [vault,   setVault]   = useState<VaultState | null>(null);
   const [stage,   setStage]   = useState<Stage>('request');
   const [error,   setError]   = useState<unknown>(null);
   const online = useOnline();
-
-  const requestId = useMemo(
-    () => new URLSearchParams(window.location.search).get('requestId') ?? '',
-    [],
-  );
 
   useEffect(() => {
     if (requestId === '') { setError(new Error('Missing requestId')); setStage('error'); return; }
@@ -62,14 +80,16 @@ export function Approve() {
   }, [pending, vault]);
 
   const respond = async (decision: 'approve' | 'reject') => {
+    onBusyChange?.(true);
     setStage(decision === 'approve' ? 'signing' : 'done');
     try {
       await sendApproveRequest({ type: 'RESOLVE_PENDING', requestId, decision });
       setStage('done');
-      setTimeout(() => window.close(), 900);
+      setTimeout(() => onClose(), 900);
     } catch (e) {
       setError(e);
       setStage('error');
+      onBusyChange?.(false);
     }
   };
 
@@ -94,7 +114,6 @@ export function Approve() {
             <Icon name="check" size={32} color="var(--tx-success)" strokeWidth={2.25} />
           </div>
           <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.015em' }}>Done</div>
-          <div style={{ fontSize: 13, color: 'var(--tx-fg-muted)' }}>You can close this window.</div>
         </div>
       </div>
     );
@@ -112,7 +131,7 @@ export function Approve() {
         </div>
         {error != null && (
           <div className="tx-action-bar">
-            <Button variant="outline" full onClick={() => window.close()}>Close</Button>
+            <Button variant="outline" full onClick={() => onClose()}>Close</Button>
           </div>
         )}
       </div>

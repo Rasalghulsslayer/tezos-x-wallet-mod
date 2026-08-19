@@ -6,11 +6,11 @@ sidebar_label: dApp Approval
 
 # dApp Approval
 
-When a dApp requests your accounts or asks you to sign something, TezosX Wallet opens a dedicated **approval window** for your consent. No dApp action is taken until you explicitly approve.
+When a dApp requests your accounts or asks you to sign something, TezosX Wallet asks for your consent before anything happens. If the wallet is already open (side panel or popup), the approval takes over that view; otherwise a dedicated **approval window** opens. No dApp action is taken until you explicitly approve.
 
 ## When approvals are triggered
 
-Exactly three methods are gated behind an approval window (the list lives in the service worker's dispatch, `packages/core/src/composition/sw-wiring.ts`):
+Exactly three methods are gated behind an approval (the list lives in the service worker's dispatch, `packages/core/src/composition/sw-wiring.ts`):
 
 | dApp call | Approval type |
 |---|---|

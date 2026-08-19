@@ -119,6 +119,21 @@ html, body {
   position: relative;
 }
 
+/* In-view approval host — full takeover of the popup / side panel while a
+   dApp request is pending (the windowed host is approve.html). */
+.tx-approval-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: var(--tx-bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* Input protection while the takeover settles: a dApp must not be able to
+   time a request so the user's in-flight click lands on an approval button. */
+.tx-approval-overlay.arming { pointer-events: none; }
+
 /* Page transitions */
 .tx-page {
   flex: 1;
@@ -747,8 +762,22 @@ html, body {
   width: 28px; height: 28px; border-radius: 50%;
   background: var(--tx-surface-2);
   display: grid; place-items: center; color: var(--tx-fg-muted);
+  overflow: hidden;
 }
 .tx-activity-ident.failed .core { color: var(--tx-danger); }
+
+/* Corner badge on the asset mark — direction arrow, or ✕ on failure */
+.tx-activity-ident .dir-badge {
+  position: absolute; right: -3px; bottom: -3px;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: var(--tx-surface-3);
+  box-shadow: 0 0 0 2px var(--tx-bg);
+  display: grid; place-items: center;
+  color: var(--tx-fg-muted);
+}
+.tx-activity-ident .dir-badge.in     { color: var(--tx-success); }
+.tx-activity-ident .dir-badge.out    { color: var(--tx-fg); }
+.tx-activity-ident .dir-badge.failed { color: var(--tx-danger); }
 @keyframes tx-activity-spin { to { transform: rotate(360deg); } }
 
 /* Body — t1: verb · arrow · address  /  t2: tag · time (or status) */

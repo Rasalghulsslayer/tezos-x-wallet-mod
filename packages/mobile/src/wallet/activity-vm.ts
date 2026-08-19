@@ -10,12 +10,15 @@ import { formatTokenAmount } from '@tezosx/wallet-core/shared/format';
 
 export interface ActivityRowVM {
   id: string;
+  kind: 'transfer' | 'contract-call' | 'signature' | 'unknown';
   dir: 'out' | 'in';
   verb: string;
   peer: string;
   runtime: 'l1' | 'l2' | 'cross';
   amount: string;
   symbol: string;
+  /** Transferred asset, for the row's logo mark; null for non-transfer rows. */
+  asset: { kind: 'xtz' | 'token'; symbol: string } | null;
   status: 'confirmed' | 'pending' | 'failed';
   ts: number;
 }
@@ -27,6 +30,7 @@ export function toActivityRowVM(item: ActivityItem): ActivityRowVM {
     const isIn = item.direction === 'received';
     return {
       id: item.id,
+      kind: 'transfer',
       dir: isIn ? 'in' : 'out',
       verb: isIn ? 'Received' : 'Sent',
       peer: item.counterparty,
@@ -35,24 +39,25 @@ export function toActivityRowVM(item: ActivityItem): ActivityRowVM {
       // asset's decimals to a display string, as the extension's VM does.
       amount: formatTokenAmount(item.amount, item.asset.decimals),
       symbol: item.asset.symbol,
+      asset: { kind: item.asset.kind === 'xtz' ? 'xtz' : 'token', symbol: item.asset.symbol },
       status: item.status,
       ts: item.timestamp,
     };
   }
   if (item.kind === 'contract-call') {
     return {
-      id: item.id, dir: 'out', verb: item.methodSig ?? 'Contract call', peer: item.target,
-      runtime, amount: '', symbol: '', status: item.status, ts: item.timestamp,
+      id: item.id, kind: 'contract-call', dir: 'out', verb: item.methodSig ?? 'Contract call', peer: item.target,
+      runtime, amount: '', symbol: '', asset: null, status: item.status, ts: item.timestamp,
     };
   }
   if (item.kind === 'signature') {
     return {
-      id: item.id, dir: 'out', verb: 'Signed', peer: item.origin,
-      runtime, amount: '', symbol: '', status: item.status, ts: item.timestamp,
+      id: item.id, kind: 'signature', dir: 'out', verb: 'Signed', peer: item.origin,
+      runtime, amount: '', symbol: '', asset: null, status: item.status, ts: item.timestamp,
     };
   }
   return {
-    id: item.id, dir: 'out', verb: 'Transaction', peer: item.raw.ref,
-    runtime, amount: '', symbol: '', status: 'confirmed', ts: item.timestamp,
+    id: item.id, kind: 'unknown', dir: 'out', verb: 'Transaction', peer: item.raw.ref,
+    runtime, amount: '', symbol: '', asset: null, status: 'confirmed', ts: item.timestamp,
   };
 }

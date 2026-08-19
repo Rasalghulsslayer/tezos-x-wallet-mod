@@ -53,7 +53,9 @@ interface StoredSession {
 }
 ```
 
-Closing the approval window with the X counts as a rejection: the presenter maps the window's `onRemoved` event back to the queue's dismiss callback.
+The presenter picks the surface: when a wallet view (side panel or popup) is open — it holds a long-lived UI port with the service worker — the approval renders inside that view instead, and the sequence above is otherwise identical. The approve.html window is the fallback when no view is open.
+
+Closing the approval window with the X counts as a rejection: the presenter maps the window's `onRemoved` event back to the queue's dismiss callback. Closing the last open wallet view while an in-view approval is showing rejects the same way.
 
 ## `enqueue()` internals
 

@@ -213,36 +213,24 @@ export function Activity({ state }: { state: VaultState }) {
         ) : showUnreachableEmpty ? (
           <div className="tx-activity-empty">
             <div className="icon-wrap">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <path d="M5 12a7 7 0 0 1 14 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                <path d="M8.5 15a3.5 3.5 0 0 1 7 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                <circle cx="12" cy="18" r="1" fill="currentColor" />
-                <path d="M4 4l16 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
+              <Icon name="offline" size={22} strokeWidth={1.5} />
             </div>
             <h4>Can&apos;t reach the network</h4>
             <p>Activity can&apos;t be loaded right now. Check your connection and try again.</p>
             <button onClick={() => void manualRefresh()}>
-              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden>
-                <path d="M10 6a4 4 0 1 1-1.2-2.85" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                <path d="M10 1v2.5H7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+              <Icon name="refresh" size={11} strokeWidth={2} />
               Retry
             </button>
           </div>
         ) : items.length === 0 ? (
           <div className="tx-activity-empty">
             <div className="icon-wrap">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
+              <Icon name="activity" size={22} strokeWidth={1.5} />
             </div>
             <h4>No activity yet</h4>
             <p>Send or receive XTZ and your transactions will show up here.</p>
             <button onClick={() => navigate('/receive')}>
-              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden>
-                <path d="M6 2.5v7M2.5 6h7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-              </svg>
+              <Icon name="plus" size={11} strokeWidth={2} />
               Receive
             </button>
           </div>

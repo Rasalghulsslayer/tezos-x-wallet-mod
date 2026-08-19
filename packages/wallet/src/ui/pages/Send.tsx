@@ -83,6 +83,18 @@ function mutezToBig(xtz: string): bigint {
   return BigInt(mutezPart || '0');
 }
 
+// Normalize the typed amount without a float round-trip: Number() flips to
+// scientific notation below 1e-6 and the default locale formatting rounds to
+// 3 fraction digits — both misreport small amounts on the review screen.
+function fmtExactAmount(raw: string): string {
+  const trimmed = raw.trim();
+  if (!/^\d*\.?\d*$/.test(trimmed) || trimmed === '' || trimmed === '.') return String(Number(trimmed));
+  const [w = '', f = ''] = trimmed.split('.');
+  const whole = w.replace(/^0+(?=\d)/, '') || '0';
+  const frac  = f.replace(/0+$/, '');
+  return frac === '' ? whole : `${whole}.${frac}`;
+}
+
 function bigMutezToXtzString(mutez: bigint): string {
   const whole = mutez / 1_000_000n;
   const frac  = mutez % 1_000_000n;
@@ -456,7 +468,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
           </div>
 
           <div className="tx-card" style={{ padding: 0 }}>
-            <Line label="Amount" value={`${parseFloat(amount).toLocaleString()} ${asset.symbol}`} />
+            <Line label="Amount" value={`${fmtExactAmount(amount)} ${asset.symbol}`} />
             <div className="tx-divider" />
             <Line label="Routing" value={routingLabel(state.kind, dest)} />
             <div className="tx-divider" />

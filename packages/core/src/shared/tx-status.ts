@@ -92,20 +92,29 @@ export function trackCrossRuntimeTx({ l1OpHash, getRealHash, onUpdate }: TrackCr
 // ── L1 polling via TzKT ─────────────────────────────────────────────────
 
 interface TzktOperation {
+  type?:     string;
+  hash?:     string;
   level:     number;
   timestamp: string;
   status:    string;
 }
 
 async function pollL1(opHash: string): Promise<TxStatus | null> {
+  // Query by path segment, not `?hash=` filtering: the previewnet TzKT has
+  // been observed ignoring the query filter and answering with unrelated
+  // historical operations. Never trust a returned operation without checking
+  // its hash — a mismatched item must read as "not indexed yet", not as
+  // inclusion or failure.
   const opRes = await fetch(
-    `${TZKT_API_BASE}/v1/operations/transactions?hash=${opHash}`,
+    `${TZKT_API_BASE}/v1/operations/${opHash}`,
   );
   if (!opRes.ok) return null;
   const ops = (await opRes.json()) as TzktOperation[];
-  if (ops.length === 0) return null;
-
-  const op = ops[0];
+  const matching = ops.filter((o) => o.hash === opHash);
+  // A batched operation (e.g. reveal + transaction) shares one hash across
+  // its contents; the transaction content carries the transfer's status.
+  const op = matching.find((o) => o.type === 'transaction') ?? matching[0];
+  if (op == null) return null;
   if (op.status !== 'applied') {
     return { stage: 'failed', reason: op.status };
   }

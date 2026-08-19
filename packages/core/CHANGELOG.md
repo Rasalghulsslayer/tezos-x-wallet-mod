@@ -7,6 +7,38 @@ TypeScript source over the npm-workspace symlink (no build step), by both the
 Chrome extension (`@tezosx/wallet`) and the React Native app
 (`@tezosx/wallet-mobile`).
 
+## [0.8.0] — 2026-08-19
+
+### Fixed
+- **L1 finality could be reported from someone else's operation.** The
+  tx-status tracker queried TzKT with
+  `/v1/operations/transactions?hash=<op>`, an endpoint the previewnet
+  instance has been observed answering with unrelated historical
+  transactions (the filter silently ignored), and trusted the first element
+  of the response unconditionally — a transfer still in the mempool could
+  show "finalized" at a wrong block with an absurd confirmation count in
+  under a second, and an unrelated backtracked operation could flag a
+  healthy transfer (including the L1 leg of a cross-runtime send) as failed.
+  The tracker now queries `/v1/operations/{hash}` and never trusts an
+  operation whose hash does not match the one requested: a mismatched answer
+  reads as "not indexed yet" and polling continues. Batched
+  reveal + transaction operations resolve to their transaction content.
+- **"−0 XTZ" rows in Activity.** NAC gateway calls that attach no XTZ
+  (`call_evm` ABI calls — e.g. a cross-runtime ERC-20 transfer) were
+  force-typed as 0-XTZ transfers and rendered as "−0 XTZ". They are now
+  classified as contract calls, keeping their cross-runtime correlation
+  metadata so the merge with the kernel-synthesized EVM mirror still
+  happens; the same guard applies to zero-value NAC precompile calls seen
+  from the EVM side. The token value such a call moves keeps surfacing
+  through the ERC-20 transfer rows.
+
+### Added
+- A UI-port contract in `shared/messages` (`UI_PORT_NAME`, `UiPortPush`): a
+  shell view can open a long-lived port to signal that a trusted wallet
+  surface is on screen and receive `PENDING_CHANGED` pushes when the
+  pending-approval set changes. This is what lets the extension render dApp
+  approvals inside an already-open view instead of a separate window.
+
 ## [0.7.0] — 2026-08-18
 
 ### Changed

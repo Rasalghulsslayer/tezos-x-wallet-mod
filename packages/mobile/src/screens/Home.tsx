@@ -34,9 +34,11 @@ export function Home(): React.JSX.Element {
   const xtzText = bal != null ? fmtXtz(bal.xtz) : '—';
   // Same for a token whose balance was never read (e.g. the EVM alias of the
   // tz1 holder is still resolving, so the ERC-20 read was skipped).
+  // Max 6 fraction digits, like the XTZ headline: capping at 2 would render
+  // any balance below 0.005 as "0.00".
   const tokenText = (address: string): string => {
     const v = bal?.tokens[address.toLowerCase()];
-    return v != null ? fmtXtz(v, 2, 2) : '—';
+    return v != null ? fmtXtz(v, 2, 6) : '—';
   };
   // Cached values are never shown as if they were live: whenever the numbers
   // come from the persisted snapshot (`stale` set), a band labels them with

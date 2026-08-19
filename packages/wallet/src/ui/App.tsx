@@ -20,6 +20,7 @@ import { AddToken }    from './pages/AddToken';
 import { TokensSettings } from './pages/TokensSettings';
 import { Contacts }    from './pages/Contacts';
 import { ToastHost }   from './tx/Toast';
+import { ApprovalOverlay } from './ApprovalOverlay';
 import { ExperimentalBanner } from './tx/ExperimentalBanner';
 import { FatalScreen } from './tx/FatalScreen';
 import { ErrorCard }   from './tx/ErrorCard';
@@ -39,6 +40,7 @@ export function App() {
       <HashRouter>
         <Gate />
       </HashRouter>
+      <ApprovalOverlay />
       <ToastHost />
     </div>
   );

@@ -9,6 +9,7 @@ import { ChromeNotificationPort } from '../adapters/chrome/chrome-notification';
 import { WebCryptoPort } from '../adapters/crypto/web-crypto-port';
 import { classifyChromeSender } from '../adapters/chrome/chrome-message-source';
 import { ChromeApprovalPresenter } from '../adapters/chrome/chrome-approval-presenter';
+import { ChromeUiPorts } from '../adapters/chrome/chrome-ui-ports';
 import { ChromeUnlockGuardStore } from '../adapters/chrome/chrome-unlock-guard-store';
 import { ChromePendingOpsStore } from '../adapters/chrome/chrome-pending-ops-store';
 import { ChromeAliasStore } from '../adapters/chrome/chrome-alias-store';
@@ -62,7 +63,8 @@ void persistentPorts.notifications.setPendingCount(0);
 const cryptoPort = new WebCryptoPort();
 
 const keyring        = new Keyring(persistentPorts.vaultStore, cryptoPort, new ChromeUnlockGuardStore());
-const queue          = new ApprovalQueue(persistentPorts.notifications, new ChromeApprovalPresenter());
+const uiPorts        = new ChromeUiPorts();
+const queue          = new ApprovalQueue(persistentPorts.notifications, new ChromeApprovalPresenter(uiPorts));
 const containerCache = new ContainerCache();
 
 async function broadcastEvent(push: ContentPush): Promise<void> {
@@ -172,8 +174,21 @@ chrome.runtime.onInstalled.addListener(() => {
   console.info(`[TezosX Wallet] service worker installed, v${__WALLET_VERSION__}`);
 });
 
-chrome.sidePanel
-  ?.setPanelBehavior({ openPanelOnActionClick: false })
-  .catch((err) => console.warn('[TezosX Wallet] sidePanel unavailable:', err));
+// The side panel is the default surface: the toolbar click opens it (the
+// manifest declares no action.default_popup, which would take precedence).
+// Where the sidePanel API is missing, fall back to the classic popup so the
+// toolbar click still opens a wallet.
+if (chrome.sidePanel != null) {
+  chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((err) => {
+      // With no default_popup in the manifest, a rejected setPanelBehavior
+      // would leave the toolbar click bound to nothing — restore the popup.
+      console.warn('[TezosX Wallet] sidePanel unavailable:', err);
+      void chrome.action.setPopup({ popup: 'popup.html' });
+    });
+} else {
+  void chrome.action.setPopup({ popup: 'popup.html' });
+}
 
 console.info('[TezosX Wallet] service worker booted');

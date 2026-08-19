@@ -32,14 +32,23 @@ function stubEvmRpc(mock: RpcMock) {
   });
 }
 
-function stubTzktL1(op: { level: number; timestamp: string; status: string } | null, headLevel: number) {
+interface TzktOpFixture {
+  hash:      string;
+  type:      string;
+  level:     number;
+  timestamp: string;
+  status:    string;
+}
+
+function stubTzktL1(op: TzktOpFixture | TzktOpFixture[] | null, headLevel: number) {
   return vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
     const u = String(url);
-    if (u.includes('/v1/operations/transactions')) {
-      return new Response(JSON.stringify(op == null ? [] : [op]), { status: 200 });
-    }
     if (u.includes('/v1/head')) {
       return new Response(JSON.stringify({ level: headLevel }), { status: 200 });
+    }
+    if (u.includes('/v1/operations/')) {
+      const ops = op == null ? [] : Array.isArray(op) ? op : [op];
+      return new Response(JSON.stringify(ops), { status: 200 });
     }
     return new Response('not found', { status: 404 });
   });
@@ -82,16 +91,16 @@ async function captureFirstNonBroadcasting(runtime: 'l1' | 'l2', hash: string): 
 
 /** Serve TzKT (by url) and the EVM RPC (by JSON-RPC method) from one stub. */
 function stubBothNetworks(
-  l1: { op: { level: number; timestamp: string; status: string } | null; headLevel: number },
+  l1: { op: TzktOpFixture | null; headLevel: number },
   rpc: RpcMock,
 ) {
   return vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
     const u = String(url);
-    if (u.includes('/v1/operations/transactions')) {
-      return new Response(JSON.stringify(l1.op == null ? [] : [l1.op]), { status: 200 });
-    }
     if (u.includes('/v1/head')) {
       return new Response(JSON.stringify({ level: l1.headLevel }), { status: 200 });
+    }
+    if (u.includes('/v1/operations/')) {
+      return new Response(JSON.stringify(l1.op == null ? [] : [l1.op]), { status: 200 });
     }
     const body = JSON.parse((init?.body as string) ?? '{}') as { method: string };
     if (body.method === 'eth_getTransactionReceipt') {
@@ -185,7 +194,7 @@ describe('pollL2 — L2 finality via `finalized` block tag', () => {
 describe('pollL1 — L1 Tenderbake finality (unchanged)', () => {
   it('op applied, head − op.level < 2 → stage: included', async () => {
     stubTzktL1(
-      { level: 1_000, timestamp: '2026-05-15T10:00:00Z', status: 'applied' },
+      { hash: TX_OP_HASH, type: 'transaction', level: 1_000, timestamp: '2026-05-15T10:00:00Z', status: 'applied' },
       1_000, // head == op.level → confirmations = 0
     );
     const status = await captureFirstNonBroadcasting('l1', TX_OP_HASH);
@@ -194,7 +203,7 @@ describe('pollL1 — L1 Tenderbake finality (unchanged)', () => {
 
   it('op applied, head − op.level >= 2 → stage: finalized with confirmations', async () => {
     stubTzktL1(
-      { level: 1_000, timestamp: '2026-05-15T10:00:00Z', status: 'applied' },
+      { hash: TX_OP_HASH, type: 'transaction', level: 1_000, timestamp: '2026-05-15T10:00:00Z', status: 'applied' },
       1_002,
     );
     const status = await captureFirstNonBroadcasting('l1', TX_OP_HASH);
@@ -207,17 +216,45 @@ describe('pollL1 — L1 Tenderbake finality (unchanged)', () => {
 
   it('op status != applied → stage: failed with op status as reason', async () => {
     stubTzktL1(
-      { level: 1_000, timestamp: '2026-05-15T10:00:00Z', status: 'backtracked' },
+      { hash: TX_OP_HASH, type: 'transaction', level: 1_000, timestamp: '2026-05-15T10:00:00Z', status: 'backtracked' },
       1_002,
     );
     const status = await captureFirstNonBroadcasting('l1', TX_OP_HASH);
     expect(status.stage).toBe('failed');
     if (status.stage === 'failed') expect(status.reason).toBe('backtracked');
   }, 10_000);
+
+  it('operations with a different hash are ignored — no inclusion, no failure, no finality', async () => {
+    // A TzKT node that ignores the hash lookup and answers with unrelated
+    // history must read as "not indexed yet": the tracker stays on
+    // broadcasting instead of adopting a stranger's level and status.
+    stubTzktL1(
+      { hash: 'onSomeoneElsesOperationHash________________________', type: 'transaction', level: 5, timestamp: '2026-01-01T00:00:00Z', status: 'backtracked' },
+      500_000,
+    );
+    const seen: TxStatus[] = [];
+    const handle = trackTx({ hash: TX_OP_HASH, runtime: 'l1', onUpdate: (s) => seen.push(s) });
+    await new Promise((r) => setTimeout(r, 1_000));
+    handle.stop();
+    expect(seen.map((s) => s.stage)).toEqual(['broadcasting']);
+  }, 10_000);
+
+  it('batched reveal + transaction under one hash → the transaction content drives the status', async () => {
+    stubTzktL1(
+      [
+        { hash: TX_OP_HASH, type: 'reveal',      level: 1_000, timestamp: '2026-05-15T10:00:00Z', status: 'applied' },
+        { hash: TX_OP_HASH, type: 'transaction', level: 1_000, timestamp: '2026-05-15T10:00:00Z', status: 'applied' },
+      ],
+      1_002,
+    );
+    const status = await captureFirstNonBroadcasting('l1', TX_OP_HASH);
+    expect(status.stage).toBe('finalized');
+    if (status.stage === 'finalized') expect(status.blockLevel).toBe(1_000);
+  }, 10_000);
 });
 
 describe('trackCrossRuntimeTx — L1 op drives inclusion until the kernel hash resolves', () => {
-  const APPLIED = { level: 1_000, timestamp: '2026-05-15T10:00:00Z', status: 'applied' };
+  const APPLIED = { hash: TX_OP_HASH, type: 'transaction', level: 1_000, timestamp: '2026-05-15T10:00:00Z', status: 'applied' };
 
   it('L1 op applied, real hash unknown → stage: included (before any resolution)', async () => {
     stubBothNetworks({ op: APPLIED, headLevel: 1_000 }, {});

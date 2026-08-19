@@ -17,6 +17,7 @@ import { ACTIVITY_PAGE_SIZE, EVM_EXPLORER, TEZOS_EXPLORER } from '../shared/cons
 import {
   decodeActivityCursor,
   encodeActivityCursor,
+  type ActivityContractCallItem,
   type ActivityFetchError,
   type ActivityFilter,
   type ActivityItem,
@@ -88,12 +89,13 @@ function mergeCrossRuntime(
   for (const e of evmItems) evmByHash.set(extractEvmHash(e), e);
 
   for (const t of tezosItems) {
-    if (t.kind === 'transfer' && t.crossRuntime?.direction === 'tezos-to-evm') {
+    if ((t.kind === 'transfer' || t.kind === 'contract-call')
+        && t.crossRuntime?.direction === 'tezos-to-evm') {
       const synthHash = l1OpHashToEvmHash(t.crossRuntime.l1OpHash).toLowerCase();
       const match     = evmByHash.get(synthHash);
       if (match != null) {
         consumedEvmIds.add(match.id);
-        merged.push(mergeOne(t as ActivityTransferItem, match));
+        merged.push(mergeOne(t, match));
         continue;
       }
       // Mirror not yet visible on Blockscout — keep the tz row as cross-runtime
@@ -118,9 +120,9 @@ function extractEvmHash(item: ActivityItem): string {
 }
 
 function mergeOne(
-  tezosItem: ActivityTransferItem,
+  tezosItem: ActivityTransferItem | ActivityContractCallItem,
   evmItem:   ActivityItem,
-): ActivityTransferItem {
+): ActivityTransferItem | ActivityContractCallItem {
   const l2Hash = extractEvmHash(evmItem);
   const evmStatus: ActivityTransferItem['status'] =
     evmItem.kind === 'transfer' || evmItem.kind === 'contract-call' ? evmItem.status :

@@ -2,13 +2,14 @@
  * activityRowVM: project an ActivityItem into a display-ready ActivityRowVM
  * consumed by ActivityRow. No I/O; deterministic from the input.
  *
- * The redesign uses identicon-ring-as-runtime-carrier + a verb·arrow·address
- * title (no pills inline), so the VM exposes the structured pieces rather
- * than a pre-rendered title string.
+ * The row leads with the asset's logo (ring-as-runtime around it) + a
+ * verb·arrow·address title (no pills inline), so the VM exposes the
+ * structured pieces rather than a pre-rendered title string.
  */
 
 import { formatTokenAmount, shortAddr } from '@tezosx/wallet-core/shared/format';
 import type { ActivityItem } from '@tezosx/wallet-core/domain/activity';
+import type { Asset } from '@tezosx/wallet-core/domain/asset';
 
 export type RuntimeBadge = 'l1' | 'l2' | 'cross';
 
@@ -21,9 +22,9 @@ export interface ActivityRowVM {
   runtimeTag:    'Michelson' | 'EVM' | 'Michelson → EVM' | 'EVM → Michelson';
   amount:        { value: string; sign: '+' | '−' | '' };
   asset:         string;
+  assetRef:      Asset | null;                      // full Asset for transfers — drives the row's logo
   status:        'pending' | 'confirmed' | 'failed';
   ago:           string;                            // "4s ago" | "Pending · 22s" | "Failed" | "yesterday"
-  identicon:     string;                            // seed (passed through; we use ring-as-runtime instead)
   primaryUrl:    string;
   secondaryUrl?: string;
   dayGroup:      'Today' | 'Yesterday' | 'Earlier';
@@ -108,9 +109,9 @@ export function activityRowVM(item: ActivityItem, nowMs: number = Date.now()): A
       runtimeTag,
       amount:       { value: fmtAmount(item), sign },
       asset:        item.asset.symbol,
+      assetRef:     item.asset,
       status:       item.status,
       ago,
-      identicon:    item.counterparty || item.id,
       primaryUrl:   item.links.primary.url,
       secondaryUrl: item.links.secondary?.url,
       dayGroup,
@@ -127,9 +128,9 @@ export function activityRowVM(item: ActivityItem, nowMs: number = Date.now()): A
       runtimeTag,
       amount:       { value: '', sign: '' },
       asset:        '',
+      assetRef:     null,
       status:       item.status,
       ago,
-      identicon:    item.target,
       primaryUrl:   item.links.primary.url,
       secondaryUrl: item.links.secondary?.url,
       dayGroup,
@@ -146,9 +147,9 @@ export function activityRowVM(item: ActivityItem, nowMs: number = Date.now()): A
       runtimeTag:   'EVM',
       amount:       { value: '', sign: '' },
       asset:        '',
+      assetRef:     null,
       status:       item.status,
       ago,
-      identicon:    item.origin,
       primaryUrl:   '',
       dayGroup,
     };
@@ -164,9 +165,9 @@ export function activityRowVM(item: ActivityItem, nowMs: number = Date.now()): A
     runtimeTag,
     amount:       { value: '', sign: '' },
     asset:        '',
+    assetRef:     null,
     status:       'confirmed',
     ago,
-    identicon:    item.raw.ref,
     primaryUrl:   item.links.primary.url,
     dayGroup,
   };

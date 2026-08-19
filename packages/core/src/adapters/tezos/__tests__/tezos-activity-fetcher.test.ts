@@ -40,6 +40,26 @@ describe('TezosActivityFetcher', () => {
     expect(it0.crossRuntime?.tzktOperationId).toBe(103102283776);
   });
 
+  it('classifies a zero-amount NAC gateway call as a contract call, not a 0-XTZ transfer', async () => {
+    mockFetch([{
+      ...mixed[1],
+      id:        103102283777,
+      amount:    0,
+      parameter: {
+        entrypoint: 'call_evm',
+        value:      { destination: '0xAfA0926F4CcB43118b886CFD539239b7BeF75C15' },
+      },
+    }]);
+    const page = await new TezosActivityFetcher().list({ holder: HOLDER, limit: 10 });
+    const it0 = page.items[0];
+    expect(it0.kind).toBe('contract-call');
+    if (it0.kind !== 'contract-call') return;
+    expect(it0.target).toBe('0xAfA0926F4CcB43118b886CFD539239b7BeF75C15');
+    expect(it0.methodSig).toBe('call_evm');
+    expect(it0.crossRuntime?.direction).toBe('tezos-to-evm');
+    expect(it0.crossRuntime?.l1OpHash).toBe('ooNL489SnERfEJD8gfDExhe8XPfXKqpmcMrqtsdZFvYYhQb84rH');
+  });
+
   it('parses a non-NAC contract call as contract-call kind', async () => {
     mockFetch([mixed[2]]);
     const page = await new TezosActivityFetcher().list({ holder: HOLDER, limit: 10 });

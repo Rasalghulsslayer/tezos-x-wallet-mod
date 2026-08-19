@@ -1,9 +1,12 @@
 /**
  * ActivityRow — one transaction line in the activity list (mirrors mobile.css
- * .activity + .act-ident). The left identicon is a runtime-coloured ring around
- * a direction arrow: purple (L1), cyan (L2), a purple→cyan sweep (cross), an
- * amber spinner (pending), or a solid danger ring (failed). The middle column
- * carries verb → peer and a runtime tag + relative time (or Pending/Failed); the
+ * .activity + .act-ident). The left disc is the transferred asset's logo
+ * (AssetMark) with a direction badge in the corner, wrapped in a
+ * runtime-coloured ring: purple (L1), cyan (L2), a purple→cyan sweep (cross),
+ * an amber spinner (pending), or a solid danger ring (failed — the badge
+ * flips to an ✕). Non-transfer rows (contract call, signature, unknown)
+ * center a stroke icon instead of a logo. The middle column carries
+ * verb → peer and a runtime tag + relative time (or Pending/Failed); the
  * right column is the signed amount, greyed & struck for failures.
  */
 
@@ -13,7 +16,8 @@ import Svg, { Defs, LinearGradient, Stop, Circle } from 'react-native-svg';
 import { colors, font, fontSize, space } from '../../theme';
 import type { ActivityRowVM } from '../../wallet/activity-vm';
 import { timeAgo } from '../format';
-import { Icon } from '../icon';
+import { AssetMark } from './AssetMark';
+import { Icon, type IconName } from '../icon';
 
 type Ident = 'l1' | 'l2' | 'cross' | 'pending' | 'failed';
 
@@ -30,7 +34,7 @@ export function ActivityRow({
   const ident: Ident = st === 'pending' ? 'pending' : st === 'failed' ? 'failed' : item.runtime;
   const tag = item.runtime === 'cross' ? 'Cross-runtime' : item.runtime === 'l2' ? 'EVM runtime' : 'Michelson runtime';
   const sign = item.dir === 'in' ? '+' : '−';
-  const arrow = item.dir === 'in' ? 'arrow-down-left' : 'arrow-up-right';
+  const arrow: IconName = item.dir === 'in' ? 'arrow-down-left' : 'arrow-up-right';
 
   const amountColor =
     st === 'failed'
@@ -43,7 +47,7 @@ export function ActivityRow({
 
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-      <ActIdent ident={ident} arrow={arrow} />
+      <ActIdent ident={ident} item={item} arrow={arrow} />
       <View style={styles.mid}>
         <View style={styles.t1}>
           <Text style={styles.verb}>{item.verb}</Text>
@@ -78,9 +82,11 @@ export function ActivityRow({
 
 function ActIdent({
   ident,
+  item,
   arrow,
 }: {
   ident: Ident;
+  item: ActivityRowVM;
   arrow: 'arrow-down-left' | 'arrow-up-right';
 }): React.JSX.Element {
   const spin = useRef(new Animated.Value(0)).current;
@@ -135,14 +141,37 @@ function ActIdent({
       </Svg>
     );
 
+  const badge =
+    ident === 'failed'          ? { icon: 'x' as const, color: colors.danger } :
+    item.kind !== 'transfer'    ? null :
+    item.dir === 'in'           ? { icon: 'arrow-down-left' as const, color: colors.success } :
+                                  { icon: 'arrow-up-right' as const,  color: colors.fg };
+
   return (
     <View style={styles.ident}>
       {ring}
-      <View style={styles.core}>
-        <Icon name={arrow} size={16} color={coreColor} />
-      </View>
+      {item.asset != null ? (
+        <AssetMark symbol={item.asset.symbol} kind={item.asset.kind === 'xtz' ? 'xtz' : 'token'} size="sm" />
+      ) : (
+        <View style={styles.core}>
+          <Icon name={coreIconOf(item, arrow)} size={16} color={coreColor} />
+        </View>
+      )}
+      {badge != null && (
+        <View style={styles.dirBadge}>
+          <Icon name={badge.icon} size={9} color={badge.color} strokeWidth={2.75} />
+        </View>
+      )}
     </View>
   );
+}
+
+/** Stroke icon for rows that carry no asset (contract call, signature, …). */
+function coreIconOf(item: ActivityRowVM, arrow: IconName): IconName {
+  if (item.kind === 'contract-call') return 'code';
+  if (item.kind === 'signature')     return 'pen';
+  if (item.kind === 'unknown')       return 'list';
+  return arrow;
 }
 
 const TAG_COLOR: Record<ActivityRowVM['runtime'], { color: string }> = {
@@ -176,6 +205,19 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
     backgroundColor: colors.surface2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dirBadge: {
+    position: 'absolute',
+    right: -3,
+    bottom: -3,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: colors.surface3,
+    borderWidth: 2,
+    borderColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
   },

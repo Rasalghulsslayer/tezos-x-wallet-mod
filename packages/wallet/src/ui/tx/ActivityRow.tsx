@@ -1,13 +1,18 @@
 /**
  * ActivityRow: presentation component for one item in the Activity feed.
- * 3-column grid (identicon · body · amount); identicon ring carries runtime
- * (purple = L1, cyan = L2, gradient = cross-runtime). Pending becomes a
- * conic spinner in warning; failed flips the ring to danger.
+ * 3-column grid (asset mark · body · amount); the leading disc is the
+ * transferred asset's logo (AssetMark) with a direction badge in the corner,
+ * wrapped in a ring that carries runtime (purple = L1, cyan = L2, gradient =
+ * cross-runtime). Pending becomes a conic spinner in warning; failed flips
+ * the ring to danger and the badge to an ✕. Non-transfer rows (contract
+ * call, signed message, unknown) center a design-system stroke icon instead
+ * of a logo.
  */
 
 import type { ActivityRowVM, RuntimeBadge } from '../view-models/activity-vm';
-import { ActivityCoreGlyph } from './ActivityCoreGlyph';
+import { AssetMark } from './AssetMark';
 import { ExternalArrow } from './ExternalArrow';
+import { Icon, type IconName } from './Icon';
 
 export function ActivityRow({
   vm,
@@ -42,7 +47,12 @@ export function ActivityRow({
     >
       <div className={identClass} aria-hidden>
         <div className="ring" />
-        <div className="core"><ActivityCoreGlyph vm={vm} /></div>
+        <div className="core">
+          {vm.assetRef != null
+            ? <AssetMark asset={vm.assetRef} size="sm" />
+            : <Icon name={coreIconOf(vm)} size={14} />}
+        </div>
+        {dirBadgeOf(vm)}
       </div>
 
       <div className="body">
@@ -96,6 +106,29 @@ export function ActivityRow({
         )}
       </div>
     </div>
+  );
+}
+
+/** Stroke icon for rows that carry no asset (contract call, signature, …). */
+function coreIconOf(vm: ActivityRowVM): IconName {
+  if (vm.status === 'failed')          return 'x';
+  if (vm.verb === 'Contract call')     return 'code';
+  if (vm.verb === 'Signed message')    return 'pen';
+  return 'activity';
+}
+
+/** Corner badge: ✕ on failure, otherwise the transfer direction. */
+function dirBadgeOf(vm: ActivityRowVM) {
+  const badge =
+    vm.status === 'failed'    ? { icon: 'x' as const,               cls: 'failed' } :
+    vm.verb === 'Sent'        ? { icon: 'arrow-up-right' as const,  cls: 'out' }    :
+    vm.verb === 'Received'    ? { icon: 'arrow-down-left' as const, cls: 'in' }     :
+                                null;
+  if (badge == null) return null;
+  return (
+    <span className={`dir-badge ${badge.cls}`}>
+      <Icon name={badge.icon} size={9} strokeWidth={2.75} />
+    </span>
   );
 }
 

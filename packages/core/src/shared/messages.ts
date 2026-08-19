@@ -129,6 +129,23 @@ export type ApproveRequest =
   | { type: 'GET_PENDING';      requestId: string }
   | { type: 'RESOLVE_PENDING';  requestId: string; decision: 'approve' | 'reject' };
 
+// ── Service Worker → wallet views (long-lived UI port) ────────────────────────
+
+/** Name of the long-lived port a wallet view (popup / side panel) opens on
+ *  mount. Its presence tells the SW a trusted view is open, so dApp approvals
+ *  can render inside it instead of spawning an approve.html window. */
+export const UI_PORT_NAME = 'tezosx-ui';
+
+/** Push sent over the UI port whenever the pending-approval set changes; the
+ *  view answers by re-reading LIST_PENDING. */
+export type UiPortPush = { type: 'PENDING_CHANGED' };
+
+/** Sent by the view over the UI port on connect and on every visibility
+ *  change. Only a visible view counts as an open surface for approvals — a
+ *  wallet sitting in a background tab or a minimized window must not capture
+ *  an approval the user cannot see. */
+export type UiPortViewMessage = { type: 'VIEW_VISIBILITY'; visible: boolean };
+
 // ── Content script → Service Worker (EIP-1193 bridge) ─────────────────────────
 
 export interface EthereumRequest {
