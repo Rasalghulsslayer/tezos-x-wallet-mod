@@ -8,6 +8,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ## [0.9.0] — 2026-08-19
 
+### Removed
+- **Five dependencies the SDK never imported.** `@taquito/michel-codec` and
+  `@taquito/taquito` were declared but referenced nowhere in the package (the
+  Micheline types the sources do use come from `@taquito/rpc`, which stays);
+  `react`, `react-dom` and `lucide-react` are used only by the superseded
+  Temple-backed PoC extension under `extension/`, so they moved to
+  `devDependencies`. The runtime dependency set is now exactly what the
+  sources import — `viem`, `eventemitter3`, `@airgap/beacon-sdk` and
+  `@taquito/rpc` — matching what [Installation](https://github.com/trilitech/tezos-x-wallet/blob/main/website/docs/installation.md)
+  already documented for vendoring. Consumers of the SDK (`@tezosx/wallet-core`
+  and both wallet shells) no longer inherit React and an icon library
+  transitively from a headless package.
+
 ### Added
 - `WEI_PER_MUTEZ` (10¹²) is exported from `@tezosx/relayer/constants`. The
   kernel's fixed wei ↔ mutez exchange rate was previously defined privately in
