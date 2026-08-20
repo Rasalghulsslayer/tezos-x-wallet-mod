@@ -31,16 +31,14 @@
   },
   "dependencies": {
     "@airgap/beacon-sdk": "^4.8.1",
-    "@taquito/michel-codec": "^24.2.0",
     "@taquito/rpc": "^24.2.0",
-    "@taquito/taquito": "^24.2.0",
     "eventemitter3": "^5.0.4",
-    "lucide-react": "^1.8.0",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
     "viem": "^2.47.2"
   },
   "devDependencies": {
+    "lucide-react": "^1.8.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
     "vitest": "^3.2.4"
   }
 }

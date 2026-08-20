@@ -31,7 +31,7 @@ The way the SDK is actually consumed today: as a workspace dependency. `@tezosx/
 
 ```json
 "dependencies": {
-  "@tezosx/relayer": "^0.8.0"
+  "@tezosx/relayer": "^0.9.0"
 }
 ```
 
