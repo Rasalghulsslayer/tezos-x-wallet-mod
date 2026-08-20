@@ -1,6 +1,6 @@
 import { Icon } from '../../tx/Icon';
 import { Badge } from '../../tx/Badge';
-import { originDisplay } from './helpers';
+import { originDisplay } from '@tezosx/wallet-core/shared/approval-display';
 
 export function ApprovalHeader({
   origin, subtitle, accent,

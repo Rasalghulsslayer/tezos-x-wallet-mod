@@ -10,6 +10,7 @@ import type { VaultState } from '@tezosx/wallet-core/shared/messages';
 import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
 import { sendPopupRequest } from '@/shared/messaging';
 import { shortAddr } from '@tezosx/wallet-core/shared/format';
+import { erc20AssetFromToken } from '@tezosx/wallet-core/domain/asset';
 import { formatError } from '@tezosx/wallet-core/domain/error';
 import { TopBar } from '../tx/TopBar';
 import { Button } from '../tx/Button';
@@ -71,7 +72,7 @@ export function TokensSettings({ state }: { state: VaultState }) {
           <div>
             {tokens.map((t) => (
               <div key={t.address} className="tx-token-row">
-                <AssetMark asset={toErc20Asset(t)} size="sm" />
+                <AssetMark asset={erc20AssetFromToken(t)} size="sm" />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 500 }}>{t.symbol}</div>
                   <div className="tx-mono" style={{ fontSize: 11, color: 'var(--tx-fg-muted)' }}>{shortAddr(t.address, 8, 6)}</div>
@@ -95,13 +96,3 @@ export function TokensSettings({ state }: { state: VaultState }) {
   );
 }
 
-function toErc20Asset(t: RegisteredToken) {
-  return {
-    kind:     'erc20' as const,
-    address:  t.address,
-    symbol:   t.symbol,
-    name:     t.name,
-    decimals: t.decimals,
-    runtime:  'evm' as const,
-  };
-}

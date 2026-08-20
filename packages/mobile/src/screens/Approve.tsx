@@ -17,7 +17,8 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
 import { colors, fontSize, font, radius, safe } from '../theme';
-import { truncAddr } from '../ui/format';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
+import { originDisplay } from '@tezosx/wallet-core/shared/approval-display';
 import { Icon } from '../ui/icon';
 import { Btn } from '../ui/tx/Btn';
 import { Identicon } from '../ui/tx/Identicon';
@@ -28,10 +29,6 @@ import { Spinner } from '../ui/tx/Spinner';
 import type { PendingRequest } from '@tezosx/wallet-core/shared/messages';
 import { useWallet } from '../wallet/context';
 
-function hostOf(origin: string): string {
-  const m = /^[a-z]+:\/\/([^/]+)/i.exec(origin);
-  return m != null ? m[1] : origin;
-}
 
 type Stage = 'request' | 'signing';
 
@@ -46,7 +43,7 @@ export function Approve(): React.JSX.Element | null {
 
   if (req == null) return null;
 
-  const host = hostOf(req.origin);
+  const origin = originDisplay(req.origin);
   const pinned = ctx.accounts.find((a) => a.id === req.accountId) ?? ctx.activeAccount;
   // The dApp-visible face of the pinned account; null while a tz1's EVM alias
   // is still resolving, in which case the chip shows a placeholder.
@@ -92,7 +89,7 @@ export function Approve(): React.JSX.Element | null {
         <Pressable style={styles.overlay} onPress={() => respond('reject')}>
           <Pressable style={styles.sheet} onPress={() => {}}>
             <View style={styles.grip} />
-            <ApproveHead accent={accent} subtitle={SUBTITLE[req.kind]} host={host} />
+            <ApproveHead accent={accent} subtitle={SUBTITLE[req.kind]} origin={origin} />
             <ScrollView
               style={styles.scroll}
               contentContainerStyle={styles.scrollContent}
@@ -100,10 +97,10 @@ export function Approve(): React.JSX.Element | null {
             >
               <PinnedChip
                 label={ctx.labelFor(pinned)}
-                addr={pinnedAddr != null ? truncAddr(pinnedAddr, 8) : 'Resolving EVM address…'}
+                addr={pinnedAddr != null ? shortAddr(pinnedAddr, 8) : 'Resolving EVM address…'}
                 leading={<Identicon seed={pinned.identitySeed} size={34} />}
               />
-              <Body req={req} host={host} />
+              <Body req={req} host={origin.title} />
             </ScrollView>
             {!ctx.online && (
               <View style={styles.offlineNote}>
@@ -193,17 +190,17 @@ function Body({
       <RiskBand level="med" title="Moderate" detail="Review the recipient and amount before signing." />
       <Text style={[styles.kicker, styles.kickerSpaced]}>dApp intent</Text>
       <View style={styles.card}>
-        <Line label="To" value={<Text style={styles.mono}>{truncAddr(req.to, 8)}</Text>} />
+        <Line label="To" value={<Text style={styles.mono}>{shortAddr(req.to, 8)}</Text>} />
         <View style={styles.divider} />
         <Line label="Value" value={req.value} />
         <View style={styles.divider} />
-        <Line label="Data" value={<Text style={styles.mono}>{req.data === '0x' || req.data === '' ? '—' : truncAddr(req.data, 10)}</Text>} />
+        <Line label="Data" value={<Text style={styles.mono}>{req.data === '0x' || req.data === '' ? '—' : shortAddr(req.data, 10)}</Text>} />
       </View>
       {cross != null && (
         <>
           <Text style={[styles.kicker, styles.kickerSpaced]}>What you actually sign</Text>
           <View style={[styles.card, styles.crossCard]}>
-            <Line label="Michelson target" value={<Text style={styles.mono}>{truncAddr(cross.michelsonTarget, 6)}</Text>} />
+            <Line label="Michelson target" value={<Text style={styles.mono}>{shortAddr(cross.michelsonTarget, 6)}</Text>} />
             <View style={styles.divider} />
             <Line label="Entrypoint" value={cross.entrypoint} />
             <View style={styles.divider} />
@@ -223,11 +220,11 @@ function Body({
 function ApproveHead({
   accent,
   subtitle,
-  host,
+  origin,
 }: {
   accent: 'purple' | 'cyan';
   subtitle: string;
-  host: string;
+  origin: { title: string; secure: boolean; favLetter: string };
 }): React.JSX.Element {
   const tint = accent === 'purple' ? colors.purple : colors.cyan;
   return (
@@ -242,11 +239,22 @@ function ApproveHead({
         <Rect x={0} y={0} width="100%" height="100%" fill="url(#ah-tint)" />
       </Svg>
       <View style={styles.headFav}>
-        <Text style={styles.headFavText}>{host.charAt(0).toUpperCase()}</Text>
+        <Text style={styles.headFavText}>{origin.favLetter}</Text>
       </View>
-      <View>
-        <Text style={styles.headSub}>{subtitle}</Text>
-        <Text style={styles.headHost}>{host}</Text>
+      <View style={styles.headText}>
+        {/* An insecure origin is flagged here and spelled out with its scheme
+            below, so a look-alike http origin can't pass for the real site. */}
+        <View style={styles.headSubRow}>
+          <Icon
+            name={origin.secure ? 'lock' : 'alert'}
+            size={11}
+            color={origin.secure ? colors.success : colors.danger}
+          />
+          <Text style={styles.headSub}>
+            {origin.secure ? subtitle : `Insecure origin · ${subtitle}`}
+          </Text>
+        </View>
+        <Text style={styles.headHost}>{origin.title}</Text>
       </View>
     </View>
   );
@@ -291,6 +299,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headFavText: { color: colors.fg, fontWeight: '700', fontSize: 17 },
+  headText: { flex: 1, minWidth: 0 },
+  headSubRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   headSub: { fontSize: fontSize.xs, textTransform: 'uppercase', letterSpacing: 0.85, color: colors.fgSubtle, fontWeight: '600' },
   headHost: { fontSize: fontSize.lg, fontWeight: '600', color: colors.fg, marginTop: 2 },
 

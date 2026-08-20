@@ -10,17 +10,13 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { formatError } from '@tezosx/wallet-core/domain/error';
-import { isValidEdsk, isValidMnemonic } from '@tezosx/wallet-core/domain/validation';
+import { EVM_PRIVKEY_RE, isValidEdsk, isValidMnemonic } from '@tezosx/wallet-core/domain/validation';
 import { colors, fontSize, font, radius, space } from '../theme';
 import { useWallet } from '../wallet/context';
 import { Btn } from '../ui/tx/Btn';
 import { ErrorInline } from '../ui/tx/ErrorInline';
 import { RuntimeToggle } from '../ui/tx/RuntimeToggle';
 import { TopBar } from '../ui/tx/TopBar';
-
-// Shape check only — the keyring's key derivation normalises the 0x prefix
-// and rejects the rare out-of-secp256k1-range key with a precise error.
-const EVM_PRIVKEY_RE = /^(0x)?[0-9a-fA-F]{64}$/;
 
 export function Import({ params }: { params: Record<string, unknown> }): React.JSX.Element {
   const ctx = useWallet();

@@ -1,10 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { buildEvmToTezosCall } from '../build-evm-to-tezos-call';
 import { PrecompileError } from '../../domain/error';
-import { NAC_PRECOMPILE_ADDR, NAC_RECOMMENDED_GAS } from '../../shared/constants';
+import { NAC_PRECOMPILE_ADDR, NAC_RECOMMENDED_GAS, WEI_PER_MUTEZ } from '../../shared/constants';
 import type { CrossRuntimeIntent } from '../../domain/intent';
-
-const MUTEZ_TO_WEI = 1_000_000_000_000n;
 
 describe('buildEvmToTezosCall — mutez→wei (×1e12) & precompile encoding', () => {
   it('transfer intent → value ×1e12, call gas, http://tezos/<dest> encoded', () => {
@@ -12,7 +10,7 @@ describe('buildEvmToTezosCall — mutez→wei (×1e12) & precompile encoding', (
     const call = buildEvmToTezosCall(intent);
     expect(call.direction).toBe('evm-to-michelson');
     expect(call.to).toBe(NAC_PRECOMPILE_ADDR);
-    expect(call.value).toBe(5n * MUTEZ_TO_WEI);          // value conserved, no inflation
+    expect(call.value).toBe(5n * WEI_PER_MUTEZ);          // value conserved, no inflation
     expect(call.gasLimit).toBe(NAC_RECOMMENDED_GAS.call); // generic `call`, not the removed `transfer`
     // The calldata is a NAC `call` whose url is http://tezos/<destination>.
     const urlHex = Buffer.from('http://tezos/tz1abc', 'utf8').toString('hex');
@@ -23,7 +21,7 @@ describe('buildEvmToTezosCall — mutez→wei (×1e12) & precompile encoding', (
     // 1 mutez out must encode 1e12 wei in — the same WEI_PER_MUTEZ constant the
     // tz1→0x builder divides by. A drifted factor here is a mis-send.
     expect(buildEvmToTezosCall({ kind: 'transfer', destination: 'tz1', amount: 1n }).value)
-      .toBe(MUTEZ_TO_WEI);
+      .toBe(WEI_PER_MUTEZ);
   });
 
   it('call-michelson with a value → value ×1e12, callMichelson gas', () => {
@@ -35,7 +33,7 @@ describe('buildEvmToTezosCall — mutez→wei (×1e12) & precompile encoding', (
       value: 3n,
     };
     const call = buildEvmToTezosCall(intent);
-    expect(call.value).toBe(3n * MUTEZ_TO_WEI);
+    expect(call.value).toBe(3n * WEI_PER_MUTEZ);
     expect(call.gasLimit).toBe(NAC_RECOMMENDED_GAS.callMichelson);
     expect(call.to).toBe(NAC_PRECOMPILE_ADDR);
   });

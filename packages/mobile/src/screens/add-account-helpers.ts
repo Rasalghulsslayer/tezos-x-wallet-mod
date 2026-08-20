@@ -8,13 +8,11 @@
 
 import type { AccountKind, AddAccountSource } from '@tezosx/wallet-core/domain/account';
 import type { AddAccountSourceKind } from '@tezosx/wallet-core/view-models/add-account-flow-vm';
-import { isValidEdsk, isValidMnemonic } from '@tezosx/wallet-core/domain/validation';
+import { EVM_PRIVKEY_RE, isValidEdsk, isValidMnemonic } from '@tezosx/wallet-core/domain/validation';
 import { deriveTezosIdentity, deriveTezosIdentityFromSecretKey } from '@tezosx/wallet-core/shared/seed';
 import { deriveEvmAccount, normaliseEvmPrivateKey } from '@tezosx/wallet-core/shared/evm-signing';
 
 export type TzMode = 'mnemonic' | 'edsk';
-
-const EVM_PRIVKEY_RE = /^(0x)?[0-9a-fA-F]{64}$/;
 
 /**
  * Cheap synchronous shape check driving the live meta line and the Continue

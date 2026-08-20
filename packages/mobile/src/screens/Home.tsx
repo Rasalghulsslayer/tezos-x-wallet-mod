@@ -8,9 +8,8 @@
 
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { timeAgo } from '@tezosx/wallet-core/shared/format';
+import { formatBalanceDisplay, timeAgo } from '@tezosx/wallet-core/shared/format';
 import { colors, fontSize, radius, space } from '../theme';
-import { fmtXtz } from '../ui/format';
 import { Icon } from '../ui/icon';
 import { AccountHeader } from '../ui/tx/AccountHeader';
 import { AssetRow } from '../ui/tx/AssetRow';
@@ -31,14 +30,12 @@ export function Home(): React.JSX.Element {
   const tokens = ctx.tokens.data ?? [];
   // A failed balance read is an unknown balance, not zero — rendering "0.00"
   // would tell the user their funds are gone. Show an em dash instead.
-  const xtzText = bal != null ? fmtXtz(bal.xtz) : '—';
+  const xtzText = bal != null ? formatBalanceDisplay(bal.xtz) : '—';
   // Same for a token whose balance was never read (e.g. the EVM alias of the
   // tz1 holder is still resolving, so the ERC-20 read was skipped).
-  // Max 6 fraction digits, like the XTZ headline: capping at 2 would render
-  // any balance below 0.005 as "0.00".
   const tokenText = (address: string): string => {
     const v = bal?.tokens[address.toLowerCase()];
-    return v != null ? fmtXtz(v, 2, 6) : '—';
+    return v != null ? formatBalanceDisplay(v) : '—';
   };
   // Cached values are never shown as if they were live: whenever the numbers
   // come from the persisted snapshot (`stale` set), a band labels them with

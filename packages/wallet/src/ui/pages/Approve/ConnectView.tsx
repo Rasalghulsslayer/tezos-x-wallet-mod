@@ -5,7 +5,7 @@ import { Icon } from '../../tx/Icon';
 import { Line } from '../../tx/Line';
 import { ApprovalHeader } from './ApprovalHeader';
 import { PinnedChip } from './PinnedChip';
-import { originDisplay } from './helpers';
+import { originDisplay } from '@tezosx/wallet-core/shared/approval-display';
 import type { AccountContext } from './types';
 
 export function ConnectView({

@@ -15,7 +15,7 @@ import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-nativ
 import Svg, { Defs, LinearGradient, Stop, Circle } from 'react-native-svg';
 import { colors, font, fontSize, space } from '../../theme';
 import type { ActivityRowVM } from '../../wallet/activity-vm';
-import { timeAgo } from '../format';
+import { timeAgo } from '@tezosx/wallet-core/shared/format';
 import { AssetMark } from './AssetMark';
 import { Icon, type IconName } from '../icon';
 

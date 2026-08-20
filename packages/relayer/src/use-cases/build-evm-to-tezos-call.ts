@@ -11,10 +11,10 @@ import {
   NAC_RECOMMENDED_GAS,
   NAC_TEZOS_RUNTIME_URL,
   NAC_HTTP_POST,
+  WEI_PER_MUTEZ,
 } from '../shared/constants.js';
 import { encodeNacCall, encodeNacCallMichelson } from '../shared/abi.js';
 
-const MUTEZ_TO_WEI   = 1_000_000_000_000n;
 const INVALID_PARAMS = -32602;
 
 export function buildEvmToTezosCall(intent: CrossRuntimeIntent): PrecompileCall {
@@ -27,7 +27,7 @@ export function buildEvmToTezosCall(intent: CrossRuntimeIntent): PrecompileCall 
     return {
       direction: 'evm-to-michelson',
       to:        NAC_PRECOMPILE_ADDR,
-      value:     intent.amount * MUTEZ_TO_WEI,
+      value:     intent.amount * WEI_PER_MUTEZ,
       data:      encodeNacCall(`${NAC_TEZOS_RUNTIME_URL}${intent.destination}`, [], '0x', NAC_HTTP_POST),
       gasLimit:  NAC_RECOMMENDED_GAS.call,
     };
@@ -36,7 +36,7 @@ export function buildEvmToTezosCall(intent: CrossRuntimeIntent): PrecompileCall 
     return {
       direction: 'evm-to-michelson',
       to:        NAC_PRECOMPILE_ADDR,
-      value:     (intent.value ?? 0n) * MUTEZ_TO_WEI,
+      value:     (intent.value ?? 0n) * WEI_PER_MUTEZ,
       data:      encodeNacCallMichelson(
         intent.destination,
         intent.entrypoint,

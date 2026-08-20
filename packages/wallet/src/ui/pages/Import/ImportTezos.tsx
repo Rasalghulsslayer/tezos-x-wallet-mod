@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { isValidEdsk, isValidMnemonic } from '@tezosx/wallet-core/domain/validation';
+import { BIP39_LENGTHS, isValidEdsk, isValidMnemonic } from '@tezosx/wallet-core/domain/validation';
 import { sendPopupRequest } from '@/shared/messaging';
 import { Button } from '../../tx/Button';
 import { TopBar } from '../../tx/TopBar';
@@ -10,7 +10,6 @@ import { PasswordFields } from './PasswordFields';
 
 type TzMode = 'mnemonic' | 'edsk';
 
-const BIP39_LENGTHS = [12, 15, 18, 21, 24];
 
 export function ImportTezos({ onDone }: { onDone: () => void }) {
   const navigate           = useNavigate();
@@ -33,7 +32,7 @@ export function ImportTezos({ onDone }: { onDone: () => void }) {
     : shapeValid
       ? <Meta tone="ok">{mode === 'mnemonic' ? `Valid · ${wordCount} words` : 'Valid · edsk'}</Meta>
       : mode === 'mnemonic'
-        ? (BIP39_LENGTHS.includes(wordCount)
+        ? ((BIP39_LENGTHS as readonly number[]).includes(wordCount)
             ? <Meta tone="bad">Invalid · not a BIP-39 phrase. Check spelling and word order.</Meta>
             : <Meta tone="bad">Invalid · {wordCount} {wordCount === 1 ? 'word' : 'words'}. Expected 12, 15, 18, 21 or 24.</Meta>)
         : <Meta tone="bad">Invalid · expected a secret key starting with edsk…</Meta>;

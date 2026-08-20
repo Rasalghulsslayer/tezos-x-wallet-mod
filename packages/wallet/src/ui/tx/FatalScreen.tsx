@@ -1,7 +1,5 @@
 import type { FormattedError } from '@tezosx/wallet-core/domain/error';
 
-const BUILD_VERSION = '0.5.0';
-
 export function FatalScreen({
   error,
   onReload = () => window.location.reload(),
@@ -37,7 +35,7 @@ export function FatalScreen({
           )}
         </div>
         <div className="tx-fatal-meta">
-          {(error.code ?? 'UNKNOWN').replace(/[^a-z0-9]/gi, '_').toUpperCase()} · build {BUILD_VERSION}
+          {(error.code ?? 'UNKNOWN').replace(/[^a-z0-9]/gi, '_').toUpperCase()} · build {__WALLET_VERSION__}
         </div>
       </div>
     </div>

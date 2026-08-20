@@ -8,8 +8,7 @@
  */
 
 import { AppState, type AppStateStatus } from 'react-native';
-
-const DEFAULT_IDLE_MS = 5 * 60_000;
+import { AUTO_LOCK_IDLE_MS } from '@tezosx/wallet-core/shared/constants';
 
 export interface AutoLockHandle {
   /** Reset the inactivity timer (call on user interaction). */
@@ -18,7 +17,7 @@ export interface AutoLockHandle {
   stop(): void;
 }
 
-export function startAutoLock(onLock: () => void, idleMs: number = DEFAULT_IDLE_MS): AutoLockHandle {
+export function startAutoLock(onLock: () => void, idleMs: number = AUTO_LOCK_IDLE_MS): AutoLockHandle {
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   const arm = (): void => {

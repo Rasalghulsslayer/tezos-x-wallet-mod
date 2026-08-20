@@ -19,7 +19,7 @@ describe('assetRowVM', () => {
     expect(vm.symbol).toBe('XTZ');
     expect(vm.runtimeBadge).toBe('l1');
     expect(vm.runtimeLabel).toBe('Michelson runtime');
-    expect(vm.balanceFormatted).toBe('1');
+    expect(vm.balanceFormatted).toBe('1.00');
   });
 
   it('projects XTZ L2 with EVM runtime label and wei→XTZ formatting at 18 decimals', () => {
@@ -27,7 +27,7 @@ describe('assetRowVM', () => {
     expect(vm.id).toBe('xtz:l2');
     expect(vm.runtimeBadge).toBe('l2');
     expect(vm.runtimeLabel).toBe('EVM runtime');
-    expect(vm.balanceFormatted).toBe('1.5');
+    expect(vm.balanceFormatted).toBe('1.50');
   });
 
   it('projects a 6-decimal ERC-20 (USDC pattern)', () => {
@@ -36,13 +36,13 @@ describe('assetRowVM', () => {
     expect(vm.symbol).toBe('USDC');
     expect(vm.runtimeBadge).toBe('l2');
     expect(vm.runtimeLabel).toBe('EVM runtime');
-    expect(vm.balanceFormatted).toBe('2.5');
+    expect(vm.balanceFormatted).toBe('2.50');
   });
 
   it('projects an 18-decimal ERC-20 (WXTZ pattern)', () => {
     const vm = assetRowVM(TOKEN_18, '3000000000000000000');
     expect(vm.symbol).toBe('WXTZ');
-    expect(vm.balanceFormatted).toBe('3');
+    expect(vm.balanceFormatted).toBe('3.00');
   });
 
   it('returns an empty balance string when amount is null (loading state)', () => {

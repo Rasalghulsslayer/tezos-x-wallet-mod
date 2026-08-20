@@ -9,7 +9,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
 import { formatError } from '@tezosx/wallet-core/domain/error';
 import { colors, fontSize, font, space } from '../theme';
-import { truncAddr } from '../ui/format';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
 import { Icon } from '../ui/icon';
 import { AssetMark } from '../ui/tx/AssetMark';
 import { Btn } from '../ui/tx/Btn';
@@ -68,7 +68,7 @@ function TokenRow({ token }: { token: RegisteredToken }): React.JSX.Element {
       <AssetMark symbol={token.symbol} kind="token" size="sm" />
       <View style={styles.body}>
         <Text style={styles.name}>{token.symbol}</Text>
-        <Text style={styles.addr}>{truncAddr(token.address, 8)}</Text>
+        <Text style={styles.addr}>{shortAddr(token.address, 8)}</Text>
       </View>
       <Btn
         variant="danger"

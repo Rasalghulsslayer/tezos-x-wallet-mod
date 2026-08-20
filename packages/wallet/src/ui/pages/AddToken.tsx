@@ -17,6 +17,7 @@ import { sendPopupRequest } from '@/shared/messaging';
 import { formatError } from '@tezosx/wallet-core/domain/error';
 import { EVM_EXPLORER } from '@tezosx/wallet-core/shared/constants';
 import { shortAddr } from '@tezosx/wallet-core/shared/format';
+import { EVM_ADDR_RE } from '@tezosx/wallet-core/domain/validation';
 import { Button } from '../tx/Button';
 import { Icon } from '../tx/Icon';
 import { TopBar } from '../tx/TopBar';
@@ -27,7 +28,6 @@ import { toast } from '../tx/Toast';
 
 type Stage = 'paste' | 'confirm' | 'submitting';
 
-const EVM_ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 
 function hexByteCount(a: string): number {
   return Math.floor(a.trim().replace(/^0x/i, '').replace(/[^0-9a-fA-F]/g, '').length / 2);

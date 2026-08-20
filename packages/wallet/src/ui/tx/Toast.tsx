@@ -16,7 +16,8 @@ type Listener = (payload: ToastPayload | null) => void;
 const listeners = new Set<Listener>();
 let hideTimer: ReturnType<typeof setTimeout> | undefined;
 
-const AUTO_DISMISS_MS = 5_000;
+const AUTO_DISMISS_MS   = 5_000;
+const QUICK_DISMISS_MS  = 1_600;   // confirmation blips (copied, saved)
 
 function emit(payload: ToastPayload | null): void {
   listeners.forEach((l) => l(payload));
@@ -26,7 +27,7 @@ function emit(payload: ToastPayload | null): void {
 export function toast(message: string): void {
   if (hideTimer) { clearTimeout(hideTimer); hideTimer = undefined; }
   emit({ message, variant: 'success' });
-  hideTimer = setTimeout(() => emit(null), 1_600);
+  hideTimer = setTimeout(() => emit(null), QUICK_DISMISS_MS);
 }
 
 /** Danger toast — pass options. Auto-dismiss unless `sticky` is set. */

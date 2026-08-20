@@ -1,3 +1,11 @@
+/**
+ * Anti-phishing display helpers for the dApp approval surfaces. What an
+ * approval screen shows IS the security boundary: a message that renders
+ * differently from what is signed, or an origin whose scheme/port is hidden,
+ * lets a hostile dApp dress up as a legitimate one. Shared by the router
+ * (signature previews) and both shells' approval UIs.
+ */
+
 // Bidi overrides / embeddings / isolates and zero-width characters: invisible
 // or direction-flipping codepoints that let a decoded message read as
 // something other than what is signed. If a payload contains any, we refuse to
@@ -16,14 +24,17 @@ export function tryDecodeUtf8(hex: string): string | undefined {
     for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
     const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
     if (DECEPTIVE_CHARS.test(text)) return undefined;
-    return /^[\x09\x0a\x0d\x20-\x7e -￿]+$/.test(text) ? text : undefined;
+    // ASCII printable + tab/LF/CR, then U+00A0 upward: DEL (U+007F) and the
+    // C1 control block (U+0080-U+009F) are invisible in a rendered preview,
+    // so a payload carrying them is shown as raw hex instead.
+    return /^[\x09\x0a\x0d\x20-\x7e\u00a0-\uffff]+$/.test(text) ? text : undefined;
   } catch {
     return undefined;
   }
 }
 
 /**
- * How an origin should be shown in the approval header. Rendering only the
+ * How an origin should be shown in an approval header. Rendering only the
  * hostname hid the scheme and port, so `http://victim.com` and
  * `http://victim.com:8443` looked identical to the legitimate
  * `https://victim.com`. For an https origin we keep the clean `host[:port]`;

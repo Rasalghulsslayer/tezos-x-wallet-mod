@@ -6,6 +6,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.9.0] — 2026-08-19
+
+### Added
+- `WEI_PER_MUTEZ` (10¹²) is exported from `@tezosx/relayer/constants`. The
+  kernel's fixed wei ↔ mutez exchange rate was previously defined privately in
+  both cross-runtime builders (under two different names) and re-declared by
+  every consumer that needed it; there is now a single exported source of
+  truth, used by both builders and by `@tezosx/wallet-core`'s display
+  conversions.
+
 ## [0.8.0] — 2026-08-18
 
 ### Added

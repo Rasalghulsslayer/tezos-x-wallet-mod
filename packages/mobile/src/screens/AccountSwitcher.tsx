@@ -12,7 +12,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { formatError, type FormattedError } from '@tezosx/wallet-core/domain/error';
 import { colors, fontSize, font, radius } from '../theme';
-import { truncAddr } from '../ui/format';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
 import { Icon } from '../ui/icon';
 import { Badge } from '../ui/tx/Badge';
 import { Btn } from '../ui/tx/Btn';
@@ -100,7 +100,7 @@ function SwitcherRow({
           </Badge>
         </View>
         <Text style={styles.addr} numberOfLines={1}>
-          {truncAddr(isEvm ? account.address : account.tz1, 8)}
+          {shortAddr(isEvm ? account.address : account.tz1, 8)}
         </Text>
       </View>
       {active && <Icon name="check" size={20} color={colors.purple} />}

@@ -7,6 +7,47 @@ TypeScript source over the npm-workspace symlink (no build step), by both the
 Chrome extension (`@tezosx/wallet`) and the React Native app
 (`@tezosx/wallet-mobile`).
 
+## [0.9.0] — 2026-08-19
+
+### Added
+- **`shared/amounts.ts`** — the write direction of unit math, previously
+  duplicated inside both shells' Send screens: `parseTokenAmount` (typed
+  decimal → 0x base-units hex, the counterpart of `formatTokenAmount`),
+  `xtzToMutez` (typed decimal → mutez bigint), and `normalizeDecimalInput`
+  (input normalization without a float round-trip). All BigInt/string —
+  no parseFloat anywhere on an amount path.
+- **`shared/approval-display.ts`** — the anti-phishing display helpers,
+  now shared: `originDisplay` (keeps the scheme/port visible for non-https
+  origins) and `tryDecodeUtf8` (refuses bidi/zero-width text in signature
+  previews). Both existed as duplicated copies (the extension's approval
+  pages and the router); the router now imports the shared module.
+- `formatBalanceDisplay` in `shared/format.ts`: grouped en-US thousands and
+  a min/max fraction window over an exact decimal string — pure string work,
+  replacing the shells' `parseFloat`+`toLocaleString` balance formatting that
+  lost precision and diverged in locale between platforms.
+- `dayGroupOf` in `shared/format.ts`: the calendar-midnight Today/Yesterday/
+  Earlier bucket both activity feeds now share.
+- `domain/validation.ts` exports the shared input shapes: `EVM_ADDR_RE`,
+  `EVM_PRIVKEY_RE`, `AMOUNT_RE`, `BIP39_LENGTHS`.
+- `domain/asset.ts` exports `erc20AssetFromToken` (registry entry → Asset),
+  previously re-implemented three times in the extension alone.
+- Product constants both shells duplicated: `TX_RESOLVE_POLL_MS`,
+  `TX_RESOLVE_TIMEOUT_MS`, `MAX_FEE_RESERVE_MUTEZ`, `CLIPBOARD_CLEAR_MS`,
+  `AUTO_LOCK_IDLE_MS`.
+
+### Changed
+- `timeAgo` adopts the richer behavior the mobile shell had locally:
+  "just now" under a minute, then m/h/d, then a short date beyond a week,
+  with an injectable `nowMs`. Both shells previously mixed two different
+  relative-time formats on the same screen.
+- `shortAddr` tolerates `null`/`undefined` (renders as an empty slot), so a
+  still-resolving address never needs a caller-side guard.
+- `weiToXtz` derives its conversion from the relayer's exported
+  `WEI_PER_MUTEZ` instead of an inline literal.
+
+### Compatibility
+- Requires `@tezosx/relayer` 0.9.0 (the `WEI_PER_MUTEZ` export).
+
 ## [0.8.0] — 2026-08-19
 
 ### Fixed

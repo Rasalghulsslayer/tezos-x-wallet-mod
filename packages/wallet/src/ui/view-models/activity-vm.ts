@@ -7,7 +7,7 @@
  * structured pieces rather than a pre-rendered title string.
  */
 
-import { formatTokenAmount, shortAddr } from '@tezosx/wallet-core/shared/format';
+import { dayGroupOf, formatTokenAmount, shortAddr, timeAgo } from '@tezosx/wallet-core/shared/format';
 import type { ActivityItem } from '@tezosx/wallet-core/domain/activity';
 import type { Asset } from '@tezosx/wallet-core/domain/asset';
 
@@ -53,6 +53,8 @@ function runtimeTagOf(item: ActivityItem): ActivityRowVM['runtimeTag'] {
   return 'Michelson → EVM';
 }
 
+/** Status-aware timestamp: a live status wins over the age, otherwise the
+ *  wallet-wide relative time (with a friendlier word for the day before). */
 function agoOf(item: ActivityItem, nowMs: number): string {
   if (item.kind !== 'signature' && item.kind !== 'unknown' && item.status === 'pending') {
     const secs = Math.max(0, Math.round((nowMs - item.timestamp) / 1000));
@@ -61,24 +63,9 @@ function agoOf(item: ActivityItem, nowMs: number): string {
   if ((item.kind === 'transfer' || item.kind === 'contract-call') && item.status === 'failed') {
     return 'Failed';
   }
-  const diffMs = nowMs - item.timestamp;
-  const s = Math.floor(diffMs / 1000);
-  if (s < 60)        return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60)        return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24)        return `${h}h ago`;
-  if (h < 48)        return 'yesterday';
-  const d = Math.floor(h / 24);
-  return `${d}d ago`;
-}
-
-function dayGroupOf(tsMs: number, nowMs: number): ActivityRowVM['dayGroup'] {
-  const dayMs   = 24 * 60 * 60 * 1000;
-  const startOfToday = new Date(nowMs).setHours(0, 0, 0, 0);
-  if (tsMs >= startOfToday)              return 'Today';
-  if (tsMs >= startOfToday - dayMs)      return 'Yesterday';
-  return 'Earlier';
+  const hours = Math.floor((nowMs - item.timestamp) / 3_600_000);
+  if (hours >= 24 && hours < 48) return 'yesterday';
+  return timeAgo(item.timestamp, nowMs);
 }
 
 export function activityRowVM(item: ActivityItem, nowMs: number = Date.now()): ActivityRowVM {

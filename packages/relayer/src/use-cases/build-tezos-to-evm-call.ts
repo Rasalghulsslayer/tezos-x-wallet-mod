@@ -5,7 +5,7 @@
  */
 
 import type { MichelsonV1Expression } from '@taquito/rpc';
-import { NAC_CONTRACT, NAC_ETHEREUM_RUNTIME_URL, NAC_HTTP_POST } from '../shared/constants.js';
+import { NAC_CONTRACT, NAC_ETHEREUM_RUNTIME_URL, NAC_HTTP_POST, WEI_PER_MUTEZ } from '../shared/constants.js';
 import type { GatewayCall } from '../domain/cross-runtime.js';
 import type { EthTransactionRequest } from '../domain/eth-tx.js';
 
@@ -82,8 +82,6 @@ export class SubMutezPrecisionError extends Error {
     this.name = 'SubMutezPrecisionError';
   }
 }
-
-const WEI_PER_MUTEZ = 1_000_000_000_000n;
 
 /**
  * Convert wei to mutez, rejecting any sub-mutez remainder instead of flooring

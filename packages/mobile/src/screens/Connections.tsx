@@ -11,7 +11,8 @@ import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-nati
 import { formatError } from '@tezosx/wallet-core/domain/error';
 import type { StoredSession } from '@tezosx/wallet-core/ports/session-store';
 import { colors, fontSize, font, radius, space } from '../theme';
-import { timeAgo } from '../ui/format';
+import { timeAgo } from '@tezosx/wallet-core/shared/format';
+import { originDisplay } from '@tezosx/wallet-core/shared/approval-display';
 import { Icon } from '../ui/icon';
 import { Btn } from '../ui/tx/Btn';
 import { EmptyState } from '../ui/tx/EmptyState';
@@ -22,10 +23,6 @@ import { TopBar } from '../ui/tx/TopBar';
 import { useWallet } from '../wallet/context';
 import { ScanConnect } from './ScanConnect';
 
-function hostOf(origin: string): string {
-  const m = /^[a-z]+:\/\/([^/]+)/i.exec(origin);
-  return m != null ? m[1] : origin;
-}
 
 type Filter = 'all' | 'active';
 
@@ -147,13 +144,13 @@ function ConnectSheet({ onClose }: { onClose: () => void }): React.JSX.Element {
 
 function ConnectionRow({ session }: { session: StoredSession }): React.JSX.Element {
   const ctx = useWallet();
-  const host = hostOf(session.origin);
+  const { title: host, favLetter } = originDisplay(session.origin);
   const label = ctx.labelFor(ctx.accounts.find((a) => a.id === session.accountId));
 
   return (
     <View style={styles.row}>
       <View style={styles.fav}>
-        <Text style={styles.favText}>{host.charAt(0).toUpperCase()}</Text>
+        <Text style={styles.favText}>{favLetter}</Text>
       </View>
       <View style={styles.body}>
         <Text style={styles.host} numberOfLines={1}>

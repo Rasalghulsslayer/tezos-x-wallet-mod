@@ -21,7 +21,9 @@
  * unlocked lifetime.
  */
 
-export const AUTO_LOCK_IDLE_MS = 5 * 60_000; // mirrors the mobile DEFAULT_IDLE_MS
+import { AUTO_LOCK_IDLE_MS } from '@tezosx/wallet-core/shared/constants';
+
+export { AUTO_LOCK_IDLE_MS };
 export const AUTO_LOCK_ALARM_NAME = 'auto-lock-deadline';
 /** chrome.alarms' floor for a packed extension is 1 minute — the enforcement
  *  granularity on top of AUTO_LOCK_IDLE_MS. */

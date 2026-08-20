@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { originDisplay, tryDecodeUtf8 } from '../helpers';
+import { originDisplay, tryDecodeUtf8 } from '../approval-display';
 
 // Hex-encode a utf-8 string the way a dApp's personal_sign param arrives.
 function hex(s: string): string {
@@ -30,6 +30,17 @@ describe('tryDecodeUtf8 — decode for display (SEC-4)', () => {
   it('returns undefined for non-hex or odd-length input', () => {
     expect(tryDecodeUtf8('0xzz')).toBeUndefined();
     expect(tryDecodeUtf8('0xabc')).toBeUndefined();
+  });
+
+  it('returns undefined for DEL and C1 controls — invisible in a rendered preview', () => {
+    expect(tryDecodeUtf8(hex('Approve\u007f transfer'))).toBeUndefined();
+    expect(tryDecodeUtf8(hex('Approve\u0085 transfer'))).toBeUndefined();
+    expect(tryDecodeUtf8(hex('Approve\u009f transfer'))).toBeUndefined();
+  });
+
+  it('still accepts ordinary non-ASCII text', () => {
+    expect(tryDecodeUtf8(hex('Montant : 1,5 ꜩ'))).toBe('Montant : 1,5 ꜩ');
+    expect(tryDecodeUtf8(hex('署名してください'))).toBe('署名してください');
   });
 });
 

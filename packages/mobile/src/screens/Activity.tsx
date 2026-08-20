@@ -8,7 +8,7 @@
 
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { timeAgo } from '@tezosx/wallet-core/shared/format';
+import { dayGroupOf, timeAgo } from '@tezosx/wallet-core/shared/format';
 import { colors, fontSize, radius, space } from '../theme';
 import { Icon } from '../ui/icon';
 import { ActivityRow } from '../ui/tx/ActivityRow';
@@ -29,16 +29,9 @@ interface DayGroup {
   items: ActivityRowVM[];
 }
 
-const DAY = 86400000;
-
 function groupByDay(items: ActivityRowVM[], now: number): DayGroup[] {
   const buckets: Record<string, ActivityRowVM[]> = { Today: [], Yesterday: [], Earlier: [] };
-  items.forEach((i) => {
-    const age = now - i.ts;
-    if (age < DAY) buckets.Today.push(i);
-    else if (age < 2 * DAY) buckets.Yesterday.push(i);
-    else buckets.Earlier.push(i);
-  });
+  items.forEach((i) => buckets[dayGroupOf(i.ts, now)].push(i));
   return (['Today', 'Yesterday', 'Earlier'] as const)
     .map((label) => ({ label, items: buckets[label] }))
     .filter((g) => g.items.length > 0);

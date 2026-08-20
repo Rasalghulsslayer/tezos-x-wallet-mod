@@ -9,8 +9,22 @@ import { keccak_256 } from '@noble/hashes/sha3.js';
 import type { DestRuntime } from './chain';
 
 const TZ_ADDR_RE  = /^(tz[1234]|KT1)[a-zA-Z0-9]{33}$/;
-const EVM_ADDR_RE = /^0x[a-fA-F0-9]{40}$/;
 const EDSK_REGEX  = /^edsk(?:[1-9A-HJ-NP-Za-km-z]{50}|[1-9A-HJ-NP-Za-km-z]{94})$/;
+
+/** Shape of a 0x address (40 hex chars). Shape only — prefer isValidAddress /
+ *  detectRuntime for user input, which also verify the EIP-55 checksum. */
+export const EVM_ADDR_RE = /^0x[a-fA-F0-9]{40}$/;
+
+/** Shape of a raw EVM private key: 64 hex chars, 0x prefix optional. Shape is
+ *  all a form needs to gate on — key derivation normalises the 0x prefix and
+ *  rejects the rare out-of-secp256k1-range key with a precise error. */
+export const EVM_PRIVKEY_RE = /^(0x)?[0-9a-fA-F]{64}$/;
+
+/** Shape of a typed decimal amount (no sign, no exponent, single dot). */
+export const AMOUNT_RE = /^\d+(\.\d+)?$/;
+
+/** BIP-39 mnemonic lengths accepted at import. */
+export const BIP39_LENGTHS = [12, 15, 18, 21, 24] as const;
 
 /**
  * EIP-55: a mixed-case 0x address carries a checksum in its letter casing. An

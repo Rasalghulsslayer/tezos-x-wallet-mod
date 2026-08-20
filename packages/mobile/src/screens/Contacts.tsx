@@ -13,7 +13,8 @@ import type { Contact } from '@tezosx/wallet-core/domain/contact';
 import { formatError, type FormattedError } from '@tezosx/wallet-core/domain/error';
 import { MAX_LABEL_LENGTH } from '@tezosx/wallet-core/shared/constants';
 import { colors, font, fontSize, radius, space } from '../theme';
-import { detectRuntime, truncAddr } from '../ui/format';
+import { detectRuntime } from '@tezosx/wallet-core/domain/validation';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
 import { Icon } from '../ui/icon';
 import { Btn } from '../ui/tx/Btn';
 import { EmptyState } from '../ui/tx/EmptyState';
@@ -157,7 +158,7 @@ function ContactRow({
           {contact.label}
         </Text>
         <Text style={styles.rowAddr} numberOfLines={1}>
-          {truncAddr(contact.address, 8)}
+          {shortAddr(contact.address, 8)}
         </Text>
       </View>
       <IconBtn name="trash" label={`Remove ${contact.label}`} size={17} onPress={onRemove} />
@@ -191,7 +192,7 @@ function RenameSheet({ contact, onClose }: { contact: Contact; onClose: () => vo
   return (
     <Sheet title="Rename contact" onClose={onClose}>
       <View style={styles.renameBody}>
-        <Text style={styles.renameAddr}>{truncAddr(contact.address, 10)}</Text>
+        <Text style={styles.renameAddr}>{shortAddr(contact.address, 10)}</Text>
         <TextInput
           style={styles.nameInput}
           value={label}

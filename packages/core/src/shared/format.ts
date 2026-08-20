@@ -1,5 +1,9 @@
-/** Truncate an address for display: "tz1aBcD...xYz1". */
-export function shortAddr(addr: string, head = 6, tail = 4): string {
+import { WEI_PER_MUTEZ } from '@tezosx/relayer/constants';
+
+/** Truncate an address for display: "tz1aBcD...xYz1". Null-tolerant so a
+ *  still-resolving address renders as an empty slot, not a crash. */
+export function shortAddr(addr: string | null | undefined, head = 6, tail = 4): string {
+  if (addr == null) return '';
   if (addr.length <= head + tail + 3) return addr;
   return `${addr.slice(0, head)}…${addr.slice(-tail)}`;
 }
@@ -34,8 +38,25 @@ export function mutezToXtz(mutez: string): string {
 export function weiToXtz(weiHex: string): string {
   if (!weiHex || weiHex === '0x0' || weiHex === '0x') return '0';
   const wei   = BigInt(weiHex);
-  const mutez = wei / 1_000_000_000_000n;   // 10^12 — wei → mutez
+  const mutez = wei / WEI_PER_MUTEZ;
   return formatTokenAmount(mutez.toString(), 6);
+}
+
+/**
+ * Grouped display of an exact decimal string: en-US thousands separators and
+ * a [min, max] fraction window, truncating (never rounding) beyond max. Pure
+ * string work — no parseFloat, so precision survives any magnitude. A
+ * non-numeric input (a '—' placeholder) passes through unchanged; the caller
+ * owns its sentinels.
+ */
+export function formatBalanceDisplay(decimal: string, min = 2, max = 6): string {
+  if (!/^\d+(\.\d+)?$/.test(decimal)) return decimal;
+  const [rawWhole = '0', rawFrac = ''] = decimal.split('.');
+  const whole   = rawWhole.replace(/^0+(?=\d)/, '') || '0';
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const frac    = rawFrac.slice(0, max).replace(/0+$/, '');
+  const padded  = frac.length < min ? frac.padEnd(min, '0') : frac;
+  return padded === '' ? grouped : `${grouped}.${padded}`;
 }
 
 /** Pretty chain label ("0x1f094 · 127124"). */
@@ -45,14 +66,28 @@ export function chainLabel(chainId: string): string {
   return Number.isNaN(dec) ? chainId : `${chainId} · ${dec}`;
 }
 
-/** Relative time suffix: "12s ago", "3m ago", "2h ago". */
-export function timeAgo(tsMs: number): string {
-  const diff = Date.now() - tsMs;
-  const s = Math.floor(diff / 1000);
-  if (s < 60)     return `${s}s ago`;
+/** Relative time: "just now", "5m ago", "3h ago", "2d ago", then a short
+ *  date beyond a week. `nowMs` is injectable for tests. */
+export function timeAgo(tsMs: number, nowMs: number = Date.now()): string {
+  const s = Math.floor((nowMs - tsMs) / 1000);
+  if (s < 60) return 'just now';
   const m = Math.floor(s / 60);
-  if (m < 60)     return `${m}m ago`;
+  if (m < 60) return `${m}m ago`;
   const h = Math.floor(m / 60);
-  if (h < 24)     return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 7)  return `${d}d ago`;
+  return new Date(tsMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+export type DayGroup = 'Today' | 'Yesterday' | 'Earlier';
+
+/** Calendar-day bucket for activity grouping: "Today" starts at local
+ *  midnight, not 24 sliding hours. */
+export function dayGroupOf(tsMs: number, nowMs: number): DayGroup {
+  const dayMs        = 24 * 60 * 60 * 1000;
+  const startOfToday = new Date(nowMs).setHours(0, 0, 0, 0);
+  if (tsMs >= startOfToday)         return 'Today';
+  if (tsMs >= startOfToday - dayMs) return 'Yesterday';
+  return 'Earlier';
 }

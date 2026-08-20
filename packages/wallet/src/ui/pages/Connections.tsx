@@ -4,6 +4,7 @@ import type { VaultState } from '@tezosx/wallet-core/shared/messages';
 import type { StoredSession } from '@tezosx/wallet-core/ports/session-store';
 import { sendPopupRequest } from '@/shared/messaging';
 import { timeAgo } from '@tezosx/wallet-core/shared/format';
+import { originDisplay } from '@tezosx/wallet-core/shared/approval-display';
 import { TopBar } from '../tx/TopBar';
 import { Icon } from '../tx/Icon';
 import { Button } from '../tx/Button';
@@ -87,12 +88,11 @@ export function Connections({ state, onChanged }: { state: VaultState; onChanged
         ) : (
           <div style={{ padding: '8px 0' }}>
             {visible.map((s) => {
-              let host = s.origin;
-              try { host = new URL(s.origin).hostname; } catch { /* keep raw */ }
+              const { title: host, favLetter } = originDisplay(s.origin);
               const acct = describeSessionAccount(s, accounts);
               return (
                 <div key={s.origin} className="tx-connections-row">
-                  <div className="tx-origin-fav">{host.charAt(0).toUpperCase()}</div>
+                  <div className="tx-origin-fav">{favLetter}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="t" title={s.origin}>{host}</div>
                     <div className="m">

@@ -1,5 +1,6 @@
-/** How long a copied secret lingers on the OS clipboard before being cleared. */
-export const CLIPBOARD_CLEAR_MS = 30_000;
+import { CLIPBOARD_CLEAR_MS } from '@tezosx/wallet-core/shared/constants';
+
+export { CLIPBOARD_CLEAR_MS };
 
 /**
  * Copy a secret to the clipboard and schedule it to be cleared after

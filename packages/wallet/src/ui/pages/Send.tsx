@@ -13,7 +13,8 @@ import {
   fetchXtzBalance,
   fetchErc20Balance,
 } from '@tezosx/wallet-core/adapters/tezos/tezos-balance-fetcher';
-import { mutezToXtz, weiToXtz, formatTokenAmount } from '@tezosx/wallet-core/shared/format';
+import { mutezToXtz, weiToXtz, formatTokenAmount, shortAddr } from '@tezosx/wallet-core/shared/format';
+import { parseTokenAmount, xtzToMutez, normalizeDecimalInput } from '@tezosx/wallet-core/shared/amounts';
 import { formatError } from '@tezosx/wallet-core/domain/error';
 import { trackTx } from '@tezosx/wallet-core/shared/tx-status';
 import { startPoller } from '@tezosx/wallet-core/shared/poller';
@@ -25,7 +26,7 @@ import { Button } from '../tx/Button';
 import { Icon } from '../tx/Icon';
 import { TopBar } from '../tx/TopBar';
 import { AssetSelector, type AssetOption } from '../tx/AssetSelector';
-import { XTZ_L1_ASSET, XTZ_L2_ASSET, type Asset, type Erc20Asset } from '@tezosx/wallet-core/domain/asset';
+import { XTZ_L1_ASSET, XTZ_L2_ASSET, erc20AssetFromToken, type Asset } from '@tezosx/wallet-core/domain/asset';
 import { ChainPill } from '../tx/ChainPill';
 import { Line } from '../tx/Line';
 import { RoutingCard } from '../tx/RoutingCard';
@@ -38,9 +39,14 @@ import { toast } from '../tx/Toast';
 import { StatusTimeline } from '../tx/StatusTimeline';
 import { StatusHero } from '../tx/StatusHero';
 import { StatusMeta } from '../tx/StatusMeta';
-import { TEZOS_EXPLORER, EVM_EXPLORER } from '@tezosx/wallet-core/shared/constants';
+import {
+  TEZOS_EXPLORER,
+  EVM_EXPLORER,
+  TX_RESOLVE_POLL_MS,
+  TX_RESOLVE_TIMEOUT_MS,
+  MAX_FEE_RESERVE_MUTEZ,
+} from '@tezosx/wallet-core/shared/constants';
 import { NAC_CONTRACT } from '@tezosx/relayer/constants';
-import { truncAddr } from '../tx/utils';
 
 type Stage = 'form' | 'review' | 'done';
 
@@ -55,52 +61,6 @@ type BalanceMap = Record<string, string>;
 
 function assetKey(asset: Asset): string {
   return asset.kind === 'xtz' ? 'xtz' : asset.address.toLowerCase();
-}
-
-function tokenToAsset(t: RegisteredToken): Erc20Asset {
-  return { kind: 'erc20', address: t.address, symbol: t.symbol, name: t.name, decimals: t.decimals, runtime: 'evm' };
-}
-
-const RESOLVE_POLL_MS    = 2_000;
-const RESOLVE_TIMEOUT_MS = 60_000;
-const MAX_FEE_RESERVE_MUTEZ = 10_000n;
-
-/**
- * Human decimal → 0x-prefixed base-units hex, scaled by `decimals`. XTZ always
- * uses 18 (the wei convention the relayer then converts ÷10^12 to mutez); an
- * ERC-20 uses its own token decimals, so the signed `transfer` amount matches
- * what the user typed rather than being over-scaled to 18.
- */
-function amountToBaseUnits(human: string, decimals: number): string {
-  const [whole, frac = ''] = human.trim().split('.');
-  const padded = (whole + frac.padEnd(decimals, '0')).slice(0, whole.length + decimals);
-  return '0x' + BigInt(padded || '0').toString(16);
-}
-
-function mutezToBig(xtz: string): bigint {
-  const [whole, frac = ''] = xtz.trim().split('.');
-  const mutezPart = (whole + frac.padEnd(6, '0')).slice(0, whole.length + 6);
-  return BigInt(mutezPart || '0');
-}
-
-// Normalize the typed amount without a float round-trip: Number() flips to
-// scientific notation below 1e-6 and the default locale formatting rounds to
-// 3 fraction digits — both misreport small amounts on the review screen.
-function fmtExactAmount(raw: string): string {
-  const trimmed = raw.trim();
-  if (!/^\d*\.?\d*$/.test(trimmed) || trimmed === '' || trimmed === '.') return String(Number(trimmed));
-  const [w = '', f = ''] = trimmed.split('.');
-  const whole = w.replace(/^0+(?=\d)/, '') || '0';
-  const frac  = f.replace(/0+$/, '');
-  return frac === '' ? whole : `${whole}.${frac}`;
-}
-
-function bigMutezToXtzString(mutez: bigint): string {
-  const whole = mutez / 1_000_000n;
-  const frac  = mutez % 1_000_000n;
-  return frac === 0n
-    ? whole.toString()
-    : `${whole.toString()}.${frac.toString().padStart(6, '0').replace(/0+$/, '')}`;
 }
 
 function routingLabel(sourceKind: 'tezos' | 'evm', dest: DestRuntime): string {
@@ -196,9 +156,9 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
   useEffect(() => {
     if (pendingResolve == null) return;
 
-    const resolveTimeoutMs = e2eConfig()?.resolveTimeoutMs ?? RESOLVE_TIMEOUT_MS;
+    const resolveTimeoutMs = e2eConfig()?.resolveTimeoutMs ?? TX_RESOLVE_TIMEOUT_MS;
     const handle = startPoller<ResolveTxResult>({
-      intervalMs: RESOLVE_POLL_MS,
+      intervalMs: TX_RESOLVE_POLL_MS,
       timeoutMs:  resolveTimeoutMs,
       fetch: async () => {
         const result = await sendPopupRequest<ResolveTxResult>({
@@ -260,11 +220,11 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
   const handleMax = () => {
     if (balancesLoading) return;
     if (asset.kind === 'xtz') {
-      const mutezTotal = mutezToBig(balances.xtz ?? '0');
+      const mutezTotal = xtzToMutez(balances.xtz ?? '0');
       const usable     = mutezTotal > MAX_FEE_RESERVE_MUTEZ
         ? mutezTotal - MAX_FEE_RESERVE_MUTEZ
         : 0n;
-      setAmt(bigMutezToXtzString(usable));
+      setAmt(mutezToXtz(usable.toString()));
     } else {
       setAmt(availableStr);
     }
@@ -287,7 +247,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
       const result = await sendPopupRequest<SendTxResult>({
         type:   'SEND_TX',
         to,
-        amount: amountToBaseUnits(amount, asset.kind === 'xtz' ? 18 : asset.decimals),
+        amount: parseTokenAmount(amount, asset.kind === 'xtz' ? 18 : asset.decimals),
         asset,
       });
 
@@ -301,7 +261,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
       // EVM-source the hash is already the real EVM hash and resolution
       // is a no-op. Try resolving regardless; the SW's EvmProvider returns
       // null for real EVM hashes, which falls through to the timeout
-      // branch within RESOLVE_TIMEOUT_MS without harm.
+      // branch within TX_RESOLVE_TIMEOUT_MS without harm.
       const fromGateway = state.kind === 'tezos' && dest === 'l2';
       setDone({ hash: result.hash, runtime: 'l2', pending: fromGateway });
       if (fromGateway) {
@@ -363,14 +323,14 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
             cross={isCross}
             amount={parseFloat(amount || '0').toString()}
             asset={asset}
-            to={truncAddr(to, 6)}
+            to={shortAddr(to, 9, 6)}
           />
           <StatusTimeline status={status} runtime={done.runtime} startedAt={doneStartedAt} />
           {!isFailed && done.hash !== '' && <StatusMeta status={status} runtime={done.runtime} hash={done.hash} />}
           {!isFailed && offerSave && (
             <div className="tx-card flat" style={{ marginTop: 12, padding: 12, width: '100%' }}>
               <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}>
-                Save {truncAddr(to, 6)} as a contact
+                Save {shortAddr(to, 9, 6)} as a contact
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
@@ -445,7 +405,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
           <div className="tx-lane" style={{ marginBottom: 16 }}>
             <div className="tx-lane-side">
               <span className="k">From</span>
-              <span className="v">{truncAddr(fromAddr, 6)}</span>
+              <span className="v">{shortAddr(fromAddr, 9, 6)}</span>
               <ChainPill chain={fromChain} />
             </div>
             <span
@@ -462,13 +422,13 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
                   {toContact.label}
                 </span>
               )}
-              <span className="v">{truncAddr(to, 6)}</span>
+              <span className="v">{shortAddr(to, 9, 6)}</span>
               <ChainPill chain={destChain} />
             </div>
           </div>
 
           <div className="tx-card" style={{ padding: 0 }}>
-            <Line label="Amount" value={`${fmtExactAmount(amount)} ${asset.symbol}`} />
+            <Line label="Amount" value={`${normalizeDecimalInput(amount)} ${asset.symbol}`} />
             <div className="tx-divider" />
             <Line label="Routing" value={routingLabel(state.kind, dest)} />
             <div className="tx-divider" />
@@ -481,7 +441,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
                 What you actually sign
               </div>
               <div className="tx-card tx-cross-card" style={{ padding: 0 }}>
-                <Line label="Michelson target" value={truncAddr(NAC_CONTRACT, 6)} />
+                <Line label="Michelson target" value={shortAddr(NAC_CONTRACT, 9, 6)} />
                 <div className="tx-divider" />
                 <Line label="Entrypoint" value={asset.kind === 'xtz' ? 'call' : 'call_evm'} />
                 {asset.kind === 'erc20' && (
@@ -493,7 +453,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
                 <div className="tx-divider" />
                 <Line
                   label="Debit (mutez)"
-                  value={asset.kind === 'xtz' ? mutezToBig(amount).toString() : '0'}
+                  value={asset.kind === 'xtz' ? xtzToMutez(amount).toString() : '0'}
                 />
               </div>
             </>
@@ -538,7 +498,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
         <div className="tx-kicker" style={{ padding: '8px 0' }}>Asset</div>
         {(() => {
           const tokenOptions: AssetOption[] = tokens.map((t) => ({
-            asset:    tokenToAsset(t),
+            asset:    erc20AssetFromToken(t),
             subLabel: isEvmSource ? 'Soon · EVM-source' : 'ERC-20 · EVM runtime',
             disabled: isEvmSource,
             title:    isEvmSource ? 'ERC-20 sends from EVM accounts are coming in a follow-up release.' : undefined,
@@ -583,7 +543,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
               >
                 <Identicon seed={c.address} size="sm" />
                 <span className="n">{c.label}</span>
-                <span className="a">{truncAddr(c.address, 6)}</span>
+                <span className="a">{shortAddr(c.address, 9, 6)}</span>
               </button>
             ))}
           </div>
@@ -592,7 +552,7 @@ function SendUnlocked({ state, onDone }: { state: VaultStateUnlocked; onDone: ()
           <div style={{ marginTop: 6, fontSize: 11, color: 'var(--tx-fg-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon name="check" size={12} color="var(--tx-fg-muted)" />
             <span style={{ fontWeight: 500 }}>{toContact.label}</span>
-            <span className="tx-mono">{truncAddr(to, 6)}</span>
+            <span className="tx-mono">{shortAddr(to, 9, 6)}</span>
           </div>
         )}
         <RoutingCard asset={asset} dest={dest} sourceKind={state.kind} />

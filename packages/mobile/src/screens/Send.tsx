@@ -20,12 +20,21 @@ import { startPoller } from '@tezosx/wallet-core/shared/poller';
 import type { TxStatus } from '@tezosx/wallet-core/domain/tx-status';
 import type { ResolveTxResult } from '@tezosx/wallet-core/use-cases/resolve-tx';
 import { formatError, type FormattedError } from '@tezosx/wallet-core/domain/error';
-import { XTZ_L1_ASSET, XTZ_L2_ASSET, type Asset } from '@tezosx/wallet-core/domain/asset';
+import { XTZ_L1_ASSET, XTZ_L2_ASSET, erc20AssetFromToken, type Asset } from '@tezosx/wallet-core/domain/asset';
 import { contactFor, matchContacts, shouldOfferSaveContact } from '@tezosx/wallet-core/view-models/contacts-vm';
-import { TEZOS_EXPLORER, EVM_EXPLORER, MAX_LABEL_LENGTH } from '@tezosx/wallet-core/shared/constants';
+import {
+  TEZOS_EXPLORER,
+  EVM_EXPLORER,
+  MAX_LABEL_LENGTH,
+  TX_RESOLVE_POLL_MS,
+  TX_RESOLVE_TIMEOUT_MS,
+  MAX_FEE_RESERVE_MUTEZ,
+} from '@tezosx/wallet-core/shared/constants';
 import { NAC_CONTRACT } from '@tezosx/relayer/constants';
 import { colors, font, fontSize, radius, space } from '../theme';
-import { detectRuntime, fmtXtz, truncAddr } from '../ui/format';
+import { detectRuntime, AMOUNT_RE } from '@tezosx/wallet-core/domain/validation';
+import { formatBalanceDisplay, mutezToXtz, shortAddr } from '@tezosx/wallet-core/shared/format';
+import { parseTokenAmount, xtzToMutez, normalizeDecimalInput } from '@tezosx/wallet-core/shared/amounts';
 import { Icon } from '../ui/icon';
 import { AssetMark } from '../ui/tx/AssetMark';
 import { Btn } from '../ui/tx/Btn';
@@ -54,27 +63,6 @@ interface DoneInfo {
   unresolved: boolean;  // resolution timed out — showing the intermediate hash
 }
 
-const AMOUNT_RE = /^\d+(\.\d+)?$/;
-const RESOLVE_POLL_MS = 2_000;
-const RESOLVE_TIMEOUT_MS = 60_000;
-
-/**
- * Human decimal → 0x-prefixed base-units hex, scaled by `decimals`. XTZ uses 18
- * (the wei convention the relayer converts ÷10^12 to mutez); an ERC-20 uses its
- * own token decimals so the signed `transfer` amount matches what was typed.
- */
-function amountToBaseUnits(human: string, decimals: number): string {
-  const [whole, frac = ''] = human.trim().split('.');
-  const padded = (whole + frac.padEnd(decimals, '0')).slice(0, whole.length + decimals);
-  return '0x' + BigInt(padded || '0').toString(16);
-}
-
-/** Human XTZ decimal → integer mutez string (6 dp), for the what-you-sign card. */
-function amountToMutez(human: string): string {
-  const [whole, frac = ''] = human.trim().split('.');
-  const m = (whole + frac.padEnd(6, '0')).slice(0, whole.length + 6);
-  return BigInt(m || '0').toString();
-}
 
 export function Send(_props: { params?: Record<string, unknown> } = {}): React.JSX.Element {
   const ctx = useWallet();
@@ -137,9 +125,7 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
   const toCoreAsset = (): Asset => {
     if (asset.kind === 'xtz') return isEvm ? XTZ_L2_ASSET : XTZ_L1_ASSET;
     const t = tokens.find((x) => x.address.toLowerCase() === (asset.address ?? '').toLowerCase());
-    return t != null
-      ? { kind: 'erc20', address: t.address, symbol: t.symbol, name: t.name, decimals: t.decimals, runtime: 'evm' }
-      : isEvm ? XTZ_L2_ASSET : XTZ_L1_ASSET;
+    return t != null ? erc20AssetFromToken(t) : isEvm ? XTZ_L2_ASSET : XTZ_L1_ASSET;
   };
 
   const submit = (): void => {
@@ -154,7 +140,7 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
     void (async () => {
       try {
         const coreAsset = toCoreAsset();
-        const amountHex = amountToBaseUnits(amount, coreAsset.kind === 'xtz' ? 18 : coreAsset.decimals);
+        const amountHex = parseTokenAmount(amount, coreAsset.kind === 'xtz' ? 18 : coreAsset.decimals);
         const result = await ctx.sendTransfer({ to, amount: amountHex, asset: coreAsset });
         if (result.runtime === 'l1') {
           setDone((d) => (d != null ? { ...d, hash: result.hash, runtime: 'l1', pending: false } : d));
@@ -208,8 +194,8 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
         }
       },
       isDone: (r) => r.resolved,
-      intervalMs: RESOLVE_POLL_MS,
-      timeoutMs: RESOLVE_TIMEOUT_MS,
+      intervalMs: TX_RESOLVE_POLL_MS,
+      timeoutMs: TX_RESOLVE_TIMEOUT_MS,
       onTimeout: () => {
         setDone((d) => (d != null ? { ...d, pending: false, unresolved: true } : d));
         setPendingResolve(null);
@@ -272,10 +258,10 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
             <View style={styles.heroText}>
               <Text style={styles.sAmt} numberOfLines={1} adjustsFontSizeToFit>
                 {done.sign}
-                {fmtXtz(done.amount, 2, 6)} {done.symbol}
+                {normalizeDecimalInput(done.amount)} {done.symbol}
               </Text>
               <Text style={styles.sTo} numberOfLines={1}>
-                to <Text style={styles.mono}>{truncAddr(done.to, 6)}</Text>
+                to <Text style={styles.mono}>{shortAddr(done.to, 6)}</Text>
               </Text>
             </View>
           </View>
@@ -299,7 +285,7 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
             <View style={styles.doneCard}>
               <Line
                 label={done.runtime === 'l1' ? 'Operation hash' : done.unresolved ? 'Intermediate hash' : 'Transaction hash'}
-                value={<Text style={styles.mono}>{truncAddr(done.hash, 6)}</Text>}
+                value={<Text style={styles.mono}>{shortAddr(done.hash, 6)}</Text>}
               />
               <View style={styles.divider} />
               <Pressable onPress={() => void Linking.openURL(explorerUrl)}>
@@ -383,7 +369,7 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
             <View style={styles.laneSide}>
               <Text style={styles.laneK}>From</Text>
               <Text style={styles.laneV} numberOfLines={1}>
-                {truncAddr(fromAddr, 6)}
+                {shortAddr(fromAddr, 6)}
               </Text>
               <ChainPill chain={fromChain} />
             </View>
@@ -398,14 +384,14 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
                 </Text>
               )}
               <Text style={styles.laneV} numberOfLines={1}>
-                {truncAddr(to, 6)}
+                {shortAddr(to, 6)}
               </Text>
               <ChainPill chain={destChain} />
             </View>
           </View>
 
           <View style={styles.card}>
-            <Line label="Amount" value={`${fmtXtz(amount, 2, 6)} ${asset.symbol}`} />
+            <Line label="Amount" value={`${normalizeDecimalInput(amount)} ${asset.symbol}`} />
             <View style={styles.divider} />
             <Line label="Routing" value={r.cross ? `${r.title} · ${r.sub}` : r.title} />
             <View style={styles.divider} />
@@ -416,7 +402,7 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
             <>
               <Text style={[styles.kicker, styles.crossKicker]}>What you actually sign</Text>
               <View style={styles.card}>
-                <Line label="Michelson target" value={truncAddr(NAC_CONTRACT, 6)} />
+                <Line label="Michelson target" value={shortAddr(NAC_CONTRACT, 6)} />
                 <View style={styles.divider} />
                 <Line label="Entrypoint" value={asset.kind === 'xtz' ? 'call' : 'call_evm'} />
                 {asset.kind === 'token' && (
@@ -428,7 +414,7 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
                 <View style={styles.divider} />
                 <Line
                   label="Debit (mutez)"
-                  value={asset.kind === 'xtz' ? amountToMutez(amount) : '0'}
+                  value={asset.kind === 'xtz' ? xtzToMutez(amount).toString() : '0'}
                 />
               </View>
             </>
@@ -442,7 +428,7 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
               <View style={styles.warnBody}>
                 <Text style={styles.warnTitle}>Insufficient balance</Text>
                 <Text style={styles.warnDetail}>
-                  You’re sending more {asset.symbol} than this account holds ({fmtXtz(available)}{' '}
+                  You’re sending more {asset.symbol} than this account holds ({formatBalanceDisplay(available)}{' '}
                   available).
                 </Text>
               </View>
@@ -524,7 +510,7 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
               {toContact.label}
             </Text>
             <Text style={styles.contactHintAddr} numberOfLines={1}>
-              {truncAddr(toContact.address, 8)}
+              {shortAddr(toContact.address, 8)}
             </Text>
           </View>
         )}
@@ -540,7 +526,7 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
                   {c.label}
                 </Text>
                 <Text style={styles.suggestAddr} numberOfLines={1}>
-                  {truncAddr(c.address, 6)}
+                  {shortAddr(c.address, 6)}
                 </Text>
               </Pressable>
             ))}
@@ -564,12 +550,19 @@ export function Send(_props: { params?: Record<string, unknown> } = {}): React.J
               <Text style={[styles.availLbl, insufficient && styles.availLow]}>Available</Text>
               <Text style={[styles.availSep, insufficient && styles.availLow]}>·</Text>
               <Text style={[styles.availNum, insufficient && styles.availLow]}>
-                {fmtXtz(available)} {asset.symbol}
+                {formatBalanceDisplay(available)} {asset.symbol}
               </Text>
             </View>
             <Pressable
               style={({ pressed }) => [styles.maxPill, pressed && styles.maxPillPressed]}
-              onPress={() => setAmount(available)}
+              onPress={() => {
+                // Keep room for the transfer's own fee, or Max fails on
+                // balance_too_low at signing.
+                if (asset.kind !== 'xtz') { setAmount(available); return; }
+                const total  = xtzToMutez(available);
+                const usable = total > MAX_FEE_RESERVE_MUTEZ ? total - MAX_FEE_RESERVE_MUTEZ : 0n;
+                setAmount(mutezToXtz(usable.toString()));
+              }}
             >
               <Text style={styles.maxPillText}>Max</Text>
             </Pressable>

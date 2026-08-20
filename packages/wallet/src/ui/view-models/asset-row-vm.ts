@@ -5,7 +5,7 @@
  */
 
 import type { Asset } from '@tezosx/wallet-core/domain/asset';
-import { formatTokenAmount } from '@tezosx/wallet-core/shared/format';
+import { formatBalanceDisplay, formatTokenAmount } from '@tezosx/wallet-core/shared/format';
 
 export interface AssetRowVM {
   /** Stable React key. For XTZ: 'xtz:l1' / 'xtz:l2'; for ERC-20: 'erc20:<lowercased-address>'. */
@@ -24,7 +24,11 @@ export function assetRowVM(asset: Asset, rawAmount: string | null): AssetRowVM {
   const id = asset.kind === 'xtz'
     ? `xtz:${runtimeBadge}`
     : `erc20:${asset.address.toLowerCase()}`;
-  const balanceFormatted = rawAmount == null ? '' : formatTokenAmount(rawAmount, asset.decimals);
+  // Same display convention as the XTZ headline: grouped thousands, ≥ 2
+  // fraction digits — the assets list must not mix two number styles.
+  const balanceFormatted = rawAmount == null
+    ? ''
+    : formatBalanceDisplay(formatTokenAmount(rawAmount, asset.decimals));
   return {
     id,
     asset,

@@ -32,7 +32,9 @@ import { useAccountData, type AsyncData, type BalancesView, type ActivityView } 
 import { activeToView, summaryToView, type ViewAccount } from './view-account';
 
 export type VaultView = 'onboarding' | 'locked' | 'unlocked';
-export type TabId = 'home' | 'activity' | 'connections' | 'settings';
+import type { TabId } from '../ui/tx/TabBar';
+
+export type { TabId };
 export type StackName =
   | 'send' | 'receive' | 'addAccount' | 'addToken' | 'tokens' | 'contacts'
   | 'welcome' | 'create' | 'import';

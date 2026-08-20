@@ -1,5 +1,6 @@
 import type { TxStatus } from '@tezosx/wallet-core/domain/tx-status';
 import { TEZOS_EXPLORER, EVM_EXPLORER } from '@tezosx/wallet-core/shared/constants';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
 import { Icon } from './Icon';
 
 interface Props {
@@ -26,7 +27,7 @@ export function StatusMeta({ status, runtime, hash }: Props) {
       <div className="tx-status-meta-row">
         <span className="k">Hash</span>
         <a className="v link" href={explorerUrl} target="_blank" rel="noopener noreferrer">
-          {truncMiddle(hash, 5, 4)}
+          {shortAddr(hash, 5, 4)}
           <Icon name="external-link" size={11} />
         </a>
       </div>
@@ -49,8 +50,4 @@ export function StatusMeta({ status, runtime, hash }: Props) {
       )}
     </div>
   );
-}
-
-function truncMiddle(s: string, head: number, tail: number): string {
-  return s.length <= head + tail + 1 ? s : `${s.slice(0, head)}…${s.slice(-tail)}`;
 }

@@ -36,6 +36,24 @@ export const TX_POLL_INTERVAL_SLOW_MS = 5_000;
  */
 export const TX_POLL_TIMEOUT_MS = 120_000;
 
+/** Polling cadence and give-up deadline for resolving a cross-runtime
+ *  synthetic hash into the kernel-synthesized EVM hash. */
+export const TX_RESOLVE_POLL_MS    = 2_000;
+export const TX_RESOLVE_TIMEOUT_MS = 60_000;
+
+/**
+ * Mutez kept aside when the user hits "Max" on an XTZ send, so the transfer
+ * still has room for its own fee instead of failing on balance_too_low.
+ */
+export const MAX_FEE_RESERVE_MUTEZ = 10_000n;
+
+/** How long a copied secret may sit in the clipboard before it is cleared
+ *  (unless the user has since copied something else). */
+export const CLIPBOARD_CLEAR_MS = 30_000;
+
+/** Wallet inactivity budget before the keyring auto-locks, on both shells. */
+export const AUTO_LOCK_IDLE_MS = 5 * 60_000;
+
 /** Blockscout REST API base (account/txlist endpoint), distinct from the
  *  human-facing EVM_EXPLORER URL used for click-through links. */
 export const BLOCKSCOUT_API_BASE = 'https://blockscout.previewnet.tezosx.nomadic-labs.com/api';

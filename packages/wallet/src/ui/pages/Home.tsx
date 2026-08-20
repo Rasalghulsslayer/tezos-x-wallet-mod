@@ -8,7 +8,7 @@ import {
   fetchErc20Balance,
 } from '@tezosx/wallet-core/adapters/tezos/tezos-balance-fetcher';
 import { FAUCET_URL } from '@tezosx/wallet-core/shared/constants';
-import { mutezToXtz, timeAgo, weiToXtz } from '@tezosx/wallet-core/shared/format';
+import { formatBalanceDisplay, mutezToXtz, timeAgo, weiToXtz } from '@tezosx/wallet-core/shared/format';
 import { sendPopupRequest } from '@/shared/messaging';
 import { loadBalancesSnapshot, saveBalancesSnapshot } from '@/adapters/chrome/popup-snapshot-store';
 import { unreachableTitle, useOnline } from '../hooks/use-online';
@@ -23,7 +23,7 @@ import { IconBtn } from '../tx/Button';
 import { Icon } from '../tx/Icon';
 import { AssetRow } from '../tx/AssetRow';
 import { assetRowVM } from '../view-models/asset-row-vm';
-import { XTZ_L1_ASSET, XTZ_L2_ASSET, type Erc20Asset } from '@tezosx/wallet-core/domain/asset';
+import { XTZ_L1_ASSET, XTZ_L2_ASSET, erc20AssetFromToken } from '@tezosx/wallet-core/domain/asset';
 import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
 import { TopBar } from '../tx/TopBar';
 import { BottomTabs } from '../tx/BottomTabs';
@@ -169,10 +169,9 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
   const activeLabel    = activeSummary?.label?.trim()
     || (activeSummary != null ? `Account ${activeIdx + 1}` : 'Account');
 
-  const fmtBalance = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
-  // '—' is the failed-fetch sentinel: it must render as-is, never be parsed
-  // into a false "0.00" balance. null = still loading.
-  const xtzDisplay = xtz == null || xtz === '—' ? '—' : fmtBalance(parseFloat(xtz) || 0);
+  // '—' is the failed-fetch sentinel: formatBalanceDisplay passes it through
+  // untouched, so it never becomes a false "0.00" balance. null = still loading.
+  const xtzDisplay = xtz == null ? '—' : formatBalanceDisplay(xtz);
   const isEvm      = state.kind === 'evm';
 
   const setActive = async (id: AccountId) => {
@@ -310,10 +309,7 @@ export function Home({ state, onChanged }: { state: VaultState; onChanged: () =>
         />
 
         {customTokens.map((t) => {
-          const asset: Erc20Asset = {
-            kind: 'erc20', address: t.address, symbol: t.symbol, name: t.name,
-            decimals: t.decimals, runtime: 'evm',
-          };
+          const asset  = erc20AssetFromToken(t);
           const rawHex = tokenBalances[t.address.toLowerCase()];
           return (
             <AssetRow

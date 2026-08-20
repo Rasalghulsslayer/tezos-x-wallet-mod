@@ -1,6 +1,6 @@
 import { useState, type MouseEvent } from 'react';
 import { Icon } from './Icon';
-import { truncAddr } from './utils';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
 import { toast } from './Toast';
 
 export function CopyAddr({
@@ -34,7 +34,7 @@ export function CopyAddr({
       }}
       onClick={doCopy}
     >
-      {truncAddr(addr, len)}
+      {shortAddr(addr, len + 3, len)}
       <Icon name={copied ? 'check' : 'copy'} size={12} color={copied ? 'var(--tx-success)' : 'var(--tx-fg-muted)'} />
     </span>
   );

@@ -9,7 +9,7 @@
 
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, font, fontSize, radius } from '../../theme';
-import { truncAddr } from '../format';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
 import { Icon } from '../icon';
 import { Badge } from './Badge';
 
@@ -27,7 +27,7 @@ export function AddrRow({
     <View style={styles.row}>
       <Badge variant={chain === 'l1' ? 'purple' : 'cyan'}>{chain === 'l1' ? 'Michelson' : 'EVM'}</Badge>
       <Text style={[styles.addr, resolving && styles.resolving]} numberOfLines={1}>
-        {resolving ? 'Resolving EVM address…' : truncAddr(addr, 10)}
+        {resolving ? 'Resolving EVM address…' : shortAddr(addr, 10)}
       </Text>
       <Pressable
         accessibilityRole="button"

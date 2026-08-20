@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import type { ActivityItem } from '@tezosx/wallet-core/domain/activity';
-import { activityRowVM } from '../../view-models/activity-vm';
+import { activityRowVM, type ActivityRowVM } from '../../view-models/activity-vm';
 import { ActivityRow } from '../../tx/ActivityRow';
-import { groupByDay, DAY_ORDER } from './helpers';
+import { DAY_ORDER, type DayGroup } from './helpers';
 
 export function ActivityList({
   items, cursor, loadingMore, onLoadMore,
@@ -13,7 +13,15 @@ export function ActivityList({
   onLoadMore:  () => void;
 }) {
   const nowMs   = Date.now();
-  const grouped = useMemo(() => groupByDay(items, nowMs), [items, nowMs]);
+  // Bucket on the dayGroup the VM already computes for every row.
+  const grouped = useMemo(() => {
+    const out: Record<DayGroup, ActivityRowVM[]> = { Today: [], Yesterday: [], Earlier: [] };
+    for (const item of items) {
+      const vm = activityRowVM(item, nowMs);
+      out[vm.dayGroup].push(vm);
+    }
+    return out;
+  }, [items, nowMs]);
 
   return (
     <div style={{ padding: '0 8px 8px' }}>
@@ -23,8 +31,7 @@ export function ActivityList({
         return (
           <div key={group}>
             <div className="tx-activity-group-head">{group}</div>
-            {groupItems.map((item) => {
-              const vm = activityRowVM(item, nowMs);
+            {groupItems.map((vm) => {
               return (
                 <ActivityRow
                   key={vm.id}

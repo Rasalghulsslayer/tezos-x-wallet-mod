@@ -2,7 +2,8 @@ import { Icon } from './Icon';
 import { Identicon } from './Identicon';
 import { CopyAddr } from './CopyAddr';
 import { Badge } from './Badge';
-import { truncAddr, RESOLVING_EVM_ADDRESS } from './utils';
+import { RESOLVING_EVM_ADDRESS } from './utils';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
 import { toast } from './Toast';
 import type { AccountCardVM } from '@tezosx/wallet-core/view-models/account-card-vm';
 
@@ -176,7 +177,7 @@ function SplitSide({ chain, label, addr, what, len }: {
         {addr == null
           ? <span style={{ color: 'var(--tx-fg-muted)', fontWeight: 400 }}>{RESOLVING_EVM_ADDRESS}</span>
           : <>
-              {truncAddr(addr, len)}
+              {shortAddr(addr, len + 3, len)}
               <Icon name="copy" size={11} color="var(--tx-fg-subtle)" />
             </>}
       </div>

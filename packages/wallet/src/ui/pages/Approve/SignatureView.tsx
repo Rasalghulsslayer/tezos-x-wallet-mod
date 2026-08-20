@@ -1,6 +1,6 @@
 import type { PendingRequest } from '@tezosx/wallet-core/shared/messages';
 import { Button } from '../../tx/Button';
-import { truncAddr } from '../../tx/utils';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
 import { ApprovalHeader } from './ApprovalHeader';
 import { ModerateRisk } from './ModerateRisk';
 import { PinnedChip } from './PinnedChip';
@@ -47,7 +47,7 @@ export function SignatureView({
         </div>
         {decoded != null && (
           <div style={{ fontSize: 11, color: 'var(--tx-fg-subtle)', marginTop: 6 }}>
-            Decoded from hex · the raw payload is still <code>{truncAddr(pending.message, 8)}</code>.
+            Decoded from hex · the raw payload is still <code>{shortAddr(pending.message, 11, 8)}</code>.
           </div>
         )}
       </div>

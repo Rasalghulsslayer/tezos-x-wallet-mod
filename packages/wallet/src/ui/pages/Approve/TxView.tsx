@@ -1,7 +1,7 @@
 import type { PendingRequest } from '@tezosx/wallet-core/shared/messages';
 import { Button } from '../../tx/Button';
 import { Line } from '../../tx/Line';
-import { truncAddr } from '../../tx/utils';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
 import { ApprovalHeader } from './ApprovalHeader';
 import { ModerateRisk } from './ModerateRisk';
 import { PinnedChip } from './PinnedChip';
@@ -31,11 +31,11 @@ export function TxView({
 
         <div className="tx-kicker" style={{ marginTop: 14, marginBottom: 6 }}>dApp intent</div>
         <div className="tx-card" style={{ padding: 0 }}>
-          <Line label="To"    value={truncAddr(pending.to, 8)} />
+          <Line label="To"    value={shortAddr(pending.to, 11, 8)} />
           <div className="tx-divider" />
           <Line label="Value" value={pending.value} />
           <div className="tx-divider" />
-          <Line label="Data"  value={pending.data === '0x' ? '(empty)' : truncAddr(pending.data, 10)} />
+          <Line label="Data"  value={pending.data === '0x' ? '(empty)' : shortAddr(pending.data, 13, 10)} />
         </div>
 
         {cross != null && (
@@ -44,7 +44,7 @@ export function TxView({
               What you actually sign
             </div>
             <div className="tx-card tx-cross-card" style={{ padding: 0 }}>
-              <Line label="Michelson target" value={truncAddr(cross.michelsonTarget, 6)} />
+              <Line label="Michelson target" value={shortAddr(cross.michelsonTarget, 9, 6)} />
               <div className="tx-divider" />
               <Line label="Entrypoint"       value={cross.entrypoint} />
               {cross.decodedSelector != null && (

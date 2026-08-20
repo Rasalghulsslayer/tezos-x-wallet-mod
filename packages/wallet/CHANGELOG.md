@@ -6,6 +6,37 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [0.19.0] — 2026-08-19
+
+### Changed
+- **Balances follow one display convention everywhere.** The headline XTZ
+  balance and every asset row now share the same formatter (grouped en-US
+  thousands, at least two fraction digits, up to six, truncated — never
+  rounded) built on exact BigInt/string math. Previously the XTZ headline
+  went through a float round-trip in the system locale while ERC-20 rows
+  used a third, ungrouped style in the same list.
+- **One address truncation helper.** Three divergent in-shell helpers (plus a
+  fourth for hashes) are replaced by the shared `shortAddr`; each screen keeps
+  the truncation width it had, but they no longer disagree on how a given
+  width is cut.
+- **Relative timestamps read the same across screens.** Home, Connections and
+  the Activity feed now share one formatter: "just now" under a minute, then
+  m/h/d, then a short date beyond a week (Activity keeps its "yesterday" and
+  its Pending/Failed states). The transaction-status screens keep their own
+  elapsed-time wording.
+- Internal: the amount parsing, approval origin/signature display, day
+  grouping, asset projection, validation shapes and the shared product
+  constants moved into `@tezosx/wallet-core`, where the mobile app consumes
+  the same implementations. Activity's day sections are computed once (the
+  view-model already carried the bucket; the list now uses it).
+
+### Fixed
+- The fatal-error screen stamped a hardcoded, stale build number; it now
+  shows the version injected at build time.
+
+### Compatibility
+- Requires `@tezosx/wallet-core` 0.9.0 and `@tezosx/relayer` 0.9.0.
+
 ## [0.18.0] — 2026-08-19
 
 ### Changed

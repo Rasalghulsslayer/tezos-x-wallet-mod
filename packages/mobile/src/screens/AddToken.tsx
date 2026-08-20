@@ -13,7 +13,8 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import type { RegisteredToken } from '@tezosx/wallet-core/domain/token';
 import { formatError, type FormattedError } from '@tezosx/wallet-core/domain/error';
 import { colors, fontSize, font, radius } from '../theme';
-import { truncAddr } from '../ui/format';
+import { shortAddr } from '@tezosx/wallet-core/shared/format';
+import { EVM_ADDR_RE } from '@tezosx/wallet-core/domain/validation';
 import { Icon } from '../ui/icon';
 import { Btn } from '../ui/tx/Btn';
 import { Dots } from '../ui/tx/Dots';
@@ -22,7 +23,6 @@ import { TopBar } from '../ui/tx/TopBar';
 import { useWallet } from '../wallet/context';
 
 type Stage = 'paste' | 'confirm';
-const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 
 /** The core throws NotErc20Error (name-tagged) when decimals() doesn't respond. */
 const isNotErc20 = (e: unknown): boolean => e instanceof Error && e.name === 'NotErc20Error';
@@ -38,7 +38,7 @@ export function AddToken(): React.JSX.Element {
   const [err, setErr] = useState<FormattedError | null>(null);
 
   const trimmed = address.trim();
-  const valid = ADDR_RE.test(trimmed);
+  const valid = EVM_ADDR_RE.test(trimmed);
   const bytes = Math.floor(trimmed.replace(/^0x/i, '').replace(/[^0-9a-fA-F]/g, '').length / 2);
   const idx = stage === 'paste' ? 0 : 1;
 
@@ -187,7 +187,7 @@ export function AddToken(): React.JSX.Element {
 
             <View style={styles.meta}>
               <MetaRow k="Contract" trailing={<Icon name="copy" size={14} color={colors.fgSubtle} />}>
-                {truncAddr(preview.address, 8)}
+                {shortAddr(preview.address, 8)}
               </MetaRow>
               <MetaRow k="Name" sans>
                 {preview.name}

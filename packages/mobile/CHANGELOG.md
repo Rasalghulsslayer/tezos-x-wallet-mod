@@ -5,6 +5,40 @@ The Tezos X wallet for iOS/Android (React Native, Expo bare). Format follows
 shared `@tezosx/wallet-core` over the workspace; only platform adapters
 (storage, secure RNG, biometrics) and the UI live here.
 
+## [0.7.0] — 2026-08-19
+
+### Security
+- **The approval screen shows the origin's scheme.** The dApp origin was
+  reduced to its bare hostname, so `http://victim.example` was
+  indistinguishable from the legitimate `https://victim.example` while
+  approving a connection or a transaction. Origins now render through the
+  shared display rule: https keeps a clean `host`, anything else shows the
+  full `scheme://host[:port]`. The Connections list follows the same rule.
+
+### Fixed
+- **Activity day sections follow the calendar.** "Today" was a sliding
+  24-hour window, so yesterday-evening transactions showed under "Today".
+  Sections now split at local midnight, like the extension.
+- **Max keeps room for the fee.** The Max button set the full XTZ balance,
+  so the transfer failed on balance_too_low at signing; it now reserves the
+  same fee headroom as the extension.
+- **The review and done screens show the exact amount.** They went through
+  locale formatting, which rounds — a 1-mutez transfer reviewed as "0.00".
+  Both now render the typed amount exactly, the same fix the extension
+  shipped in 0.18.0.
+- Balances share the extension's display convention (grouped thousands,
+  2–6 fraction digits, truncated) on exact string math — no more float
+  round-trip on large balances.
+
+### Changed
+- Internal: the local formatting module dissolved into `@tezosx/wallet-core`
+  (`shortAddr`, `formatBalanceDisplay`, `timeAgo`, amount parsing, validation
+  shapes, shared constants) — one implementation for both shells. The two
+  relative-time formats that coexisted on the Activity screen are gone.
+
+### Compatibility
+- Requires `@tezosx/wallet-core` 0.9.0 and `@tezosx/relayer` 0.9.0.
+
 ## [0.6.0] — 2026-08-19
 
 ### Changed
