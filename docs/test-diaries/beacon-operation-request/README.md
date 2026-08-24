@@ -2,7 +2,10 @@
 
 **Branch:** `feat/beacon-wallet-provider` · **Date:** 2026-08-24 · **Scope:** milestone 2 only
 **Gates:** tsc 0 across relayer + relayer/ext + core + wallet · eslint 0 errors (10 pre-existing warnings, unchanged) · vitest **643 passing across 63 files** (587 / 61 after milestone 1, **+56 / +2**) · `npm run build:wallet` ✓ · eager per-page cost 5.1 kB
-**Live run:** **NOT DONE.** No operation has been signed or injected over Beacon. Milestone 1's connect is live-proven; nothing in this milestone is.
+**Live run, 2026-08-24: RUNG 1 SIGNED AND INJECTED, VERIFIED ON CHAIN.** Two plain transfers through
+the dApp's own Beacon probe (`/beacon-probe`, ceremony engine out of the path), both `applied`, both
+with the dApp's pin honoured **to the mutez**. See §2/10-13. The parameter-carrying rungs and the
+23-op ceremony remain untested.
 **Predecessor:** `../beacon-wallet-provider/README.md` (milestone 1, connect — live-confirmed 2026-08-24).
 
 ---
@@ -63,6 +66,10 @@ it is a fee that no longer covers its own gas.
 | 4 | The ceremony's phase-2 deploy pin declares gas `660_000`, i.e. the hard limit **exactly**. So the guard on a supplied pin must be `>` and not `>=`. | The dApp's `NATIVE_DEPLOY_OP_PARAMS`; asserted in both new suites. |
 | 4b | **Taquito's CONTRACT API passes a complete pin through untouched — verified, because the dApp's own notes warn about this exact path.** `native-op-params.ts` says the "estimates all three and OVERWRITES the pinned fee" behaviour "describes the **contract/signer** API", and `TezosSigner` uses `toolkit.contract.transfer`. `rpc-contract-provider.js:233` does always call the estimate gate, but the gate itself (`provider.js`) is `if (fee === undefined \|\| gasLimit === undefined \|\| storageLimit === undefined) { … }` and fills only with `??=`. So the estimator runs ONLY when a knob is absent; all three supplied are returned unchanged. The warning is real but conditional — and it is precisely why a **partial** pin must be treated as no pin: a partial pin WOULD reach the estimator, and `??=` would then pair the dApp's fee with Taquito's gas, the mismatched combination the dApp documents as its 964 µtez defect. | `node_modules/@taquito/taquito/dist/lib/provider.js`; `contract/rpc-contract-provider.js:220-240`. That gate also throws `InvalidEstimateValueError` on a decimal knob, which `checkOperation`'s `Number.isSafeInteger` already refuses. |
 | 4c | `transferWithBufferedFees` also supplies all three to `contract.transfer` (fee computed, gas and storage from its own estimate), so the unpinned path does not estimate twice. | Same gate, read against `tezos-signer.ts`. |
+| 10 | **AN OPERATION SIGNS AND INJECTS OVER BEACON.** `ooSKHnYeFQ7xxbnyNcJdWahguc7pnbfpW1QmhxdTHBucQuaVtuf` (level 582527) and `oo6GEebKnbWcNYv5AMAk3Y4xrLMxq2iEmNtp1xp4dhyqBaTgb5M` (level 582530), both `status: applied`, sender = target = `tz1cCWjCcVi4bbAbnrsHwbBiqVJcSVTaaSEb`, `amount: 1` mutez. | TzKT `/v1/operations/<hash>` — read independently of what the wallet or the dApp reported, which is what makes it evidence. |
+| 11 | **THE PIN IS HONOURED TO THE MUTEZ, ON CHAIN.** Declared `fee 20000 / gas 10000 / storage 100`; chain recorded `bakerFee: 20000`, `gasLimit: 10000`, `storageLimit: 100`, `gasUsed: 2149`, `storageUsed: 0`, `storageFee: 0`. Had Taquito re-estimated, a plain transfer prices at ~797 µtez — 25× lower — so the estimate gate provably did not run. This is Measured 4b, previously established only by READING `provider.js`, now observed. And `gasUsed: 2149` matches the dApp's own documented measurement of a plain transfer exactly. | Same TzKT read. |
+| 12 | **The balance delta confirms it a second way, without the indexer.** 39 998 694 → 39 958 694 mutez = **exactly −40 000**, i.e. 2 × the declared 20 000 fee, with the 1 mutez self-transfer netting zero and no storage burn. Counter 2 → 4: two operations, and NO reveal was prepended (the account was already revealed), so the reviewer's "is a 660 000-gas op included when a reveal is prepended" question is still open. | `contracts/<tz1>/balance` and `/counter` via `head`. |
+| 13 | **`parameter: None` on chain** — rung 1's claim was that the field is ABSENT from what Beacon serialises, and `buildParams` omits it rather than sending an empty object. Confirmed on the wire, not just in a unit test. | Same TzKT read. Taquito forges an empty `parameter` differently, so this distinction is real. |
 | 5 | No `client.requestOperation` call site exists in the dApp; every operation is Taquito `wallet.transfer`. `BeaconWallet.removeDefaultParams` deletes each knob whose value is falsy **independently per field**, so a supplied knob reaches the wallet intact and an absent one is absent. | dApp `grep` (0 hits for `operationDetails`/`requestOperation` outside comments); `taquito-beacon-wallet.js:211-224`. |
 | 6 | Beacon sends the three knobs as decimal **strings** — Taquito's `createTransferOperation` stringifies them — so they are parsed, and only accepted as a complete finite non-negative set. | `narrowOperationRequest` / `readLimits`, asserted in `session.test.ts`. |
 | 7 | **Two stale comments in the dApp** claim the rotate and `call_evm` paths are "DELEGATED TO THE WALLET, EXPLICITLY". The code above them spreads `...rotatePin` / `...pin`. The code is authoritative; the comments predate the fix. | `executor-taquito.ts:1527-1533` and `:1553-1565` versus `:1522-1540` and `:1066`. Worth a one-line fix in that repo, which is read-only here. |
@@ -241,10 +248,14 @@ eager per-page cost 5.1 kB (unchanged) · lazy chunk 148 kB
 
 ## 8. NOT DONE — stated, not smoothed over
 
-- **NO OPERATION HAS BEEN SIGNED OR INJECTED OVER BEACON.** Milestone 1's connect is live-proven;
-  every claim in this milestone is from unit tests, the installed SDK, the dApp's source, and two
-  live RPC reads. The pin-honouring behaviour is the part most worth a live run, because the failure
-  it guards against — a fee under the floor — presents as a generic abort with no diagnosis.
+- **Only the PARAMETERLESS rung is live-proven.** Rung 1 (a plain transfer, no `parameter` field)
+  signed, injected and honoured its pin — §2/10-13. **Nothing carrying Micheline has been signed over
+  Beacon**, so the parameter pairing (§3/M3), the `summariseMicheline` preview, and a KT1 destination
+  are all still argued from unit tests only. The probe's rungs 2 and 3 exercise exactly those and
+  cost ~0.05 ꜩ together; rung 3 mints a real contract.
+- **The approval screen's cost ceiling was not read back.** The predicted figure for rung 1 was
+  20 101 mutez (1 + 20 000 + 100). Nothing failed, but the displayed number is a UI fact no chain
+  read can confirm, so §3/M2's fix remains unobserved.
 - **The 23-op ceremony is untested end to end.** Each op kind is covered in isolation; the sequence,
   its inter-op state, and the recovery paths are not.
 - **`AUTO-LOCK IS STILL A CEREMONY HAZARD` and is still not addressed.** `AUTO_LOCK_IDLE_MS` is 5
