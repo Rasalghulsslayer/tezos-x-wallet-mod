@@ -3,7 +3,11 @@
 **Branch:** `feat/beacon-wallet-provider` · **Dates:** 2026-08-21 → 2026-08-24 · **Scope:** milestone 1 only
 **Suites:** 8 files, 139 new tests · **Gates:** tsc 0 across relayer + relayer/ext + core + wallet · eslint 0 errors (10 pre-existing warnings, unchanged) · vitest **579 passing across 61 files** (440 / 53 before, **+139 / +8**) · `npm run build:wallet` ✓ including a new content-script gate
 **Reviewer pass:** REQUEST-CHANGES → all findings closed (1 blocker, 2 major, 1 minor, 1 nit). Details in §4.
-**Live run against the MAPS dApp:** **NOT DONE.** Nothing below claims a browser ever loaded this.
+**Live run against the MAPS dApp, 2026-08-24: PAIRING CONFIRMED.** The wallet is discovered, listed,
+selectable, and completes Beacon's cryptobox pairing handshake with the real `@ecadlabs/beacon-dapp`
+4.8.1-ecad.7 dApp. Three defects were found by that run and are recorded in §4.1 — one of them a bug
+in beacon-ui that made an unregistered extension *impossible* to select. What the run has and has not
+established is itemised in §3.1/22-25 and §3.2.
 
 > **Deviation from the per-suite diary rule, stated rather than quiet.** The convention is one diary
 > per suite file. This is one diary for eight suites, because they are eight layers of a *single*
@@ -119,17 +123,25 @@ reasoned about and is **not** established.
 | 18 | **Milestone 1 makes zero chain reads.** `handleBeaconRequest` builds no container and no signer, and none of the new modules can reach the network. | `grep -E "fetch\|TezosToolkit\|RpcClient\|axios\|http"` over all new files → one hit, the `xmlns` in the icon data-URI. |
 | 19 | **No by-block-hash context query is introduced, and none exists on the signer's path either.** Every `readProvider` call in Taquito 24.3's prepare + estimate providers goes via `'head'`: 18× `getProtocolConstants('head')`, `getCounter(pkh,'head')`, `getNextProtocol('head')`, and `getBlockHash(block ?? 'head~2')` for the branch (a `/hash` read, 0.09–0.60 s per the previewnet note). | Enumerated with `grep -noE "readProvider\.[a-zA-Z]+\([^)]*\)"` over both providers; `getHeadCounter` → `getCounter(pkh,'head')` at `prepare-provider.js:49-51`. **This is why this wallet is on the fast path where Temple is not.** |
 | 20 | Content scripts declare no `all_frames`, so all three run in the **top document only**; a subframe posting to its parent arrives with `event.source` set to the subframe's window and is rejected by the guard. | `manifest.json` (no `all_frames`); guard asserted in `beacon-announce.test.ts`. |
+| 22 | **The wallet is discovered and listed in a real dApp's pairing modal.** All three content scripts load (`content bridge loaded`, `beacon announce ready`, `beacon bridge loaded (0 buffered frame(s))`), the pong is captured by `listenForExtensions`, and the tile appears under "show more" — the non-featured bucket, which is correct: `Sn` partitions on `key.startsWith("kukai"\|"temple"\|"plenty"\|"umami")`. | Live run, 2026-08-24, MAPS dApp on previewnet. |
+| 23 | **The hand-written transport's pairing handshake is correct against the real dApp.** Selecting the wallet and confirming produced a completed pairing — i.e. the sealed `postmessage-pairing-response` was opened by the dApp's own `openCryptobox`, the frame nesting and the `sender.id` stamp were accepted, and the channel opened. This is the claim §3.2/1 previously could not make: the unit suites checked our wire format against the SDK's *reader code*; this checked it against the *running dApp*. | Same run. |
+| 24 | **`beacon-ui` renders an unregistered extension's list entry from `shortName ?? name`,** so a `shortName` makes the modal disagree with every other surface. Observed directly: the tile read "TezosX" until the field was dropped. | Same run. → §4.1/L1. |
+| 25 | **`beacon-ui` gates the wallet detail panel on `types.length`,** making an extension-only wallet unselectable. Observed as: tile present, click collapses the list, no pairing frame posted, nothing logged on either side — while Temple, in the same list, opened its panel. | Same run + the guard read off the shipped bundle. → §4.1/L2. |
 | 21 | The existing EIP-1193 path is untouched behaviourally. The one shared-code change is a mechanical extraction of the enqueue-refusal block into `requestApproval`, so both dApp surfaces clear the same per-origin flood cap; the pre-existing `sw-wiring-approval` and `sw-wiring-multi-account` suites pass unchanged. | Full `npm test`: 579 passing, 0 failing. |
 
 ### 3.2 Assumed / UNVERIFIED — report, do not paper over
 
+Rows 1-5 below were **closed by the live run of 2026-08-24** and are kept, struck through, rather than
+deleted: what they predicted and what actually happened is the useful record. Rows 6 onward remain
+open.
+
 | # | Not established | Why it matters |
 |---|---|---|
-| 1 | **That the three console lines actually print.** No browser has loaded this build. All three are argued from the dApp's *source*, and the gate from a *transcription* of it inside our own test file. A transcription can drift from the original; only a live run closes this. | It is the stated definition of done. **Milestone 1 is code-complete and gate-green, not demonstrated.** |
-| 2 | **That the wallet appears in Beacon's pairing modal.** The pong is verified against `listenForExtensions`, the code that *collects* extensions — not against `beacon-ui` rendering one. Whether the modal accepts an `iconUrl` that is a `data:image/svg+xml` URI is unchecked. | If the modal does not list it, the operator can never choose `post_message`. |
-| 3 | **That the dynamic `import()` resolves at runtime in the content script.** Measured 16 shows the chunks are web-accessible and that crxjs uses the identical mechanism for its own loader. Strong, but a build-artefact argument, not an executed one. | A failure here means pairing never boots. The wallet would still appear in the modal (the announce half is independent) and then fail at pairing with `beacon session failed to start:` in the console — a loud, localised failure rather than a silent hang. |
-| 4 | **The actual outcome of the discovery race.** §4/M2 removed the mechanism; the announce half is now an IIFE with its listener inline. Whether any specific dApp's bundling would have lost the old race, or wins the new one, cannot be measured without loading pages. | The fix is structural and cheap; its necessity is inferred from the artefacts. |
-| 5 | **Behaviour with several wallet extensions on one page.** `targetId` routing is unit-tested; the real three-extension configuration that motivated the dApp's `paired wallet:` line is not reproduced. | The exact condition under which "which popup am I confirming?" became unanswerable before. |
+| 1 | ~~That the three console lines actually print.~~ **CLOSED — pairing confirmed live.** The transcription of the dApp's gate did not drift: the wire format the unit suites pinned against the SDK's reader code was accepted by the running dApp. See §3.1/22-23. | Was the stated definition of done. |
+| 2 | ~~That the wallet appears in Beacon's pairing modal.~~ **CLOSED — it is listed,** under "show more" (the non-featured bucket, which is correct). The `data:image/svg+xml` icon is accepted. Two real defects surfaced here that no unit test could have caught: §4.1/L1 and L2. | — |
+| 3 | ~~That the dynamic `import()` resolves at runtime in the content script.~~ **CLOSED.** `beacon bridge loaded` appears in the page console and the session booted on the first pairing frame, so the lazy chunk resolves from a content script exactly as the `web_accessible_resources` argument predicted. | — |
+| 4 | ~~The actual outcome of the discovery race.~~ **CLOSED for this dApp.** The announce half's listener was in place before the ping; discovery succeeded on the first attempt. Whether the pre-fix loader would have lost the race here is now moot and untestable. | — |
+| 5 | **Behaviour with several wallet extensions on one page.** Partly closed: MetaMask was live during the run (its `contentscript.js`/`inpage.js` noise is in the log) and did not interfere — but MetaMask does not speak Beacon. A second *Beacon* extension on the same page is still untested, and that is the case `targetId` routing exists for. | The exact condition under which "which popup am I confirming?" became unanswerable before. |
 | 6 | **A request whose `appMetadata.senderId` differs from its message `senderId`.** The SDK looks appMetadata up by the request's `senderId` and throws `AppMetadata not found` on a mismatch; our `respond()` catches and logs, so it degrades to *no answer plus a console warning* and the dApp waits. Real `DAppClient` always sets the two equal, so this is a latent edge, not a live bug. | Would present as a hang with no dApp-side error. |
 | 7 | **Whether B1 was the only realm failure.** The `Buffer` gap is proven and gated, but a fixed build may hit further SDK globals (`self`/`window` assumptions, `crypto.subtle`) that only a real content script exposes. | The reviewer found B1 and M2 in the artefacts, which is a fair indication of what a live run would surface. |
 | 8 | **Storage-quota behaviour.** That `chrome.storage.local.set` rejects rather than truncating at the 10 MB boundary, and what the resulting vault-write failure looks like. §4/M1 bounds the growth; it does not test the boundary. | Bounded growth makes the boundary unreachable in practice, not impossible. |
@@ -240,6 +252,65 @@ leaving it unset is precisely what makes it the page's origin. No defect — `ap
 wire on this path — but wrong, in a file whose ethos is precisely-cited SDK claims. **Comment
 corrected** to state that the fallback does fire, resolves to the paired dApp's own origin, and is
 tolerated because it is never serialised.
+
+## 4.1 What the LIVE RUN found — three defects no test could have caught
+
+The reviewer pass found B1 and M2 in build artefacts. The live run found three more, and the two
+substantive ones were both in `beacon-ui`, not in this wallet. Recorded because the pattern matters:
+every remaining defect after the unit suites went green was in the *integration surface*, and each
+was invisible from inside.
+
+### L1 — the modal rendered "TezosX", not "TezosX Wallet"
+
+`beacon-ui` builds an unregistered extension's entry as `name: e.shortName ?? e.name ?? ''`. The pong
+sent `shortName: 'TezosX'`, so the tile read "TezosX" while the EIP-6963 announcement, the stored peer
+record and every log line said "TezosX Wallet". An operator told to look for one name cannot find the
+other. **Fixed** by dropping `shortName`. The hand-copied pong shape in the import-free announce half
+is now asserted to deep-equal `buildPongFrame`, and the absence of `shortName` is its own test.
+
+### L2 — an extension-only wallet is UNSELECTABLE in beacon-ui
+
+The one that actually blocked the milestone. Clicking a wallet falls through to:
+
+```js
+I = e => !e
+      || (e.types.length <= 1 && !e.types.includes("ios") && !e.types.includes("desktop"))
+      || (isMobile && e.types.length === 1 && e.types.includes("desktop"))
+      || setView(INSTALL)
+```
+
+`a || b || c || open()`, and the `INSTALL` view is the *only* thing that renders the detail panel
+holding the "Use Extension" button that posts a pairing request. An unregistered extension maps to
+exactly one list entry with `type: "extension"`, so `types === ['extension']`, so `b` is true, so
+`open()` never runs. Symptom: tile present, click collapses the list, no frame posted, nothing logged
+on either side. Temple escapes it only because Beacon's registry lists Temple as **both** an extension
+and a web wallet, and `beacon-ui` merges registry entries **by name** — `types.length === 2`.
+
+⇒ **No unregistered browser extension can be paired from this modal.** Nothing about the pong, id,
+name or icon changes that.
+
+**WORKAROUND, labelled as one.** `types` is built by pushing one entry per discovery answer, merged by
+name, so the announce half sends **two**: the real `chrome.runtime.id` first, then the same name under
+a derived id. The merged entry gets two types, the guard passes, the panel opens. The pairing request
+carries `targetId = x.id` from the **first** entry of the merged group — hence the ordering, which is
+asserted rather than assumed. `classifyPageFrame` also accepts a `targetId` that *starts with* this
+extension's id, so pairing cannot fail silently if the dApp stamps the derived one; extension ids are
+fixed-length, so nothing else can produce that prefix, and a `targetId` that merely *contains* it is
+still ignored.
+
+Cost: one phantom row in the dApp's `getAvailableExtensions()`. The modal still shows a single tile,
+because the two answers merge by name. **Delete the block when beacon-ui stops gating on
+`types.length`** — it is one `postMessage` plus its tests. The clean fixes are upstream in
+`@ecadlabs/beacon-ui`, or one line in the dApp calling `client.sendPairingRequest(extensionId)`
+directly.
+
+### L3 — the loaded build was not the built build
+
+`packages/wallet/dist` had been overwritten by a crxjs **dev** build, whose content-script loaders
+import `vendor/vite-client.js` and need the Vite dev server. The repo also carries a checked-in
+`wallet-dist/` at **v0.14.0 with no Beacon code at all** — which is what `TESTING.md` tells a tester
+to load. Either presents as "the wallet is not in the modal". Not a code defect, but it cost a
+diagnostic round trip, and `TESTING.md` pointing at a stale artefact is worth fixing separately.
 
 ### Refuted, for the record
 
@@ -462,11 +533,14 @@ lazy chunk          145.81 kB, reached only on a real pairing
 
 ## 8. NOT DONE — stated, not smoothed over
 
-- **No live run.** No browser has loaded this build and no dApp has connected. The three console
-  lines in the definition of done are **not** observed. Milestone 1 is code-complete and gate-green;
-  it is not demonstrated. Everything in §3.2 stays open until a previewnet run against the MAPS dApp.
-  The reviewer found a blocker and a major finding in the build artefacts alone, which is a fair
-  indication of what a live run would still surface.
+- **Pairing is confirmed live; the ceremony is not.** The 2026-08-24 run establishes discovery,
+  selection and the cryptobox pairing handshake against the real dApp (§3.1/22-25). It does **not**
+  establish anything past connect — see the `operation_request` bullet below. Note also that the run
+  required the beacon-ui workaround in §4.1/L2 to be selectable at all, so "it works" is conditional
+  on carrying that workaround.
+- **Only one dApp, one browser, one profile.** Confirmed against `@ecadlabs/beacon-dapp`
+  4.8.1-ecad.7 in Chrome with MetaMask also installed. Not tested against `@airgap/beacon-dapp`, a
+  second Beacon wallet on the same page (§3.2/5), Firefox, or a fresh profile.
 - **`operation_request` is not implemented** — answered with `UNKNOWN_ERROR`. No operation has been
   signed or injected over Beacon. Milestone 2.
 - **`sign_payload` is not implemented and the `sign` scope is not granted.**
