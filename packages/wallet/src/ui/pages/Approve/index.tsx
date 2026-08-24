@@ -20,6 +20,7 @@ import { ErrorCard } from '../../tx/ErrorCard';
 import { ConnectView } from './ConnectView';
 import { TxView } from './TxView';
 import { SignatureView } from './SignatureView';
+import { TezosOpView } from './TezosOpView';
 import type { AccountContext, Stage } from './types';
 
 /* eslint-disable react-hooks/rules-of-hooks */
@@ -174,9 +175,10 @@ export function ApprovalPanel({
   ) : null;
 
   const view =
-    pending.kind === 'connect'   ? <ConnectView   pending={pending} respond={respond} ctx={accountContext} /> :
-    pending.kind === 'signature' ? <SignatureView pending={pending} respond={respond} ctx={accountContext} /> :
-                                   <TxView pending={pending} respond={respond} ctx={accountContext} />;
+    pending.kind === 'connect'         ? <ConnectView   pending={pending} respond={respond} ctx={accountContext} /> :
+    pending.kind === 'signature'       ? <SignatureView pending={pending} respond={respond} ctx={accountContext} /> :
+    pending.kind === 'tezos-operation' ? <TezosOpView   pending={pending} respond={respond} ctx={accountContext} /> :
+                                         <TxView        pending={pending} respond={respond} ctx={accountContext} />;
 
   return (
     <>

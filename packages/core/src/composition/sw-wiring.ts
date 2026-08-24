@@ -15,6 +15,8 @@ import type { ContainerCache } from './container-cache';
 import { ensureContainerFor } from './container-builder';
 import type {
   ApproveRequest,
+  BeaconOperationRequest,
+  BeaconPermissionRequest,
   BeaconRequest,
   ContentPush,
   EthereumRequest,
@@ -23,17 +25,20 @@ import type {
   WalletResponse,
 } from '../shared/messages';
 import type { StoredSession } from '../ports/session-store';
-import type { AccountId } from '../domain/account';
+import type { Account, AccountId } from '../domain/account';
 import type { ClassifiedSource } from '../ports/message-source';
 import { AccountNotFoundError } from '../domain/vault';
 import {
   BEACON_NETWORK_NOT_SUPPORTED,
+  BEACON_NOT_CONNECTED,
   BEACON_NO_ADDRESS,
+  BEACON_OPERATION_FAILED,
   WALLET_BEACON_NETWORK,
   checkRequestedNetwork,
   grantScopes,
   type BeaconPermissionGrant,
 } from '../domain/beacon';
+import { checkOperation, maxOpCostMutez } from '../domain/tezos-operation';
 
 import { getState }                from '../use-cases/get-state';
 import { createAccount }           from '../use-cases/create-account';
@@ -68,7 +73,7 @@ import { resetWallet }             from '../use-cases/reset-wallet';
 import { TEZLINK_EVM_RPC }         from '@tezosx/relayer/constants';
 import { deriveEvmAlias }          from '@tezosx/relayer/utils/derive';
 import type { EvmAliasCache }      from '../shared/evm-alias-cache';
-import { tryDecodeUtf8 }           from '../shared/approval-display';
+import { summariseMicheline, tryDecodeUtf8 } from '../shared/approval-display';
 import { buildTezosToEvmCall, UnknownSelectorError, SubMutezPrecisionError, InvalidDestinationError } from '@tezosx/relayer/use-cases/build-tezos-to-evm-call';
 
 export interface SwState {
@@ -496,8 +501,12 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
       return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
     }
     const sessions = await deps.persistentPorts.sessionStore.list();
-    const session  = sessions.find((s) => s.origin === msg.origin);
-    return { ok: true, data: session == null ? [] : [session.evmAlias] };
+    // A Beacon session must NOT satisfy this. It discloses a tz1 and its public
+    // key; nothing about granting that is consent to hand the same origin an EVM
+    // address. The `evmAlias` guard is belt-and-braces: a Beacon session stores an
+    // empty one, so even a mistake in the protocol filter discloses nothing.
+    const session = sessions.find((s) => s.origin === msg.origin && s.protocol !== 'beacon');
+    return { ok: true, data: session == null || session.evmAlias === '' ? [] : [session.evmAlias] };
   }
 
   // eth_signTypedData (any version) is not implemented by either signer:
@@ -532,7 +541,10 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
 
     if (requiresSession) {
       const sessions = await deps.persistentPorts.sessionStore.list();
-      const session  = sessions.find((s) => s.origin === msg.origin);
+      // A Beacon grant is NOT an EIP-1193 grant. Without this filter, connecting
+      // over Beacon would silently authorise eth_sendTransaction and
+      // personal_sign for the same origin.
+      const session  = sessions.find((s) => s.origin === msg.origin && s.protocol !== 'beacon');
       if (session == null) {
         return {
           ok:      false,
@@ -712,32 +724,18 @@ async function requestApproval(
 // ── Beacon dispatch (content script ↔ SW) ─────────────────────────────────────
 
 /**
- * Answer a Beacon `permission_request`.
+ * Route a Beacon request to its handler.
  *
- * Mirrors `eth_requestAccounts`: unlocked vault, user approval through the same
- * queue and the same Approve surface, account pinned at enqueue time. Three
- * things differ, all of them deliberate:
- *
- *  - The connecting account must be tz1-source. A Beacon dApp asks for a Tezos
- *    address and its public key; an EVM-source account has neither, so this
- *    refuses rather than inventing one.
- *  - The requested network is CHECKED, and the response states the wallet's own
- *    network rather than echoing the request. Echoing would make the dApp's
- *    network gate a check against its own question — vacuous by construction.
- *  - No `StoredSession` is written. The Beacon SDK keeps its own per-peer
- *    permission record, and a StoredSession is what gates `eth_accounts`, so
- *    writing one here would let a Beacon grant hand out EIP-1193 access to the
- *    same origin. The cost is that a Beacon connection does not yet appear in
- *    the wallet's Connected-sites list — a stated gap, not a solved problem.
+ * The two guards every Beacon request shares live here: an unlocked vault, and a
+ * tz1-source account. A Beacon dApp asks for a Tezos address and signs Michelson;
+ * an EVM-source account has neither, so this refuses rather than inventing one.
  */
 async function handleBeaconRequest(msg: BeaconRequest, deps: SwDeps): Promise<WalletResponse> {
   const unlocked = deps.keyring.getUnlocked();
   if (unlocked == null) {
     return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
   }
-
-  const account = unlocked.account;
-  if (account.kind !== 'tezos') {
+  if (unlocked.account.kind !== 'tezos') {
     return {
       ok:      false,
       code:    BEACON_NO_ADDRESS,
@@ -747,7 +745,34 @@ async function handleBeaconRequest(msg: BeaconRequest, deps: SwDeps): Promise<Wa
     };
   }
 
-  const verdict = checkRequestedNetwork(msg.request.network);
+  return msg.request.kind === 'permission'
+    ? handleBeaconPermission(msg, msg.request, unlocked.account, deps)
+    : handleBeaconOperation(msg, msg.request, deps);
+}
+
+/**
+ * Answer a Beacon `permission_request`.
+ *
+ * Mirrors `eth_requestAccounts`: user approval through the same queue and the
+ * same Approve surface, account pinned at enqueue time. Two things differ, both
+ * deliberate:
+ *
+ *  - The requested network is CHECKED, and the response states the wallet's own
+ *    network rather than echoing the request. Echoing would make the dApp's
+ *    network gate a check against its own question — vacuous by construction.
+ *  - The `StoredSession` written on approval carries `protocol: 'beacon'`, and
+ *    `eth_accounts` skips those. So a Beacon grant is a first-class session — it
+ *    appears in Connected sites, `DISCONNECT` revokes it, and it gates
+ *    `operation_request` — WITHOUT ever satisfying an EIP-1193 request the user
+ *    never approved.
+ */
+async function handleBeaconPermission(
+  msg:     BeaconRequest,
+  request: BeaconPermissionRequest,
+  account: Extract<Account, { kind: 'tezos' }>,
+  deps:    SwDeps,
+): Promise<WalletResponse> {
+  const verdict = checkRequestedNetwork(request.network);
   if (!verdict.ok) {
     return { ok: false, code: BEACON_NETWORK_NOT_SUPPORTED, message: verdict.reason };
   }
@@ -777,13 +802,139 @@ async function handleBeaconRequest(msg: BeaconRequest, deps: SwDeps): Promise<Wa
     };
   }
 
+  // `evmAlias` and `chainId` are deliberately empty: a Beacon session grants no
+  // EIP-1193 access, and leaving them blank means a mistake in the `eth_accounts`
+  // filter surfaces as an empty array rather than as a disclosed address.
+  const session: StoredSession = {
+    origin:      msg.origin,
+    accountId:   pinned.id,
+    protocol:    'beacon',
+    tz1Address:  pinned.tz1,
+    evmAlias:    '',
+    chainId:     '',
+    connectedAt: Date.now(),
+  };
+  await deps.persistentPorts.sessionStore.upsert(session);
+
   const grant: BeaconPermissionGrant = {
     address:   pinned.tz1,
     publicKey: pinned.publicKey,
     network:   WALLET_BEACON_NETWORK,
-    scopes:    grantScopes(msg.request.scopes),
+    scopes:    grantScopes(request.scopes),
   };
   return { ok: true, data: grant };
+}
+
+/**
+ * Sign and inject ONE Michelson operation for a connected Beacon dApp.
+ *
+ * Mirrors `eth_sendTransaction`: a session is required, the operation is shown
+ * before it is signed, and the signing account is the one the session was granted
+ * with — NOT whichever account happens to be active now. That last point is the
+ * reason `pinnedAccountId` exists on the EIP-1193 path: a user who switches
+ * accounts mid-session must not have a dApp's operation silently re-pointed at
+ * the new one.
+ *
+ * The operation is validated BEFORE the prompt. Every field is page-supplied
+ * JSON that the Beacon SDK does not check, and an operator should never be asked
+ * to confirm something that cannot be submitted.
+ */
+async function handleBeaconOperation(
+  msg:     BeaconRequest,
+  request: BeaconOperationRequest,
+  deps:    SwDeps,
+): Promise<WalletResponse> {
+  const sessions = await deps.persistentPorts.sessionStore.list();
+  const session  = sessions.find((s) => s.origin === msg.origin && s.protocol === 'beacon');
+  if (session == null) {
+    return {
+      ok:      false,
+      code:    BEACON_NOT_CONNECTED,
+      message: 'Origin is not connected. Request permissions first.',
+    };
+  }
+
+  const op      = request.operation;
+  const verdict = checkOperation(op);
+  if (!verdict.ok) {
+    return { ok: false, code: JSON_RPC_INVALID_PARAMS, message: verdict.reason };
+  }
+
+  const accountId = session.accountId;
+  if (accountId == null || accountId === '') {
+    return {
+      ok:      false,
+      code:    BEACON_NOT_CONNECTED,
+      message: 'This connection predates per-account sessions. Reconnect to continue.',
+    };
+  }
+
+  const outcome = await requestApproval({
+    kind:              'tezos-operation',
+    requestId:         msg.requestId,
+    origin:            msg.origin,
+    accountId,
+    createdAt:         Date.now(),
+    destination:       op.destination,
+    amount:            op.amount,
+    entrypoint:        op.entrypoint,
+    parametersPreview: op.parameters === undefined ? undefined : summariseMicheline(op.parameters),
+    limits:            op.limits,
+    maxCostMutez:      op.limits == null ? undefined : String(maxOpCostMutez(op.limits)),
+  }, deps);
+  if (outcome.kind === 'refused') return outcome.response;
+  if (outcome.decision === 'reject') {
+    return { ok: false, code: EIP_USER_REJECTED, message: 'User rejected the request' };
+  }
+
+  let container: Container;
+  try {
+    container = await ensureContainerFor(accountId, {
+      keyring:         deps.keyring,
+      containerCache:  deps.containerCache,
+      persistentPorts: deps.persistentPorts,
+      onProviderEvent: deps.broadcastEvent,
+    });
+  } catch (err) {
+    if (err instanceof AccountNotFoundError) {
+      return {
+        ok:      false,
+        code:    EIP_USER_REJECTED,
+        message: 'The signing account was removed before approval',
+      };
+    }
+    throw err;
+  }
+
+  const signer = container.signer;
+  if (signer.kind !== 'tezos') {
+    return {
+      ok:      false,
+      code:    BEACON_NO_ADDRESS,
+      message: 'The account this session was granted with cannot sign Michelson operations',
+    };
+  }
+
+  try {
+    const opHash = await signer.sendOperation({
+      to:           op.destination,
+      mutezAmount:  op.amount,
+      entrypoint:   op.entrypoint,
+      michelineArg: op.parameters,
+      limits:       op.limits,
+    });
+    return { ok: true, data: { opHash } };
+  } catch (err) {
+    // The operation was approved and then failed — a simulation refusal, a fee
+    // below the floor, an injection error. Surfaced as its own code so the dApp
+    // is not told the user aborted something they in fact confirmed.
+    const e = err as { message?: string };
+    return {
+      ok:      false,
+      code:    BEACON_OPERATION_FAILED,
+      message: e.message ?? 'The operation could not be injected',
+    };
+  }
 }
 
 /**

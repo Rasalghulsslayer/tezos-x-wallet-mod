@@ -62,6 +62,15 @@ export const BEACON_GRANTABLE_SCOPES: readonly string[] = ['operation_request'];
  */
 export const BEACON_NETWORK_NOT_SUPPORTED = 5001;
 export const BEACON_NO_ADDRESS            = 5002;
+/** The origin holds no Beacon permission — it must connect first. */
+export const BEACON_NOT_CONNECTED         = 5003;
+/**
+ * An approved operation failed on the way to the chain: refused by simulation, a
+ * fee below the floor, an injection error. Distinct from a user rejection on
+ * purpose — telling a dApp the operator aborted something they in fact confirmed
+ * is the mislabelling that made previewnet failures undiagnosable through Temple.
+ */
+export const BEACON_OPERATION_FAILED      = 5004;
 
 /** What the wallet answers a granted `permission_request` with. */
 export interface BeaconPermissionGrant {

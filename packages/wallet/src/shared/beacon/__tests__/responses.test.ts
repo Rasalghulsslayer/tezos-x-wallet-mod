@@ -186,9 +186,26 @@ describe('beaconErrorFor', () => {
   it('falls back to ABORTED_ERROR for a locked wallet, the flood cap, and internals', () => {
     // Coarse on the wire by design; the envelope message carries the reason and
     // the content script logs it.
-    for (const code of [4100, -32005, -32602, -32603, 0]) {
+    for (const code of [4100, -32005, -32603, 0]) {
       expect(beaconErrorFor(code), String(code)).toBe(BeaconErrorType.ABORTED_ERROR);
     }
+  });
+
+  it('maps "not connected" to NOT_GRANTED, distinct from a user abort', () => {
+    // A dApp must be able to tell "you never connected" from "the user said no",
+    // because only one of the two is fixed by connecting.
+    expect(beaconErrorFor(5003)).toBe(BeaconErrorType.NOT_GRANTED_ERROR);
+  });
+
+  it('maps an approved-then-failed operation to BROADCAST_ERROR, never ABORTED', () => {
+    // The operator confirmed it. Reporting an abort would blame them for a
+    // simulation refusal or a fee below the floor — the mislabelling that made
+    // previewnet failures undiagnosable through Temple.
+    expect(beaconErrorFor(5004)).toBe(BeaconErrorType.BROADCAST_ERROR);
+  });
+
+  it('maps a malformed operation to PARAMETERS_INVALID', () => {
+    expect(beaconErrorFor(-32602)).toBe(BeaconErrorType.PARAMETERS_INVALID_ERROR);
   });
 
   it('only ever returns a BeaconErrorType the SDK defines', () => {

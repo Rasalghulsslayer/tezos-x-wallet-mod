@@ -44,6 +44,8 @@ import {
   PostMessagePairingRequest,
   type BeaconRequestOutputMessage,
   type BeaconResponseInputMessage,
+  type OperationRequestOutput,
+  type PermissionRequestOutput,
 } from '@airgap/beacon-types';
 import type { Storage as BeaconStorage } from '@airgap/beacon-types';
 import type { BeaconRequest, WalletResponse } from '@tezosx/wallet-core/shared/messages';
@@ -54,7 +56,9 @@ import { readPairingRequest } from './page-frames';
 import {
   beaconErrorFor,
   errorResponseFor,
+  narrowOperationRequest,
   narrowPermissionRequest,
+  operationResponseFor,
   permissionResponseFor,
 } from './responses';
 
@@ -97,47 +101,66 @@ export async function startBeaconSession(options: BeaconSessionOptions): Promise
   await client.connect((message) => { void handle(message); });
 
   async function handle(message: BeaconRequestOutputMessage): Promise<void> {
-    if (message.type !== BeaconMessageType.PermissionRequest) {
-      // Milestone 2 wires `operation_request` through the signer. Until then this
-      // ANSWERS rather than hanging: nothing beneath a Beacon request carries a
-      // timeout, so an unanswered one leaves the dApp waiting forever.
-      // UNKNOWN_ERROR, not ABORTED_ERROR, so it cannot be read as a user reject.
-      console.warn(
-        `[TezosX Wallet] beacon ${message.type} is not implemented yet; refusing. ` +
-        'Only permission_request is served at this milestone.',
-      );
-      await respond(errorResponseFor(message.id, BeaconErrorType.UNKNOWN_ERROR));
+    if (message.type === BeaconMessageType.PermissionRequest) {
+      await handlePermission(message);
       return;
     }
+    if (message.type === BeaconMessageType.OperationRequest) {
+      await handleOperation(message);
+      return;
+    }
+    // `sign_payload`, `broadcast`, the proof-of-event challenges: not served, and
+    // ANSWERED rather than left hanging — nothing beneath a Beacon request carries
+    // a timeout, so silence leaves the dApp waiting forever. UNKNOWN_ERROR, not
+    // ABORTED_ERROR, so "not built" cannot read as "the user said no".
+    console.warn(
+      `[TezosX Wallet] beacon ${message.type} is not supported; refusing. ` +
+      'This wallet serves permission_request and operation_request.',
+    );
+    await respond(errorResponseFor(message.id, BeaconErrorType.UNKNOWN_ERROR));
+  }
 
+  /** Relay one narrowed request and hand back the envelope, or null if it failed. */
+  async function relay(
+    id:      string,
+    label:   string,
+    request: BeaconRequest['request'],
+  ): Promise<WalletResponse | null> {
     const envelope: BeaconRequest = {
       type:      'BEACON_REQUEST',
       origin:    options.origin,
       requestId: options.newRequestId(),
-      request:   narrowPermissionRequest(message),
+      request,
     };
 
     let result: WalletResponse | undefined;
     try {
       result = await options.send(envelope);
     } catch (err) {
-      console.warn('[TezosX Wallet] beacon permission_request could not reach the wallet:', err);
-      await respond(errorResponseFor(message.id, BeaconErrorType.ABORTED_ERROR));
-      return;
+      console.warn(`[TezosX Wallet] beacon ${label} could not reach the wallet:`, err);
+      await respond(errorResponseFor(id, BeaconErrorType.ABORTED_ERROR));
+      return null;
     }
 
     if (result == null || !result.ok) {
       // The envelope's message carries the real reason — locked vault, wrong
-      // network, EVM-source active account. The Beacon wire code is coarser than
-      // that, so the reason is logged where an operator will look for it.
+      // network, not connected, a malformed operation, an injection failure. The
+      // Beacon wire code is coarser than that, so the reason is logged where an
+      // operator will look for it.
       const code = result?.code ?? -32603;
       console.warn(
-        `[TezosX Wallet] beacon permission_request refused (${code}):`,
+        `[TezosX Wallet] beacon ${label} refused (${code}):`,
         result?.message ?? 'no response from the wallet',
       );
-      await respond(errorResponseFor(message.id, beaconErrorFor(code)));
-      return;
+      await respond(errorResponseFor(id, beaconErrorFor(code)));
+      return null;
     }
+    return result;
+  }
+
+  async function handlePermission(message: PermissionRequestOutput): Promise<void> {
+    const result = await relay(message.id, 'permission_request', narrowPermissionRequest(message));
+    if (result == null || !result.ok) return;
 
     const grant = result.data as BeaconPermissionGrant;
     console.info(
@@ -145,6 +168,34 @@ export async function startBeaconSession(options: BeaconSessionOptions): Promise
       `scopes=[${grant.scopes.join(', ')}]`,
     );
     await respond(permissionResponseFor(message.id, grant));
+  }
+
+  async function handleOperation(message: OperationRequestOutput): Promise<void> {
+    // Batches and non-transaction kinds are refused here, before the service
+    // worker is involved and before the operator is prompted: none of it is a
+    // judgement call, and the SDK has a precise error for each.
+    const narrowed = narrowOperationRequest(message);
+    if (!narrowed.ok) {
+      console.warn(`[TezosX Wallet] beacon operation_request refused: ${narrowed.reason}`);
+      await respond(errorResponseFor(message.id, narrowed.errorType));
+      return;
+    }
+
+    const op = narrowed.request.operation;
+    console.info(
+      `[TezosX Wallet] beacon operation_request: ${op.entrypoint ?? '(transfer)'} → ` +
+      `${op.destination} amount=${op.amount} ` +
+      (op.limits == null
+        ? 'unpinned (wallet will price it)'
+        : `pinned fee=${op.limits.fee} gas=${op.limits.gasLimit} storage=${op.limits.storageLimit}`),
+    );
+
+    const result = await relay(message.id, 'operation_request', narrowed.request);
+    if (result == null || !result.ok) return;
+
+    const { opHash } = result.data as { opHash: string };
+    console.info('[TezosX Wallet] beacon operation injected, L1 opHash:', opHash);
+    await respond(operationResponseFor(message.id, opHash));
   }
 
   /**

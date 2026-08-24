@@ -37,6 +37,8 @@ const PREVIEWNET_MICHELSON_RPC = 'https://michelson.previewnet.tezosx.nomadic-la
 const WALLET_NAME = 'TezosX Wallet';
 const ORIGIN      = 'https://maps.example';
 const TZ1         = 'tz1VSUr8wwNhLAzempoch5d6hLRiTh8Cjcjb';
+/** The real previewnet NAC gateway — the destination the ceremony's %call_evm uses. */
+const GATEWAY_KT1 = 'KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw';
 const EDPK        = 'edpkvGfYw3LyB1UcCahKQk4rF2tvbMUk8GFiTuMjL75uGXrpvKXhjn';
 
 class MemoryBeaconStorage implements Storage {
@@ -320,29 +322,148 @@ describe('startBeaconSession — permission_request over the real Beacon wire', 
 
   // ── Requests this milestone does not serve ──────────────────────────────────
 
-  it('refuses an operation_request with UNKNOWN_ERROR, distinct from a user abort', async () => {
-    const h = await setup(() => GRANTED);
-    await sendPermissionRequest(h);          // grant first: operation_request needs appMetadata on file
-    h.frames.length = 0;
+  // ── operation_request, over the same real wire ──────────────────────────────
 
+  /** The pinned `%call_evm` shape the ceremony actually sends. */
+  const CEREMONY_OP = {
+    kind:          'transaction',
+    amount:        '0',
+    destination:   GATEWAY_KT1,
+    fee:           '5000',
+    gas_limit:     '20000',
+    storage_limit: '10000',
+    parameters:    { entrypoint: 'call_evm', value: { prim: 'Pair', args: [{ string: '0xdead' }] } },
+  };
+
+  async function sendOperationRequest(
+    h:    Harness,
+    over: Record<string, unknown> = {},
+    id    = 'op-req-1',
+  ): Promise<string> {
     const serialized = await new Serializer().serialize({
-      id: 'op-req-1', version: '2', senderId: h.dappSenderId,
+      id, version: '2', senderId: h.dappSenderId,
       type: BeaconMessageType.OperationRequest,
       network: { type: NetworkType.CUSTOM, rpcUrl: PREVIEWNET_MICHELSON_RPC },
       sourceAddress: TZ1,
-      operationDetails: [{ kind: 'transaction', amount: '0', destination: 'KT1'.padEnd(36, 'x') }],
+      operationDetails: [CEREMONY_OP],
+      ...over,
+    });
+    h.session.accept(await h.dapp.encryptFor(h.walletKey, serialized));
+    await flush();
+    return id;
+  }
+
+  it('relays a pinned transaction to the wallet with its limits intact', async () => {
+    const h = await setup((env) =>
+      env.request.kind === 'operation' ? { ok: true, data: { opHash: 'oo' + 'Z'.repeat(49) } } : GRANTED);
+    await sendPermissionRequest(h);   // grant first: the SDK needs appMetadata on file
+    h.sent.length = 0;
+    await sendOperationRequest(h);
+
+    expect(h.sent).toHaveLength(1);
+    expect(h.sent[0].request).toEqual({
+      kind: 'operation',
+      operation: {
+        destination: GATEWAY_KT1,
+        amount:      '0',
+        entrypoint:  'call_evm',
+        parameters:  { prim: 'Pair', args: [{ string: '0xdead' }] },
+        // Parsed from Beacon's decimal STRINGS, and only as a complete set.
+        limits:      { fee: 5000, gasLimit: 20000, storageLimit: 10000 },
+      },
+    });
+  });
+
+  it('answers an injected operation with its L1 op hash', async () => {
+    const opHash = 'ooRealOpHash' + 'x'.repeat(39);
+    const h = await setup((env) =>
+      env.request.kind === 'operation' ? { ok: true, data: { opHash } } : GRANTED);
+    await sendPermissionRequest(h);
+    h.frames.length = 0;
+    const id = await sendOperationRequest(h);
+
+    const replies = await walletReplies(h);
+    const response = replies.find((r) => r.type === BeaconMessageType.OperationResponse);
+    // `transactionHash` is the SDK's field name; the dApp calls
+    // op.confirmation(1) on it, so it must be a real injected op.
+    expect(response).toMatchObject({ id, transactionHash: opHash, version: '2' });
+  });
+
+  it('treats a HALF-supplied pin as no pin at all', async () => {
+    // This chain's fee floor couples the three knobs, so honouring one of three
+    // would produce an operation whose fee does not cover its own gas.
+    const h = await setup((env) =>
+      env.request.kind === 'operation' ? { ok: true, data: { opHash: 'oo' } } : GRANTED);
+    await sendPermissionRequest(h);
+    h.sent.length = 0;
+    await sendOperationRequest(h, {
+      operationDetails: [{ ...CEREMONY_OP, gas_limit: undefined }],
+    });
+    expect((h.sent[0].request as { operation: { limits?: unknown } }).operation.limits).toBeUndefined();
+  });
+
+  it('refuses a BATCH with TOO_MANY_OPERATIONS and relays nothing', async () => {
+    // Signing the first and reporting success for all of them would be worse
+    // than refusing.
+    const h = await setup(() => GRANTED);
+    await sendPermissionRequest(h);
+    h.sent.length = 0; h.frames.length = 0;
+    const id = await sendOperationRequest(h, { operationDetails: [CEREMONY_OP, CEREMONY_OP] });
+
+    expect((await walletReplies(h)).find((r) => r.type === BeaconMessageType.Error))
+      .toMatchObject({ id, errorType: BeaconErrorType.TOO_MANY_OPERATIONS });
+    expect(h.sent).toHaveLength(0);
+  });
+
+  it('refuses a non-transaction kind and relays nothing', async () => {
+    const h = await setup(() => GRANTED);
+    await sendPermissionRequest(h);
+    h.sent.length = 0; h.frames.length = 0;
+    const id = await sendOperationRequest(h, {
+      operationDetails: [{ kind: 'origination', balance: '0', script: {} }],
+    });
+
+    expect((await walletReplies(h)).find((r) => r.type === BeaconMessageType.Error))
+      .toMatchObject({ id, errorType: BeaconErrorType.PARAMETERS_INVALID_ERROR });
+    expect(h.sent).toHaveLength(0);
+  });
+
+  it('maps a refused-because-not-connected operation to NOT_GRANTED', async () => {
+    const h = await setup((env) => env.request.kind === 'operation'
+      ? { ok: false, code: 5003, message: 'Origin is not connected.' }
+      : GRANTED);
+    await sendPermissionRequest(h);
+    h.frames.length = 0;
+    const id = await sendOperationRequest(h);
+    expect((await walletReplies(h)).find((r) => r.type === BeaconMessageType.Error))
+      .toMatchObject({ id, errorType: BeaconErrorType.NOT_GRANTED_ERROR });
+  });
+
+  it('maps an approved-then-failed operation to BROADCAST_ERROR, not ABORTED', async () => {
+    const h = await setup((env) => env.request.kind === 'operation'
+      ? { ok: false, code: 5004, message: 'insufficient_fees' }
+      : GRANTED);
+    await sendPermissionRequest(h);
+    h.frames.length = 0;
+    const id = await sendOperationRequest(h);
+    expect((await walletReplies(h)).find((r) => r.type === BeaconMessageType.Error))
+      .toMatchObject({ id, errorType: BeaconErrorType.BROADCAST_ERROR });
+  });
+
+  it('still refuses sign_payload, which this wallet cannot serve', async () => {
+    const h = await setup(() => GRANTED);
+    await sendPermissionRequest(h);
+    h.frames.length = 0;
+    const serialized = await new Serializer().serialize({
+      id: 'sign-1', version: '2', senderId: h.dappSenderId,
+      type: BeaconMessageType.SignPayloadRequest,
+      signingType: 'raw', payload: '05010000', sourceAddress: TZ1,
     });
     h.session.accept(await h.dapp.encryptFor(h.walletKey, serialized));
     await flush();
 
-    const replies = await walletReplies(h);
-    const error = replies.find((r) => r.type === BeaconMessageType.Error);
-    expect(error).toBeDefined();
-    // Milestone 2 replaces this. UNKNOWN_ERROR ≠ ABORTED_ERROR so "not built yet"
-    // can never be misread as "the user said no".
-    expect(error).toMatchObject({ id: 'op-req-1', errorType: BeaconErrorType.UNKNOWN_ERROR });
-    // And nothing was relayed to the service worker for it.
-    expect(h.sent).toHaveLength(1);
+    expect((await walletReplies(h)).find((r) => r.type === BeaconMessageType.Error))
+      .toMatchObject({ id: 'sign-1', errorType: BeaconErrorType.UNKNOWN_ERROR });
   });
 
   // ── Malformed page input ────────────────────────────────────────────────────

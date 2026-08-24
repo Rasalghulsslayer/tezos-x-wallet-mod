@@ -11,21 +11,28 @@ import {
   BeaconErrorType,
   BeaconMessageType,
   PermissionScope,
+  TezosOperationType,
   type BeaconResponseInputMessage,
   type Network,
   type NetworkType,
+  type OperationRequestOutput,
   type PermissionRequestOutput,
 } from '@airgap/beacon-types';
 import {
   BEACON_NETWORK_NOT_SUPPORTED,
+  BEACON_NOT_CONNECTED,
   BEACON_NO_ADDRESS,
+  BEACON_OPERATION_FAILED,
   type BeaconNetwork,
   type BeaconPermissionGrant,
 } from '@tezosx/wallet-core/domain/beacon';
-import type { BeaconPermissionRequest } from '@tezosx/wallet-core/shared/messages';
+import type { OpLimits } from '@tezosx/wallet-core/domain/tezos-operation';
+import type { BeaconOperationRequest, BeaconPermissionRequest } from '@tezosx/wallet-core/shared/messages';
 
 /** EIP-1193 4001, the code the router returns for a user rejection. */
 const EIP_USER_REJECTED = 4001;
+/** JSON-RPC -32602, the code the router returns for a malformed operation. */
+const JSON_RPC_INVALID_PARAMS = -32602;
 
 /**
  * Envelope code → the Beacon error the SDK expects.
@@ -45,6 +52,17 @@ export function beaconErrorFor(code: number): BeaconErrorType {
   switch (code) {
     case BEACON_NETWORK_NOT_SUPPORTED: return BeaconErrorType.NETWORK_NOT_SUPPORTED;
     case BEACON_NO_ADDRESS:            return BeaconErrorType.NO_ADDRESS_ERROR;
+    // The origin holds no grant. NOT_GRANTED is the SDK's own word for it, and
+    // keeping it distinct from ABORTED is what lets a dApp tell "you never
+    // connected" from "the user said no".
+    case BEACON_NOT_CONNECTED:         return BeaconErrorType.NOT_GRANTED_ERROR;
+    // Approved, then failed on the way to the chain. BROADCAST_ERROR is the
+    // member the SDK documents for exactly this ("the transaction is broadcast
+    // but there is an error"), and it must not be ABORTED: telling a dApp the
+    // operator aborted something they in fact confirmed is the mislabelling that
+    // made previewnet failures undiagnosable through Temple.
+    case BEACON_OPERATION_FAILED:      return BeaconErrorType.BROADCAST_ERROR;
+    case JSON_RPC_INVALID_PARAMS:      return BeaconErrorType.PARAMETERS_INVALID_ERROR;
     case EIP_USER_REJECTED:            return BeaconErrorType.ABORTED_ERROR;
     default:                           return BeaconErrorType.ABORTED_ERROR;
   }
@@ -100,6 +118,113 @@ export function permissionResponseFor(
     scopes:     toSdkScopes(grant.scopes),
     walletType: 'implicit',
   };
+}
+
+/**
+ * The `operation_response` for an injected operation.
+ *
+ * `transactionHash` — the SDK's field name — carries the L1 operation hash. The
+ * dApp then calls `op.confirmation(1)` and reads `operationResults()` off it, so
+ * the hash must be of an operation that has actually been injected; answering
+ * with a hash of something un-broadcast would leave the dApp polling forever.
+ */
+export function operationResponseFor(id: string, opHash: string): BeaconResponseInputMessage {
+  return { type: BeaconMessageType.OperationResponse, id, transactionHash: opHash };
+}
+
+export type OperationNarrowing =
+  | { ok: true;  request: BeaconOperationRequest }
+  | { ok: false; errorType: BeaconErrorType; reason: string };
+
+/**
+ * Narrow a Beacon `operation_request` to the ONE transaction this wallet signs.
+ *
+ * Everything refused here is refused BEFORE the service worker is involved and
+ * before the operator is prompted, because none of it is a judgement call:
+ *
+ *  - A batch. `operationDetails` is an array and Beacon allows several
+ *    operations in one group. This wallet signs one, so a batch is refused with
+ *    the SDK's own `TOO_MANY_OPERATIONS` rather than silently signing the first
+ *    and reporting success for all of them.
+ *  - Any kind other than `transaction` — an origination, a delegation, a reveal.
+ *    The wallet has no path for them and must not pretend otherwise.
+ *
+ * `fee` / `gas_limit` / `storage_limit` are forwarded ONLY as a complete set.
+ * Beacon's partial operation type makes each optional independently, and this
+ * chain's fee floor couples them, so a half-supplied pin is treated as no pin at
+ * all — the wallet then prices the whole operation itself, which is coherent,
+ * where honouring one of three numbers would not be.
+ */
+export function narrowOperationRequest(req: OperationRequestOutput): OperationNarrowing {
+  const details = req.operationDetails;
+  if (!Array.isArray(details) || details.length === 0) {
+    return {
+      ok: false, errorType: BeaconErrorType.PARAMETERS_INVALID_ERROR,
+      reason: 'The operation request carried no operations',
+    };
+  }
+  if (details.length > 1) {
+    return {
+      ok: false, errorType: BeaconErrorType.TOO_MANY_OPERATIONS,
+      reason: `This wallet signs one operation at a time; the request carried ${details.length}`,
+    };
+  }
+
+  const op = details[0];
+  if (op.kind !== TezosOperationType.TRANSACTION) {
+    return {
+      ok: false, errorType: BeaconErrorType.PARAMETERS_INVALID_ERROR,
+      reason: `Unsupported operation kind "${String(op.kind)}" — this wallet signs transactions only`,
+    };
+  }
+
+  const tx = op as {
+    destination?:   unknown;
+    amount?:        unknown;
+    fee?:           unknown;
+    gas_limit?:     unknown;
+    storage_limit?: unknown;
+    parameters?:    { entrypoint?: unknown; value?: unknown };
+  };
+
+  return {
+    ok: true,
+    request: {
+      kind: 'operation',
+      operation: {
+        // Left as-is when malformed: `checkOperation` in core is the single place
+        // that decides what a well-formed operation is, and duplicating that
+        // judgement here would give two answers to one question.
+        destination: typeof tx.destination === 'string' ? tx.destination : '',
+        amount:      typeof tx.amount      === 'string' ? tx.amount      : String(tx.amount ?? ''),
+        entrypoint:  typeof tx.parameters?.entrypoint === 'string' ? tx.parameters.entrypoint : undefined,
+        parameters:  tx.parameters?.value as BeaconOperationRequest['operation']['parameters'],
+        limits:      readLimits(tx),
+      },
+    },
+  };
+}
+
+/**
+ * The dApp's pin, or nothing. Beacon sends the three knobs as decimal STRINGS
+ * (Taquito's `createTransferOperation` stringifies them), so they are parsed
+ * here — and only accepted as a complete, finite, non-negative set.
+ */
+function readLimits(tx: {
+  fee?: unknown; gas_limit?: unknown; storage_limit?: unknown;
+}): OpLimits | undefined {
+  const fee     = toWholeNumber(tx.fee);
+  const gas     = toWholeNumber(tx.gas_limit);
+  const storage = toWholeNumber(tx.storage_limit);
+  if (fee == null || gas == null || storage == null) return undefined;
+  return { fee, gasLimit: gas, storageLimit: storage };
+}
+
+function toWholeNumber(value: unknown): number | undefined {
+  if (typeof value === 'number') return Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) return undefined;
+  const n = Number(value);
+  return Number.isSafeInteger(n) ? n : undefined;
 }
 
 /** A refusal the SDK can turn into a typed error on the dApp side. */
