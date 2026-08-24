@@ -7,6 +7,7 @@ import type { RequestArguments } from '@tezosx/relayer/types';
 import type { ActivityFilter, ActivityPage } from '../domain/activity';
 import type { AccountSummary, AccountKind, AccountId, AddAccountSource } from '../domain/account';
 import type { Asset } from '../domain/asset';
+import type { BeaconNetwork } from '../domain/beacon';
 
 export type { ActivityFilter, ActivityPage, AccountSummary, AddAccountSource };
 
@@ -48,6 +49,14 @@ export interface PendingConnection {
   origin:    string;
   accountId: AccountId;        // pinned at enqueue time; resolves through this account's container
   createdAt: number;
+  /**
+   * Which dApp surface asked. Absent — every pre-Beacon caller — means the
+   * EIP-1193 (`window.ethereum`) path, where the site receives the account's
+   * EVM alias. `'beacon'` means a Beacon dApp, which receives the tz1 and its
+   * public key instead. The Approve screen has to say which, because "the site
+   * will see your 0x address" is simply false for a Beacon connection.
+   */
+  protocol?: 'beacon';
 }
 
 export interface PendingTransaction {
@@ -153,6 +162,30 @@ export interface EthereumRequest {
   origin:     string;
   requestId:  string;
   args:       RequestArguments;
+}
+
+// ── Content script → Service Worker (Beacon bridge) ───────────────────────────
+
+/**
+ * A Beacon request, already narrowed by the content script to the fields core
+ * needs. `requestId` is minted in the content script (never the dApp's Beacon
+ * message id), so a page can neither choose nor collide the key the approval
+ * queue tracks it under — same rule as the EIP-1193 bridge.
+ */
+export interface BeaconRequest {
+  type:      'BEACON_REQUEST';
+  origin:    string;
+  requestId: string;
+  request:   BeaconPermissionRequest;
+}
+
+/** The narrowed `permission_request`. */
+export interface BeaconPermissionRequest {
+  kind:     'permission';
+  /** The network the dApp pinned, if any. Checked, never echoed. */
+  network?: BeaconNetwork;
+  /** The Beacon `PermissionScope` values the dApp asked for. */
+  scopes?:  readonly string[];
 }
 
 // ── Service Worker → Content script (push events) ─────────────────────────────

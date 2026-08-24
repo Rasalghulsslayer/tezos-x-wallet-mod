@@ -19,6 +19,10 @@
     "pretest:e2e": "npm run build"
   },
   "dependencies": {
+    "@airgap/beacon-core": "^4.8.0",
+    "@airgap/beacon-types": "^4.8.0",
+    "@airgap/beacon-utils": "^4.8.0",
+    "@airgap/beacon-wallet": "^4.8.1",
     "@noble/ciphers": "1.2.1",
     "@noble/curves": "2.2.0",
     "@noble/hashes": "2.2.0",

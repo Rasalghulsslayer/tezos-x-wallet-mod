@@ -15,6 +15,7 @@ import type { ContainerCache } from './container-cache';
 import { ensureContainerFor } from './container-builder';
 import type {
   ApproveRequest,
+  BeaconRequest,
   ContentPush,
   EthereumRequest,
   PendingTransaction,
@@ -25,6 +26,14 @@ import type { StoredSession } from '../ports/session-store';
 import type { AccountId } from '../domain/account';
 import type { ClassifiedSource } from '../ports/message-source';
 import { AccountNotFoundError } from '../domain/vault';
+import {
+  BEACON_NETWORK_NOT_SUPPORTED,
+  BEACON_NO_ADDRESS,
+  WALLET_BEACON_NETWORK,
+  checkRequestedNetwork,
+  grantScopes,
+  type BeaconPermissionGrant,
+} from '../domain/beacon';
 
 import { getState }                from '../use-cases/get-state';
 import { createAccount }           from '../use-cases/create-account';
@@ -103,16 +112,17 @@ const JSON_RPC_INTERNAL         = -32603;
 const JSON_RPC_LIMIT_EXCEEDED   = -32005;
 
 export async function dispatch(
-  msg:    PopupRequest | ApproveRequest | EthereumRequest,
+  msg:    PopupRequest | ApproveRequest | EthereumRequest | BeaconRequest,
   source: ClassifiedSource,
   deps:   SwDeps,
 ): Promise<WalletResponse> {
-  if ('type' in msg && msg.type === 'ETHEREUM_REQUEST') {
+  if ('type' in msg && (msg.type === 'ETHEREUM_REQUEST' || msg.type === 'BEACON_REQUEST')) {
     // dApp traffic must arrive over the untrusted dApp channel, and when the
     // host attests an origin it must match the origin stamped into the
     // envelope. Reject trusted-ui / unrecognized sources so they can't
     // impersonate a dApp, and reject a stamped origin that disagrees with the
-    // host-verified one.
+    // host-verified one. Both dApp surfaces (EIP-1193 and Beacon) clear the
+    // same gate — a second surface must not come with a second, weaker guard.
     if (
       source == null ||
       source.channel !== 'dapp' ||
@@ -120,7 +130,9 @@ export async function dispatch(
     ) {
       return { ok: false, code: EIP_UNAUTHORIZED, message: 'Forbidden sender' };
     }
-    return handleEthereumRequest(msg, deps);
+    return msg.type === 'ETHEREUM_REQUEST'
+      ? handleEthereumRequest(msg, deps)
+      : handleBeaconRequest(msg, deps);
   }
 
   // Everything else is privileged (unlock, seed export, approval decisions):
@@ -605,22 +617,9 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
       };
     }
 
-    let decision: Awaited<ReturnType<typeof deps.approvalQueue.enqueue>>;
-    try {
-      decision = await deps.approvalQueue.enqueue(pending);
-    } catch (err) {
-      if (err instanceof DuplicateRequestIdError) {
-        return { ok: false, code: JSON_RPC_INVALID_PARAMS, message: 'Duplicate request id' };
-      }
-      if (err instanceof TooManyPendingRequestsError) {
-        // -32005: limit exceeded (EIP-1474). Rejects the flood without opening
-        // yet another popup.
-        return { ok: false, code: JSON_RPC_LIMIT_EXCEEDED, message: 'Too many pending requests from this origin' };
-      }
-      throw err;
-    }
-
-    if (decision === 'reject') {
+    const outcome = await requestApproval(pending, deps);
+    if (outcome.kind === 'refused') return outcome.response;
+    if (outcome.decision === 'reject') {
       return { ok: false, code: EIP_USER_REJECTED, message: 'User rejected the request' };
     }
     pinnedAccountId = pending.accountId;
@@ -670,6 +669,121 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
     const e = err as { code?: number; message?: string };
     return { ok: false, code: e.code ?? JSON_RPC_INTERNAL, message: e.message ?? 'Internal error' };
   }
+}
+
+type ApprovalOutcome =
+  | { kind: 'decision'; decision: 'approve' | 'reject' }
+  | { kind: 'refused';  response: WalletResponse };
+
+/**
+ * Enqueue a dApp approval and turn the queue's two structural refusals into
+ * envelopes. Shared by every dApp surface on purpose: the per-origin flood cap
+ * is the wallet's only defence against approval fatigue, and a second surface
+ * that hand-rolled its own enqueue could silently skip it.
+ */
+async function requestApproval(
+  pending: Parameters<ApprovalQueue['enqueue']>[0],
+  deps:    SwDeps,
+): Promise<ApprovalOutcome> {
+  try {
+    return { kind: 'decision', decision: await deps.approvalQueue.enqueue(pending) };
+  } catch (err) {
+    if (err instanceof DuplicateRequestIdError) {
+      return {
+        kind: 'refused',
+        response: { ok: false, code: JSON_RPC_INVALID_PARAMS, message: 'Duplicate request id' },
+      };
+    }
+    if (err instanceof TooManyPendingRequestsError) {
+      // -32005: limit exceeded (EIP-1474). Rejects the flood without opening
+      // yet another popup.
+      return {
+        kind: 'refused',
+        response: {
+          ok: false, code: JSON_RPC_LIMIT_EXCEEDED,
+          message: 'Too many pending requests from this origin',
+        },
+      };
+    }
+    throw err;
+  }
+}
+
+// ── Beacon dispatch (content script ↔ SW) ─────────────────────────────────────
+
+/**
+ * Answer a Beacon `permission_request`.
+ *
+ * Mirrors `eth_requestAccounts`: unlocked vault, user approval through the same
+ * queue and the same Approve surface, account pinned at enqueue time. Three
+ * things differ, all of them deliberate:
+ *
+ *  - The connecting account must be tz1-source. A Beacon dApp asks for a Tezos
+ *    address and its public key; an EVM-source account has neither, so this
+ *    refuses rather than inventing one.
+ *  - The requested network is CHECKED, and the response states the wallet's own
+ *    network rather than echoing the request. Echoing would make the dApp's
+ *    network gate a check against its own question — vacuous by construction.
+ *  - No `StoredSession` is written. The Beacon SDK keeps its own per-peer
+ *    permission record, and a StoredSession is what gates `eth_accounts`, so
+ *    writing one here would let a Beacon grant hand out EIP-1193 access to the
+ *    same origin. The cost is that a Beacon connection does not yet appear in
+ *    the wallet's Connected-sites list — a stated gap, not a solved problem.
+ */
+async function handleBeaconRequest(msg: BeaconRequest, deps: SwDeps): Promise<WalletResponse> {
+  const unlocked = deps.keyring.getUnlocked();
+  if (unlocked == null) {
+    return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+  }
+
+  const account = unlocked.account;
+  if (account.kind !== 'tezos') {
+    return {
+      ok:      false,
+      code:    BEACON_NO_ADDRESS,
+      message:
+        'The active account is an EVM (0x) account. A Beacon dApp needs a Tezos ' +
+        'account — switch to a tz1 account in the wallet and connect again.',
+    };
+  }
+
+  const verdict = checkRequestedNetwork(msg.request.network);
+  if (!verdict.ok) {
+    return { ok: false, code: BEACON_NETWORK_NOT_SUPPORTED, message: verdict.reason };
+  }
+
+  const outcome = await requestApproval({
+    kind:      'connect',
+    protocol:  'beacon',
+    requestId: msg.requestId,
+    origin:    msg.origin,
+    accountId: account.id,
+    createdAt: Date.now(),
+  }, deps);
+  if (outcome.kind === 'refused') return outcome.response;
+  if (outcome.decision === 'reject') {
+    return { ok: false, code: EIP_USER_REJECTED, message: 'User rejected the request' };
+  }
+
+  // Re-read the pinned account: REMOVE_ACCOUNT, a lock, or an account switch can
+  // land between enqueue and approval, and the grant must describe the account
+  // the user actually confirmed — never whichever one happens to be active now.
+  const pinned = deps.keyring.listAccounts().find((a) => a.id === account.id);
+  if (pinned == null || pinned.kind !== 'tezos') {
+    return {
+      ok:      false,
+      code:    EIP_USER_REJECTED,
+      message: 'The connecting account was removed before approval',
+    };
+  }
+
+  const grant: BeaconPermissionGrant = {
+    address:   pinned.tz1,
+    publicKey: pinned.publicKey,
+    network:   WALLET_BEACON_NETWORK,
+    scopes:    grantScopes(msg.request.scopes),
+  };
+  return { ok: true, data: grant };
 }
 
 /**
