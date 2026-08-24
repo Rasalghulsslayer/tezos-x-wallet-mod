@@ -15,10 +15,22 @@
  */
 
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { BEACON_HANDOFF_KEY, BEACON_WALLET_NAME, TO_EXTENSION, TO_PAGE } from '../../shared/beacon/page-frames';
+import {
+  BEACON_HANDOFF_KEY,
+  BEACON_WALLET_NAME,
+  TO_EXTENSION,
+  TO_PAGE,
+  buildPongFrame,
+} from '../../shared/beacon/page-frames';
 
 const EXTENSION_ID = 'abcdefghijklmnopqrstuvwxyzabcdef';
 const ORIGIN       = 'https://maps.example';
+/** Must match `beacon-announce.ts`'s WALLET_ICON. */
+const WALLET_ICON =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E" +
+  "%3Crect width='100' height='100' rx='22' fill='%237c5cff'/%3E" +
+  "%3Ctext x='50' y='70' font-size='58' text-anchor='middle' fill='white' font-family='Arial%2C sans-serif' font-weight='bold'%3ET%3C/text%3E" +
+  '%3C/svg%3E';
 
 interface Posted { data: unknown; targetOrigin: string }
 
@@ -95,6 +107,27 @@ describe('beacon-announce — the synchronous half', () => {
     expect('message' in frame).toBe(false);
     expect(frame.sender).toMatchObject({ id: EXTENSION_ID, name: BEACON_WALLET_NAME });
     expect(env.posted[0].targetOrigin).toBe(ORIGIN);
+  });
+
+  it('emits exactly what page-frames builds — the duplication is checked, not just commented', () => {
+    // `beacon-announce.ts` cannot import `buildPongFrame` (it must stay
+    // import-free to be emitted as a synchronous IIFE), so this equality is what
+    // keeps the hand-copied shape from drifting.
+    expect(buildPongFrame({
+      id: EXTENSION_ID, name: BEACON_WALLET_NAME, iconUrl: WALLET_ICON,
+    })).toEqual({ target: TO_PAGE, payload: 'pong', sender: {
+      id: EXTENSION_ID, name: BEACON_WALLET_NAME, iconUrl: WALLET_ICON,
+    } });
+  });
+
+  it('sends NO shortName, so the pairing modal shows the full wallet name', async () => {
+    // beacon-ui renders an extension as `shortName ?? name ?? ''`. A shortName
+    // makes the modal say something other than the name the user was told.
+    await loadAnnounce(env);
+    send(env, { target: TO_EXTENSION, payload: 'ping' });
+    const sender = (env.posted[0].data as { sender: Record<string, unknown> }).sender;
+    expect('shortName' in sender).toBe(false);
+    expect(sender.name).toBe('TezosX Wallet');
   });
 
   it('answers the ping without needing the SDK half', async () => {

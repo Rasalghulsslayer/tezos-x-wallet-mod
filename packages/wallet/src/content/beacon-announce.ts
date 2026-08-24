@@ -77,11 +77,16 @@ function postPong(): void {
       // FLAT, not nested under `message`: PostMessageTransport.listenForExtensions
       // reads event.data.payload and event.data.sender. Nesting it makes the
       // wallet invisible in the pairing modal, with no error anywhere.
+      // NO `shortName`. beacon-ui renders an extension entry as
+      // `shortName ?? name ?? ''`, so setting one makes the pairing modal read
+      // "TezosX" while the EIP-6963 announcement, the peer record the dApp
+      // stores, and every log line all say "TezosX Wallet". One wallet, one name
+      // — and a user looking for the name they were told cannot find a
+      // different one.
       sender:  {
-        id:        chrome.runtime.id,
-        name:      WALLET_NAME,
-        shortName: 'TezosX',
-        iconUrl:   WALLET_ICON,
+        id:      chrome.runtime.id,
+        name:    WALLET_NAME,
+        iconUrl: WALLET_ICON,
       },
     },
     window.location.origin || '*',
