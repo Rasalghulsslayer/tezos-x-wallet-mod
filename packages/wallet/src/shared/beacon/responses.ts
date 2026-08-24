@@ -31,6 +31,9 @@ import type { BeaconOperationRequest, BeaconPermissionRequest } from '@tezosx/wa
 
 /** EIP-1193 4001, the code the router returns for a user rejection. */
 const EIP_USER_REJECTED = 4001;
+/** EIP-1193 4100, the code the router returns for a LOCKED wallet — including a
+ *  request the wallet withdrew itself by auto-locking mid-flight. */
+const EIP_UNAUTHORIZED = 4100;
 /** JSON-RPC -32602, the code the router returns for a malformed operation. */
 const JSON_RPC_INVALID_PARAMS = -32602;
 
@@ -43,10 +46,10 @@ const JSON_RPC_INVALID_PARAMS = -32602;
  * `NetworkNotSupportedBeaconError`, …), and a thrown string reaches the dApp as
  * an unresolved request that simply never answers.
  *
- * Everything unmapped — a locked wallet, the per-origin flood cap, an internal
- * failure — becomes `ABORTED_ERROR`, which the SDK documents as "aborted by the
- * user OR THE WALLET". The envelope's own message is logged alongside so the
- * reason is not lost, only the wire code is coarse.
+ * Everything unmapped — the per-origin flood cap, an internal failure — becomes
+ * `ABORTED_ERROR`, which the SDK documents as "aborted by the user OR THE
+ * WALLET". The envelope's own message is logged alongside so the reason is not
+ * lost, only the wire code is coarse.
  */
 export function beaconErrorFor(code: number): BeaconErrorType {
   switch (code) {
@@ -64,6 +67,19 @@ export function beaconErrorFor(code: number): BeaconErrorType {
     case BEACON_OPERATION_FAILED:      return BeaconErrorType.BROADCAST_ERROR;
     case JSON_RPC_INVALID_PARAMS:      return BeaconErrorType.PARAMETERS_INVALID_ERROR;
     case EIP_USER_REJECTED:            return BeaconErrorType.ABORTED_ERROR;
+    // ⚠️ A LOCKED WALLET IS INDISTINGUISHABLE FROM A USER REJECTION ON THIS
+    // WIRE, AND THAT IS THE PROTOCOL'S LIMIT, NOT AN OVERSIGHT. Beacon has no
+    // locked-wallet member: `ABORTED_ERROR` is the one the SDK documents for
+    // "aborted by the user OR THE WALLET" and the only one returned by
+    // Permission | Operation Request | Sign | Broadcast. The near-miss,
+    // `NO_PRIVATE_KEY_FOUND_ERROR`, is documented "Returned by: Sign" only, and
+    // it would tell a dApp its account was wrong — a worse lie than a coarse
+    // truth. So the distinction lives where this wallet controls it: the
+    // envelope carries 4100 rather than 4001 and names the trigger, and the
+    // content script logs `refused (4100): …` verbatim. That log is what turns
+    // "the operator declined" into "the wallet auto-locked" for whoever is
+    // reading a ceremony that stopped.
+    case EIP_UNAUTHORIZED:             return BeaconErrorType.ABORTED_ERROR;
     default:                           return BeaconErrorType.ABORTED_ERROR;
   }
 }

@@ -112,7 +112,13 @@ describe('ApprovalQueue', () => {
     expect(q.resolve('nope', 'approve')).toBe(false);
   });
 
-  it('rejectAll rejects every pending request and dismisses each surface', async () => {
+  it('rejectAll ABORTS every pending request — it does not impersonate a user rejection', async () => {
+    // ⚠️ THIS TEST ASSERTED `'reject'`, WHICH IS THE DEFECT IT NOW GUARDS. The
+    // queue resolved the very value the Reject button produces, so every dApp
+    // surface answered "User rejected the request" when the WALLET withdrew the
+    // prompt — an auto-lock, a reset, a service-worker suspend. During a
+    // multi-operation ceremony that is both a false statement about the operator
+    // and a false lead for whoever is debugging why the run stopped.
     const presenter = new FakePresenter();
     const { port }  = recordingNotifications();
     const q = new ApprovalQueue(port, presenter);
@@ -121,12 +127,28 @@ describe('ApprovalQueue', () => {
     const b = q.enqueue(req('b'));
     expect(q.list()).toHaveLength(2);
 
-    q.rejectAll('wallet locked');
+    q.rejectAll('idle:locked');
 
-    expect(await a).toBe('reject');
-    expect(await b).toBe('reject');
+    // The reason travels WITH the decision: by the time a consumer reads it the
+    // queue that knew why has already been flushed.
+    expect(await a).toEqual({ aborted: 'idle:locked' });
+    expect(await b).toEqual({ aborted: 'idle:locked' });
+    expect(await a).not.toBe('reject');
     expect(q.list()).toHaveLength(0);
     expect(presenter.closed).toHaveLength(2);
+  });
+
+  it('still resolves a plain string for the operator\'s own two answers', async () => {
+    // The union must not leak into the UI path: an approval is `'approve'`, a
+    // rejection is `'reject'`, and only the wallet's own withdrawal is an object.
+    const q = new ApprovalQueue(recordingNotifications().port, new FakePresenter());
+    const approved = q.enqueue(req('ok'));
+    q.resolve('ok', 'approve');
+    expect(await approved).toBe('approve');
+
+    const declined = q.enqueue(req('no'));
+    q.resolve('no', 'reject');
+    expect(await declined).toBe('reject');
   });
 
   it('reflects the pending count on the badge as requests come and go', async () => {

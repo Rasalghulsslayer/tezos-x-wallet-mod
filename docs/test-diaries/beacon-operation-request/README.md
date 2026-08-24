@@ -294,21 +294,67 @@ eager per-page cost 5.1 kB (unchanged) · lazy chunk 148 kB
 - **Auto-lock was not exercised, it was merely outrun.** The whole ceremony took 4 min 18 s against
   an `AUTO_LOCK_IDLE_MS` of 5 min, so the hazard never had time to fire. Nothing was learned about
   it. A run with one 5-minute pause — a phone call, a screen lock, an operator reading a 38 kB
-  parameter carefully — still meets `queue.rejectAll()` mid-ceremony, and still presents
-  indistinguishably from a user rejection. **This is now the largest untested risk in the path**,
-  precisely because the successful run says nothing about it.
+  parameter carefully — still meets `queue.rejectAll()` mid-ceremony. It now SAYS SO (§9), but it
+  still ends the run. **This is the largest untested risk in the path**, precisely because the
+  successful run says nothing about it.
 - **The recovery paths are still untested.** 25/25 applied means no operation was rejected, aborted,
   re-priced or resumed. Every failure branch — `confirmApplied` on a failed `setAdmin`, a mid-run
   reject, a spent issuance id — is unobserved.
-- **`AUTO-LOCK IS STILL A CEREMONY HAZARD` and is still not addressed.** `AUTO_LOCK_IDLE_MS` is 5
-  minutes and only `trusted-ui` traffic defers it; `autoLock` calls `queue.rejectAll()`. Approving
-  each op does defer the deadline, so the common path survives — but any step that keeps the operator
-  away for >5 min kills the run, and `chrome.idle` locks immediately on screen lock. Named in
-  milestone 1's diary, unchanged here, and it should be decided before a real ceremony.
-- **A locked wallet still fails indistinguishably from a user rejection** (milestone 1 §4.1/L4), and
-  a mid-ceremony auto-lock would present exactly that way.
+- **`AUTO-LOCK IS STILL A CEREMONY HAZARD`, and only its DIAGNOSIS is addressed.**
+  `AUTO_LOCK_IDLE_MS` is 5 minutes and only `trusted-ui` traffic defers it; `autoLock` calls
+  `queue.rejectAll()`. Approving each op does defer the deadline, so the common path survives — but
+  any step that keeps the operator away for >5 min kills the run, and `chrome.idle` fires the moment
+  the screen locks regardless of how recently they approved. §9 makes the failure legible; it does
+  not make the ceremony survive it. Deferring auto-lock while the queue is non-empty would, and that
+  trades a security property for an availability one, which is the operator's call and not the
+  wallet author's.
+- **On the BEACON wire a locked wallet is still indistinguishable from a user rejection** (milestone
+  1 §4.1/L4). Fixed as far as the protocol allows — see §9 — but Beacon's enum has no locked-wallet
+  member, so a Beacon dApp still receives `ABORTED_ERROR` for both. Only the wallet's envelope, its
+  log, and the EIP-1193 code now separate them.
 - **`sign_payload` is not implemented** and the `sign` scope is still not granted.
 - **Batches are refused, not supported.** If the ceremony ever batches, this needs revisiting.
 - **The `CALL_EVM_GAS_LIMIT` defect is reported, not fixed** (§5).
 - **No reviewer pass on this milestone yet.** Milestone 1's found a blocker in the build artefacts
   that every green test missed; this milestone has had no equivalent scrutiny.
+
+---
+
+## 9. The abort/rejection split — fixed
+
+**A wallet-side abort was reported as a user rejection on every dApp surface.** `rejectAll` resolved
+`'reject'` — the exact value the Reject button produces — so a lock, a reset or a service-worker
+suspend answered `4001 / "User rejected the request"`. Two costs, and the second is the expensive
+one: it is a false statement about the operator, and it points whoever is debugging a stalled
+ceremony at the dApp instead of at the lock.
+
+**`Decision` now has a third case**, `{ aborted: reason }`, carrying the trigger with it — the queue
+that knew why is already flushed by the time a consumer reads the outcome. `rejectAll` resolves that
+instead of `'reject'`.
+
+**Every consumer was switched from a blacklist to a whitelist.** The three call sites tested
+`decision === 'reject'`; a new third case would have fallen straight through to the approved path,
+which is the one mistake here that spends money. They now test `!== 'approve'` and hand off to a
+shared `refusalFor`, so any decision that is not an approval is a refusal by construction.
+
+**What a dApp sees now:**
+
+| surface | user rejected | wallet aborted |
+|---|---|---|
+| EIP-1193 | `4001` "User rejected the request" | **`4100`** "Wallet is locked — the wallet withdrew this request (`idle:locked`)" |
+| Beacon | `ABORTED_ERROR` | `ABORTED_ERROR` — **unchanged, and unavoidable** |
+
+**The Beacon half cannot be fixed on the wire, and pretending otherwise would be worse.**
+`ABORTED_ERROR` is the member the SDK documents as "aborted by the user OR THE WALLET", and the only
+one it lists for Permission | Operation Request | Sign | Broadcast. The near-miss,
+`NO_PRIVATE_KEY_FOUND_ERROR`, is documented "Returned by: Sign" only and would tell a dApp its
+account was wrong — a worse lie than a coarse truth. So the distinction lives where this wallet
+controls it: the envelope carries 4100 and names the trigger, and the content script logs
+`refused (4100): Wallet is locked — … (idle:locked)` verbatim. That log is the artefact that turns
+"the operator declined" into "the wallet auto-locked".
+
+**Two tests asserted the defect as the contract** — `approval-queue.test.ts`'s `rejectAll` case
+expected `'reject'`, and `sw-wiring-beacon.test.ts`'s lock-mid-prompt case expected `4001`. Both were
+green. They are now inverted, with the history in the comment, and each is paired with a test that a
+genuine operator rejection still reports `4001`: one code moving without the other is the regression
+to catch. +4 tests, 754 total.

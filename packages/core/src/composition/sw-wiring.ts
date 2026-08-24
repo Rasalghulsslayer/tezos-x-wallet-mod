@@ -9,7 +9,7 @@
  */
 
 import type { Keyring } from '../background/keyring';
-import { DuplicateRequestIdError, TooManyPendingRequestsError, type ApprovalQueue } from '../background/approval-queue';
+import { DuplicateRequestIdError, TooManyPendingRequestsError, type ApprovalQueue, type Decision } from '../background/approval-queue';
 import type { Container, PersistentPorts } from '../ports/container';
 import type { ContainerCache } from './container-cache';
 import { ensureContainerFor } from './container-builder';
@@ -631,9 +631,7 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
 
     const outcome = await requestApproval(pending, deps);
     if (outcome.kind === 'refused') return outcome.response;
-    if (outcome.decision === 'reject') {
-      return { ok: false, code: EIP_USER_REJECTED, message: 'User rejected the request' };
-    }
+    if (outcome.decision !== 'approve') return refusalFor(outcome.decision);
     pinnedAccountId = pending.accountId;
   }
 
@@ -684,8 +682,40 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
 }
 
 type ApprovalOutcome =
-  | { kind: 'decision'; decision: 'approve' | 'reject' }
+  | { kind: 'decision'; decision: Decision }
   | { kind: 'refused';  response: WalletResponse };
+
+/**
+ * The envelope for any pending request that did not end in `'approve'`.
+ *
+ * ⚠️ A WALLET-SIDE ABORT IS NOT A USER REJECTION, AND MUST NOT SAY IT IS. All
+ * three dApp surfaces used to answer `4001 / "User rejected the request"` for
+ * both, because `rejectAll` resolved the same `'reject'` the Reject button does.
+ * So an auto-lock mid-ceremony — `AUTO_LOCK_IDLE_MS` is 5 minutes, and
+ * `chrome.idle` fires the moment the screen locks — accused the operator of
+ * declining something they never saw, and pointed whoever was debugging it at
+ * the dApp instead of at the lock.
+ *
+ * `4100` is not a new convention: it is already what every locked-vault guard in
+ * this file returns, and `4001` versus `4100` is the whole distinction a dApp
+ * needs. The reason is appended verbatim so the wallet's own console names the
+ * trigger.
+ *
+ * On the Beacon wire this collapses back to `ABORTED_ERROR` and there is no
+ * avoiding it — the SDK documents that member as "aborted by the user OR THE
+ * WALLET" and offers no locked-wallet member (`NO_PRIVATE_KEY_FOUND_ERROR` is
+ * documented for Sign only). The envelope and the log are distinguishable; the
+ * Beacon `errorType` is not. See `beaconErrorFor`.
+ */
+function refusalFor(decision: Exclude<Decision, 'approve'>): WalletResponse {
+  return decision === 'reject'
+    ? { ok: false, code: EIP_USER_REJECTED, message: 'User rejected the request' }
+    : {
+        ok:      false,
+        code:    EIP_UNAUTHORIZED,
+        message: `Wallet is locked — the wallet withdrew this request (${decision.aborted})`,
+      };
+}
 
 /**
  * Enqueue a dApp approval and turn the queue's two structural refusals into
@@ -799,9 +829,7 @@ async function handleBeaconPermission(
     createdAt: Date.now(),
   }, deps);
   if (outcome.kind === 'refused') return outcome.response;
-  if (outcome.decision === 'reject') {
-    return { ok: false, code: EIP_USER_REJECTED, message: 'User rejected the request' };
-  }
+  if (outcome.decision !== 'approve') return refusalFor(outcome.decision);
 
   // Re-read the pinned account: REMOVE_ACCOUNT, a lock, or an account switch can
   // land between enqueue and approval, and the grant must describe the account
@@ -896,9 +924,7 @@ async function handleBeaconOperation(
     maxCostMutez:      op.limits == null ? undefined : String(maxOpCostMutez(op.limits, op.amount)),
   }, deps);
   if (outcome.kind === 'refused') return outcome.response;
-  if (outcome.decision === 'reject') {
-    return { ok: false, code: EIP_USER_REJECTED, message: 'User rejected the request' };
-  }
+  if (outcome.decision !== 'approve') return refusalFor(outcome.decision);
 
   let container: Container;
   try {

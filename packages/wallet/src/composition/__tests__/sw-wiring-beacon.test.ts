@@ -756,18 +756,63 @@ describe('sw-wiring — Beacon permission_request', () => {
     });
   });
 
-  it('rejects the pending Beacon approval when the wallet locks mid-prompt', async () => {
+  it('withdraws the pending Beacon approval when the wallet locks mid-prompt, and does NOT call it a user rejection', async () => {
+    // ⚠️ THIS TEST USED TO ASSERT 4001, ENCODING THE DEFECT AS THE CONTRACT.
+    // `rejectAll` resolved the same `'reject'` the Reject button produces, so an
+    // auto-lock — 5-minute idle deadline, or the instant the screen locks —
+    // answered "User rejected the request". During a 25-op ceremony that is a
+    // false statement about the operator AND it sends whoever is debugging the
+    // stall to the dApp instead of to the lock. 4100 is what every other
+    // locked-vault guard in the router already returns.
     const msg = permissionRequest();
     const inflight = dispatch(msg, contentSender, h.deps);
     await vi.waitFor(() => expect(h.deps.approvalQueue.get(msg.requestId)).toBeDefined());
 
     // Auto-lock and the LOCK handler both call rejectAll(); a Beacon request in
     // flight must resolve, not hang.
-    h.deps.approvalQueue.rejectAll('test lock');
+    h.deps.approvalQueue.rejectAll('idle:locked');
+
+    const res = await inflight;
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('unreachable');
+    expect(res.code).toBe(4100);
+    expect(res.code).not.toBe(4001);
+    // The trigger is named, because "locked" without a cause does not tell an
+    // operator whether the screen locked or the 5-minute deadline passed.
+    expect(res.message).toContain('idle:locked');
+    expect(res.message).not.toMatch(/user rejected/i);
+  });
+
+  it('still calls a REAL operator rejection a user rejection', async () => {
+    // The other half of the fix: 4001 must not become a catch-all for both.
+    const msg = permissionRequest();
+    const inflight = dispatch(msg, contentSender, h.deps);
+    await vi.waitFor(() => expect(h.deps.approvalQueue.get(msg.requestId)).toBeDefined());
+
+    h.deps.approvalQueue.resolve(msg.requestId, 'reject');
 
     const res = await inflight;
     expect(res.ok).toBe(false);
     if (res.ok) throw new Error('unreachable');
     expect(res.code).toBe(4001);
+    expect(res.message).toMatch(/user rejected/i);
+  });
+
+  it('withdraws a pending OPERATION the same way, and signs nothing', async () => {
+    // The ceremony case: 25 operations, any one of which can be in flight when
+    // the deadline passes. An abort must not reach the signer.
+    await connect(h.deps);
+    const msg = operationRequest();
+    const inflight = dispatch(msg, contentSender, h.deps);
+    await vi.waitFor(() => expect(h.deps.approvalQueue.get(msg.requestId)).toBeDefined());
+
+    h.deps.approvalQueue.rejectAll('suspend');
+
+    const res = await inflight;
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('unreachable');
+    expect(res.code).toBe(4100);
+    expect(res.message).toContain('suspend');
+    expect(signerCalls).toHaveLength(0);
   });
 });

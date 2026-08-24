@@ -2,7 +2,26 @@ import type { PendingRequest } from '../shared/messages';
 import type { NotificationPort } from '../ports/notification-port';
 import type { ApprovalPresenter, ApprovalHandle } from '../ports/approval-presenter';
 
-type Decision = 'approve' | 'reject';
+/**
+ * How a pending request ended.
+ *
+ * `'approve'` / `'reject'` are the OPERATOR's two answers from the approval UI.
+ * `{ aborted }` is the WALLET withdrawing a request the operator never got to
+ * answer — a lock, a reset, a suspend.
+ *
+ * ⚠️ THE THIRD CASE IS WHY THIS IS A UNION AND NOT A BOOLEAN. `rejectAll` used
+ * to resolve `'reject'`, the same value the Reject button produces, so a wallet
+ * that auto-locked mid-ceremony reported "User rejected the request" — a
+ * statement about the operator that was simply untrue, and the one message that
+ * sends whoever is debugging it to the wrong place entirely. The reason travels
+ * WITH the decision because by the time a consumer sees it, the queue that knew
+ * why is already flushed.
+ *
+ * Consumers must branch on `=== 'approve'` and treat everything else as a
+ * refusal. Branching on `=== 'reject'` would let an abort fall through to the
+ * approved path, which is the one mistake here that spends money.
+ */
+export type Decision = 'approve' | 'reject' | { readonly aborted: string };
 
 /** Thrown when a request id is already pending — entries are immutable once
  *  enqueued, so a colliding id can never replace what the approval UI shows. */
@@ -109,10 +128,19 @@ export class ApprovalQueue {
     return true;
   }
 
-  /** Reject every pending request (e.g. on lock). */
+  /**
+   * Withdraw every pending request — the wallet's own decision, not the
+   * operator's.
+   *
+   * Resolves `{ aborted: reason }` rather than `'reject'` so the difference
+   * survives to the dApp envelope. `reason` is carried verbatim into that
+   * envelope's message, so it is read by whoever is diagnosing a ceremony that
+   * stopped, and should name the cause (`idle:locked`, `suspend`) rather than
+   * restate that something was rejected.
+   */
   rejectAll(reason: string): void {
     for (const { resolve, handle } of this.queue.values()) {
-      resolve('reject');
+      resolve({ aborted: reason });
       this.presenter.close(handle);
     }
     this.queue.clear();

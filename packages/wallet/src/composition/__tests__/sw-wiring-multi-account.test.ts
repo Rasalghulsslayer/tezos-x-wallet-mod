@@ -616,7 +616,10 @@ describe('sw-wiring password lifecycle dispatch', () => {
     expect(await tokenStore.list(accountId)).toEqual([]);
     // Contacts are wallet-global, non-secret, and still useful after recovery.
     expect((await contactStore.list()).map((c) => c.label)).toEqual(['Alice']);
-    await expect(decision).resolves.toBe('reject');
+    // An abort, NOT a 'reject': the operator never answered this prompt, the
+    // wallet withdrew it. `'reject'` here would have the dApp told the user
+    // declined a reset they triggered themselves.
+    await expect(decision).resolves.toEqual({ aborted: 'wallet reset' });
     expect(h.deps.approvalQueue.list()).toEqual([]);
   });
 });

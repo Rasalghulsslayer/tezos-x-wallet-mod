@@ -170,4 +170,30 @@ describe('sw-wiring — approval gating', () => {
     if (res.ok) throw new Error('unreachable');
     expect(res.code).toBe(4001);
   });
+
+  it('surfaces 4100, NOT 4001, when the wallet auto-locks an eth_requestAccounts prompt', async () => {
+    // The EIP-1193 half of the abort/rejection split, and the half a dApp can
+    // actually act on: 4001 and 4100 are different codes, where Beacon collapses
+    // both to ABORTED_ERROR because its enum has no locked-wallet member.
+    //
+    // The brief's standing constraint is that this path must not regress, so the
+    // rejection above and this abort are asserted as a PAIR — one code moving
+    // without the other is the regression to catch.
+    const requestId = 'connect-req-locked';
+    const pending = dispatch(
+      { type: 'ETHEREUM_REQUEST', origin: 'https://dapp.example', requestId, args: { method: 'eth_requestAccounts' } },
+      contentSender,
+      h.deps,
+    );
+
+    await vi.waitFor(() => expect(h.deps.approvalQueue.get(requestId)).toBeDefined());
+    h.deps.approvalQueue.rejectAll('idle:idle');
+
+    const res = await pending;
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('unreachable');
+    expect(res.code).toBe(4100);
+    expect(res.message).toContain('idle:idle');
+    expect(res.message).not.toMatch(/user rejected/i);
+  });
 });
