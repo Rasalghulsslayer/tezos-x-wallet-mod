@@ -167,6 +167,8 @@ const autoLockPorts: AutoLockPorts = {
   isUnlocked: () => keyring.isUnlocked(),
   lock:       autoLock,
   now:        () => Date.now(),
+  // An approval on screen is the operator mid-decision, not the operator gone.
+  hasPendingApproval: () => queue.list().length > 0,
   async loadLastActivity() {
     const data = await chrome.storage.session.get(ACTIVITY_KEY);
     return data[ACTIVITY_KEY] as number | undefined;
@@ -185,7 +187,30 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 // of no input; anything other than 'active' means the user has stepped away.
 chrome.idle.setDetectionInterval(AUTO_LOCK_IDLE_MS / 1000);
 chrome.idle.onStateChanged.addListener((idleState) => {
-  if (idleState !== 'active') autoLock(`idle:${idleState}`);
+  if (idleState === 'active') return;
+
+  // ── 'locked' IS NOT NEGOTIABLE ────────────────────────────────────────────
+  // The operator locked the screen. That is an explicit instruction to secure
+  // the machine, and no pending prompt outranks it. Lock now, grace or not.
+  if (idleState === 'locked') {
+    autoLock('idle:locked');
+    return;
+  }
+
+  // ── 'idle' MEANS NO INPUT, WHICH IS NOT THE SAME AS NO OPERATOR ───────────
+  // chrome.idle measures keyboard and mouse across the whole machine, so an
+  // operator reading a 38 kB Micheline parameter registers as idle while doing
+  // exactly what the approval screen asks of them. Locking here called
+  // rejectAll() on the prompt they were reading and ended a 25-operation
+  // ceremony. With a prompt open, hand the decision to the deadline check,
+  // which grants AUTO_LOCK_PENDING_GRACE_MS once and then locks anyway — so
+  // this defers the lock, it never cancels it.
+  if (queue.list().length > 0) {
+    console.info('[TezosX Wallet] system idle with an approval on screen — deferring the lock');
+    void checkIdleDeadline(autoLockPorts);
+    return;
+  }
+  autoLock(`idle:${idleState}`);
 });
 chrome.runtime.onSuspend.addListener(() => autoLock('suspend'));
 

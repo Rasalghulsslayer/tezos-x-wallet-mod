@@ -294,20 +294,19 @@ eager per-page cost 5.1 kB (unchanged) · lazy chunk 148 kB
 - **Auto-lock was not exercised, it was merely outrun.** The whole ceremony took 4 min 18 s against
   an `AUTO_LOCK_IDLE_MS` of 5 min, so the hazard never had time to fire. Nothing was learned about
   it. A run with one 5-minute pause — a phone call, a screen lock, an operator reading a 38 kB
-  parameter carefully — still meets `queue.rejectAll()` mid-ceremony. It now SAYS SO (§9), but it
-  still ends the run. **This is the largest untested risk in the path**, precisely because the
-  successful run says nothing about it.
+  parameter carefully — used to meet `queue.rejectAll()` mid-ceremony. §9 made that legible and §10
+  bounds it away for the reading case, but **neither is live-tested**: no ceremony has yet been run
+  with a deliberate pause, a screen lock, or a 15-minute stall. The code path is covered by unit
+  tests only.
 - **The recovery paths are still untested.** 25/25 applied means no operation was rejected, aborted,
   re-priced or resumed. Every failure branch — `confirmApplied` on a failed `setAdmin`, a mid-run
   reject, a spent issuance id — is unobserved.
-- **`AUTO-LOCK IS STILL A CEREMONY HAZARD`, and only its DIAGNOSIS is addressed.**
-  `AUTO_LOCK_IDLE_MS` is 5 minutes and only `trusted-ui` traffic defers it; `autoLock` calls
-  `queue.rejectAll()`. Approving each op does defer the deadline, so the common path survives — but
-  any step that keeps the operator away for >5 min kills the run, and `chrome.idle` fires the moment
-  the screen locks regardless of how recently they approved. §9 makes the failure legible; it does
-  not make the ceremony survive it. Deferring auto-lock while the queue is non-empty would, and that
-  trades a security property for an availability one, which is the operator's call and not the
-  wallet author's.
+- **Auto-lock is addressed for the READING case only (§10).** A prompt on screen now buys one
+  bounded extension, and an explicit screen lock still locks immediately — by design. What remains
+  unhandled: an operator who steps away for more than 15 minutes mid-ceremony, and a screen lock at
+  any point. Both still end the run, and both still should. The dApp's own `walletTimeoutMs` and its
+  resume behaviour after a mid-phase abort are the other half of that story and live in the other
+  repo.
 - **On the BEACON wire a locked wallet is still indistinguishable from a user rejection** (milestone
   1 §4.1/L4). Fixed as far as the protocol allows — see §9 — but Beacon's enum has no locked-wallet
   member, so a Beacon dApp still receives `ABORTED_ERROR` for both. Only the wallet's envelope, its
@@ -358,3 +357,40 @@ expected `'reject'`, and `sw-wiring-beacon.test.ts`'s lock-mid-prompt case expec
 green. They are now inverted, with the history in the comment, and each is paired with a test that a
 genuine operator rejection still reports `4001`: one code moving without the other is the regression
 to catch. +4 tests, 754 total.
+
+---
+
+## 10. Auto-lock: the read that killed the ceremony
+
+**Locking does not pause an approval, it destroys it** — `autoLock` calls `queue.rejectAll()`. And
+`chrome.idle` measures keyboard and mouse across the whole machine, not attention. So an operator
+doing exactly what the approval screen asks — reading 38 kB of undecoded Micheline before confirming
+a deploy — registered as idle, and a 25-operation ceremony was one careful read away from being
+ended by the wallet itself.
+
+**The fix is one bounded extension, not a hold.** `AutoLockPorts` gains `hasPendingApproval()`, and
+the budget becomes `AUTO_LOCK_IDLE_MS + (prompt on screen ? AUTO_LOCK_PENDING_GRACE_MS : 0)` — 5
+minutes, or 15 with a prompt open.
+
+**The ceiling is derived from the same `lastActivity` stamp, and that is the whole security
+argument.** The grace is measured from the last wallet interaction, not from when the prompt opened,
+so an origin can push the deadline out ONCE by a bounded amount and can never suspend it. It also
+means no new persisted state: a restarted service worker recomputes the identical deadline from the
+stamp it already had.
+
+**`chrome.idle`'s two non-active states are no longer treated alike:**
+
+| state | before | now |
+|---|---|---|
+| `'locked'` (screen locked) | lock immediately | **lock immediately — unchanged, and deliberately not covered by the grace.** An explicit instruction to secure the machine outranks any pending prompt. |
+| `'idle'` (no input for 5 min) | lock immediately | defer to the deadline check, which grants the grace once and then locks anyway |
+
+**Stated plainly, because it is a real weakening:** any origin that can get one approval prompt on
+screen extends the unlocked-idle window from 5 to 15 minutes. The alternative — keeping the prompt
+queued across a lock and re-presenting it after unlock — does not weaken anything, but the dApp's
+`walletTimeoutMs` would usually have expired by then, so it buys availability only if the operator
+returns fast. That trade was not taken here.
+
+**What this does NOT do:** make a ceremony survive a screen lock, or a >15-minute absence. Both
+still end the run. §9 is what makes them legible when they do. And none of §9 or §10 is live-tested —
+the successful 25-op run never approached any of these thresholds (§8).
