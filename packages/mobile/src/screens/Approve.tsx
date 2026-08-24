@@ -116,10 +116,14 @@ export function Approve(): React.JSX.Element | null {
               </Btn>
               {/* Offline, an approval can only fail (the dApp is reached over the
                   network) — disable it before the biometric prompt ever fires.
-                  Reject stays available: it resolves the local queue. */}
-              <Btn variant="accent" full disabled={!ctx.online} onPress={() => respond('approve')}>
-                {CONFIRM_LABEL[req.kind]}
-              </Btn>
+                  Reject stays available: it resolves the local queue.
+                  A request kind this surface cannot describe gets NO approve
+                  button at all — see `canApprove`. */}
+              {canApprove(req.kind) && (
+                <Btn variant="accent" full disabled={!ctx.online} onPress={() => respond('approve')}>
+                  {CONFIRM_LABEL[req.kind]}
+                </Btn>
+              )}
             </View>
           </Pressable>
         </Pressable>
@@ -132,13 +136,31 @@ const SUBTITLE: Record<PendingRequest['kind'], string> = {
   connect: 'Connection request',
   signature: 'Signature request',
   transaction: 'Transaction request',
+  'tezos-operation': 'Unsupported request',
 };
 
 const CONFIRM_LABEL: Record<PendingRequest['kind'], string> = {
   connect: 'Connect',
   signature: 'Sign',
   transaction: 'Approve',
+  // Never rendered: `canApprove` below hides the approve button for this kind.
+  'tezos-operation': 'Approve',
 };
+
+/**
+ * A native Michelson `operation_request` reaches the approval queue only from the
+ * extension's Beacon transport, which this shell does not have — the mobile
+ * surface speaks WalletConnect and EIP-1193. So the kind exists in the shared
+ * union but cannot arise here.
+ *
+ * FAIL CLOSED rather than assume that. If one ever did arrive — a future mobile
+ * Beacon transport, or a core change that routes one here — the screen must not
+ * offer an approve button for an operation it cannot describe. Approving what the
+ * screen did not show is the one outcome worth designing against.
+ */
+function canApprove(kind: PendingRequest['kind']): boolean {
+  return kind !== 'tezos-operation';
+}
 
 function Body({
   req,
@@ -177,6 +199,30 @@ function Body({
         <Text style={[styles.kicker, styles.kickerSpaced]}>Message</Text>
         <View style={styles.messageCard}>
           <Text style={styles.messageText}>{req.decoded ?? req.message}</Text>
+        </View>
+      </>
+    );
+  }
+
+  if (req.kind === 'tezos-operation') {
+    // Reachable only if a future transport routes a Beacon operation here. Names
+    // what it is and refuses, rather than rendering EVM fields for a Michelson
+    // operation — which is what the elimination-narrowing below used to do.
+    return (
+      <>
+        <Text style={styles.kicker}>Requesting</Text>
+        <Text style={styles.headline}>Tezos operation</Text>
+        <RiskBand
+          level="med"
+          title="Not supported on mobile"
+          detail="This is a native Michelson operation, which only the browser extension can sign. Reject it here."
+        />
+        <View style={styles.card}>
+          <Line label="Destination" value={<Text style={styles.mono}>{shortAddr(req.destination, 8)}</Text>} />
+          <View style={styles.divider} />
+          <Line label="Entrypoint" value={req.entrypoint ?? '—'} />
+          <View style={styles.divider} />
+          <Line label="Amount" value={`${req.amount} mutez`} />
         </View>
       </>
     );
