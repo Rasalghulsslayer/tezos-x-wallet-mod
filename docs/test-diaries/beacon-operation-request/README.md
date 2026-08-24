@@ -1,15 +1,17 @@
 # Test diary — Beacon `operation_request`, milestone 2
 
 **Branch:** `feat/beacon-wallet-provider` · **Date:** 2026-08-24 · **Scope:** milestone 2 only
-**Gates:** tsc 0 across relayer + relayer/ext + core + wallet · eslint 0 errors (10 pre-existing warnings, unchanged) · vitest **750 passing across 75 files** (587 / 61 after milestone 1, **+163 / +14**) · `npm run build:wallet` ✓ · eager per-page cost 5.1 kB
-**Live run, 2026-08-24: ALL THREE PROBE RUNGS SIGNED AND INJECTED, VERIFIED ON CHAIN.** Four
-operations through the dApp's own Beacon probe (`/beacon-probe`, ceremony engine out of the path),
-every one `applied`, every one with the dApp's pin honoured **to the mutez**. Rung 3 carried real
-Micheline to a KT1 and minted a real `ctr` child whose storage holds exactly the addresses that were
-signed — so the parameter path is proven from Beacon frame through to contract state, not merely
-from unit tests. See §2/10-20. Rung 2 proved nothing it was built to prove, for a reason worth
-reading (§2/14-15). The 23-op ceremony remains untested, and so does any payload large enough to
-truncate the preview or chunk the transport (§8).
+**Gates:** tsc 0 across relayer + relayer/ext + core + wallet + mobile · eslint 0 errors (10 pre-existing warnings, unchanged) · vitest **750 passing across 75 files** (587 / 61 after milestone 1, **+163 / +14**) · `npm run build:wallet` ✓ · eager per-page cost 5.1 kB
+**Live run, 2026-08-24: THE FULL NATIVE CEREMONY RAN OVER THIS PROVIDER. 25 OPERATIONS, 25
+APPLIED, ZERO FAILURES.** Levels 583133-583189, 4 min 18 s, counter 6 → 31 exactly — no reveal, no
+retry, no stray operation. Six per-role originator calls minting six children, six `%call_evm`
+deploys **declaring gas at this chain's hard limit exactly**, six `setAdmin` rotations on precisely
+those six children, and seven wire writes. 3.272932 ꜩ spent. Every operation carried a complete
+three-knob pin and every pin was honoured verbatim. See §2/21-27.
+
+Preceded by the three probe rungs (§2/10-20), which are what made the ceremony worth attempting:
+rung 3 proved a parameter reaches contract state, and rung 2 proved nothing it was built to prove,
+for a reason worth reading (§2/14-15).
 **Predecessor:** `../beacon-wallet-provider/README.md` (milestone 1, connect — live-confirmed 2026-08-24).
 
 ---
@@ -81,6 +83,13 @@ it is a fee that no longer covers its own gas.
 | 18 | **THE PIN HELD ON A CONTRACT CALL TOO, AND THE OPERATOR'S CEILING BOUNDED THE REAL SPEND.** Declared `fee 30000 / gas 6100 / storage 1428`; chain recorded `fee: 30000` exactly (third confirmation). Consumption: 1 698.308 milligas outer + 2 337.936 internal = **4 037 gas units** of the 6 100 declared. Storage: 92 bytes outer + 879 internal + **257 for the contract allocation** = **1 228 bytes** of the 1 428 declared. Balance 39 938 694 → 39 907 466 = **−31 228** = 30 000 + 1 228, against the **31 428** ceiling the approval screen states. Ceiling ≥ actual, with 200 mutez of headroom. | `origination_size: 257`, `cost_per_byte: 1` from `context/constants`. **My own prediction was 257 short** — I forecast −30 971 from the two `paid_storage_size_diff` figures and forgot the fixed allocation burn. `maxOpCostMutez` needs no change: the allocation is charged against the storage *limit*, so `amount + fee + storageLimit × cost_per_byte` already contains it. The formula was right where the hand-prediction was not. |
 | 19 | **RUNG 3'S PAYLOAD IS 5.5× SMALLER THAN ITS OWN LABEL CLAIMS, so "large Micheline" is still untested.** The rung is labelled *"Pair `<issuance_id>` `<ctr birth storage>` (1,336 B)"*. Measured on the wire: the parameter value is **242 characters** of compact JSON (275 including the entrypoint), and the whole operation forges to **230 bytes** unsigned, **294** with a signature. Nothing here approached the preview's 512-character truncation threshold, a multi-chunk Beacon frame, or the ~2.5 kB op the dApp's fee notes discuss. | Value re-serialised from the node's record; forged size measured by running `localForger.forge` over the block's own `branch` + `contents`. Consequence in §8. |
 | 20 | **The fee the ceremony pins is ~19× this chain's floor.** For rung 3: `100 + 4 × 294 + 0.045 × 6100` = **1 551 mutez** required, 30 000 paid. Not a defect and not this wallet's call — the dApp priced it and the operator approved it — but it means the pin's *safety margin*, not its accuracy, is what the three live rungs have demonstrated. A pin that is 19× the floor would survive a good deal of forging drift, so these rungs do **not** show that a tightly-priced pin survives. | Measured 1 + Measured 19, using the signed size. |
+| 21 | **THE 25-OPERATION CEREMONY RAN END TO END OVER THIS PROVIDER.** Levels 583133 → 583189, `applied` 25/25, counter 6 → 31 — exactly 25 increments, so no reveal was prepended, nothing was retried and nothing else was signed. Phase 1: six originator calls (`default`, params 206-576 chars, fees 30 000 ×5 and 60 000). Phase 2: six `%call_evm` to `KT18oDJJ…`. Phase 3: six `setAdmin`. Phase 4: seven `%call_evm`. | TzKT `/v1/operations/transactions?sender=<tz1>&level.gt=582767`, plus `contracts/<tz1>/counter` via `head`. Note the count is **25**, not the 23 the brief describes. |
+| 22 | **A LARGE PAYLOAD IS NOW PROVEN, AND IT IS ~66× RUNG 3's.** The phase-2 deploys carry Micheline of 23 151 / 25 263 / 27 055 / 28 911 / 31 983 / **38 703** characters. The dApp's own forge measurement puts the deploy op at **19 543 bytes** including signature (`native-op-params.test.ts:43`) against rung 3's 294. So the whole route — page → content script → service worker → `submitWithLimits` → chain — carries a 38 kB parameter intact, and `summariseMicheline`'s 512-character truncation was exercised on 13 of the 25 operations rather than on none. §8's first NOT-DONE item is retired. | Parameter sizes re-serialised compact from TzKT's `parameter.value`. What is proven is end-to-end integrity, since the gateway executed the initcode and the result was `applied`; whether the Beacon frame was internally chunked is not something these reads can see, so it is not claimed. |
+| 23 | **GAS DECLARED AT THE HARD LIMIT EXACTLY, SIX TIMES, ALL INCLUDED.** Each phase-2 deploy declares `gasLimit: 660000` — `hard_gas_limit_per_operation` to the unit — with `fee: 500000`, and consumed 52 965-88 956. This is the live confirmation of Measured 4: the guard on a supplied pin had to be `>` and not `>=`, and `checkOperation` would have refused all six had it been `>=`. | Same read. Also settles the reviewer's open question in the other direction: an operation may declare a whole block's gas allowance and still be baked. |
+| 24 | **ALL 25 ARRIVED PINNED, SO THE PINNED BRANCH RAN 25/25 AND THE BUFFERED BRANCH RAN 0/25.** The non-round fees (1 489-5 369 on phases 3-4) are *not* wallet estimates — the dApp computes a complete pin per operation via `priceOp` → `pinFromEstimate`, returning `PinnedOpParams` with all three knobs `readonly`, and logs `"estimated live, because the wallet under-prices this chain"`. `PRICE_LIVE` names *the dApp* doing the estimating, not the wallet (`executor-taquito.ts:1066`). | `executor-taquito.ts:995-1035`, `native-op-params.ts:103-107`. **This corrects an inference drawn from fee shape alone**, which read the varying fees as evidence of the wallet's own buffered path. It confirms §1: the ceremony arrives priced. It also means `removeDefaultParams` stripped nothing — no knob was falsy on the wire, the smallest `storageLimit` being 100. |
+| 25 | **THE SEQUENCE'S INTER-OPERATION STATE HELD.** Phase 1 minted six children as **internal** originations — `KT1VbF5a…`, `KT1BWugX…`, `KT1D8RQc…`, `KT1XgdxV…`, `KT1Hviuu…`, `KT1FaYv5…`, one per originator, all `applied`. Phase 3's six `setAdmin` calls target **exactly those six addresses**, each matched to its minting level. So the wallet did not merely sign 25 independent operations: it signed a dependent chain in which later operations address contracts that earlier ones brought into existence. | `/v1/operations/originations?initiator=<tz1>` cross-referenced against the phase-3 targets. Eleven internal originations in total; the five at levels 583183-583188 are gateway internals sent by `tz1Ke2h7…`, not ceremony children. |
+| 26 | **13 DISTINCT DESTINATIONS, ONLY 12 OF 25 TO THE NAC GATEWAY.** Six originators, six children, one gateway. `sendContractCall`, hardwired to `to: NAC_CONTRACT`, could have expressed 12 of the 25; the generalisation the brief demanded is what carried the other 13. | Same read. The trap named in the brief, measured. |
+| 27 | **Total spend 3.272932 ꜩ**: 3 247 173 µꜩ of `bakerFee` plus 25 759 µꜩ of storage burned (1 µꜩ/byte, including the internal originations' allocation). Balance 39 907 466 → 36 634 534. | `contracts/<tz1>/balance` via `head`, reconciled against the summed per-operation fees. |
 | 5 | No `client.requestOperation` call site exists in the dApp; every operation is Taquito `wallet.transfer`. `BeaconWallet.removeDefaultParams` deletes each knob whose value is falsy **independently per field**, so a supplied knob reaches the wallet intact and an absent one is absent. | dApp `grep` (0 hits for `operationDetails`/`requestOperation` outside comments); `taquito-beacon-wallet.js:211-224`. |
 | 6 | Beacon sends the three knobs as decimal **strings** — Taquito's `createTransferOperation` stringifies them — so they are parsed, and only accepted as a complete finite non-negative set. | `narrowOperationRequest` / `readLimits`, asserted in `session.test.ts`. |
 | 7 | **Two stale comments in the dApp** claim the rotate and `call_evm` paths are "DELEGATED TO THE WALLET, EXPLICITLY". The code above them spreads `...rotatePin` / `...pin`. The code is authoritative; the comments predate the fix. | `executor-taquito.ts:1527-1533` and `:1553-1565` versus `:1522-1540` and `:1066`. Worth a one-line fix in that repo, which is read-only here. |
@@ -262,27 +271,35 @@ eager per-page cost 5.1 kB (unchanged) · lazy chunk 148 kB
 
 ## 8. NOT DONE — stated, not smoothed over
 
-- **No LARGE payload has been signed.** All three rungs are now live (§2/10-20) and the parameter
-  path is proven to contract state — but rung 3, the ladder's own "large Micheline" rung, forged to
-  **294 bytes** and carried a **242-character** value (§2/19). So three things its label implies
-  remain untested: `summariseMicheline`'s 512-character truncation, a Beacon frame large enough to
-  chunk, and anything near the ~2.5 kB operation the dApp's fee notes discuss. The ceremony's phase-2
-  deploy is the real large payload and it declares gas at the hard limit exactly; **nothing here
-  says that one fits through the transport.** The content-script hand-off buffer caps at 32 frames,
-  which is the first place to look if a big request never arrives.
-- **A tightly-priced pin has not been tested.** Every rung paid ~19× this chain's fee floor (§2/20).
-  The pin is demonstrably honoured; what is untested is a pin with little headroom, which is the
-  case where an accurate pass-through actually matters.
-- **The approval screen's cost ceiling was never read back, on any rung.** The predicted figures were
-  20 101 mutez for rungs 1-2 and 31 428 for rung 3. The chain confirms actual spend stayed *under*
-  the rung-3 ceiling (31 228 ≤ 31 428, §2/18), which is the property that matters — but the displayed
-  number itself is a UI fact no chain read can reach, so §3/M2's fix is still unobserved. Same for
-  the Micheline preview block and the `%default` entrypoint row: nobody has confirmed they render.
+- **THE UNPINNED BRANCH HAS NEVER RUN LIVE.** The ceremony arrived pinned 25 times out of 25
+  (§2/24), so `transferWithBufferedFees` on the Beacon path is still argued from unit tests only —
+  as is `checkOperation`'s `limits == null` acceptance. This is the mirror image of what was
+  expected: the branch thought to be the default is the one with no live history. Any dApp that
+  omits a knob, or supplies a falsy one for `removeDefaultParams` to strip, lands there.
+- **A tightly-priced pin has not been tested.** The narrowest margin across all 29 live operations
+  was ~1.45× this chain's floor (phase-3 `setAdmin`); the probe rungs paid ~19× (§2/20) and the
+  phase-2 deploys ~7.6×. Honouring a generous pin is easier than honouring a tight one, and the
+  dApp's own notes record a pin that was 964 µꜩ short and would have been refused at the
+  prevalidator. Nothing here says the pass-through is exact enough for that case.
+- **Not one approval screen has been read back, across 29 signed operations.** Predicted ceilings
+  were 20 101 µꜩ (rungs 1-2) and 31 428 (rung 3); the chain confirms rung 3's spend stayed under it
+  (31 228 ≤ 31 428, §2/18), which is the property that matters. But every figure the operator
+  actually SEES — the ceiling, the `%default` entrypoint row, the truncated Micheline block, the
+  purple Michelson badge — is a UI fact no chain read reaches. §3/M2's fix remains unobserved, and
+  13 truncated previews were rendered without anyone confirming what they looked like.
 - **My rung-3 spend prediction was 257 mutez short** — the fixed `origination_size` allocation burn,
-  omitted from the forecast though not from the code (§2/18). Recorded because the forecast was the
-  falsifiable part of the exercise, and it failed while the code did not.
-- **The 23-op ceremony is untested end to end.** Each op kind is covered in isolation; the sequence,
-  its inter-op state, and the recovery paths are not.
+  omitted from the forecast though not from the code (§2/18). And an inference from fee shape alone
+  read the ceremony's phases 3-4 as unpinned; reading the dApp's source corrected it (§2/24). Both
+  recorded because the forecast was the falsifiable half of the exercise.
+- **Auto-lock was not exercised, it was merely outrun.** The whole ceremony took 4 min 18 s against
+  an `AUTO_LOCK_IDLE_MS` of 5 min, so the hazard never had time to fire. Nothing was learned about
+  it. A run with one 5-minute pause — a phone call, a screen lock, an operator reading a 38 kB
+  parameter carefully — still meets `queue.rejectAll()` mid-ceremony, and still presents
+  indistinguishably from a user rejection. **This is now the largest untested risk in the path**,
+  precisely because the successful run says nothing about it.
+- **The recovery paths are still untested.** 25/25 applied means no operation was rejected, aborted,
+  re-priced or resumed. Every failure branch — `confirmApplied` on a failed `setAdmin`, a mid-run
+  reject, a spent issuance id — is unobserved.
 - **`AUTO-LOCK IS STILL A CEREMONY HAZARD` and is still not addressed.** `AUTO_LOCK_IDLE_MS` is 5
   minutes and only `trusted-ui` traffic defers it; `autoLock` calls `queue.rejectAll()`. Approving
   each op does defer the deadline, so the common path survives — but any step that keeps the operator
