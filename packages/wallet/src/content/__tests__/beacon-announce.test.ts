@@ -99,7 +99,6 @@ describe('beacon-announce — the synchronous half', () => {
     await loadAnnounce(env);
     send(env, { target: TO_EXTENSION, payload: 'ping' });
 
-    expect(env.posted).toHaveLength(1);
     const frame = env.posted[0].data as Record<string, unknown>;
     // `listenForExtensions` reads event.data.payload and event.data.sender.
     expect(frame.payload).toBe('pong');
@@ -125,17 +124,65 @@ describe('beacon-announce — the synchronous half', () => {
     // makes the modal say something other than the name the user was told.
     await loadAnnounce(env);
     send(env, { target: TO_EXTENSION, payload: 'ping' });
-    const sender = (env.posted[0].data as { sender: Record<string, unknown> }).sender;
-    expect('shortName' in sender).toBe(false);
-    expect(sender.name).toBe('TezosX Wallet');
+    for (const { data } of env.posted) {
+      const sender = (data as { sender: Record<string, unknown> }).sender;
+      expect('shortName' in sender).toBe(false);
+      expect(sender.name).toBe('TezosX Wallet');
+    }
   });
 
   it('answers the ping without needing the SDK half', async () => {
     // No hand-off consumer installed, nothing imported: still pongs.
     await loadAnnounce(env);
     send(env, { target: TO_EXTENSION, payload: 'ping' });
-    expect(env.posted).toHaveLength(1);
+    expect(env.posted.length).toBeGreaterThan(0);
     expect(env.win[BEACON_HANDOFF_KEY]?.buffered).toHaveLength(0);
+  });
+
+  // ── The beacon-ui `types.length` workaround ────────────────────────────────
+  //
+  // beacon-ui only opens the wallet detail panel — hence the only button that
+  // posts a pairing request — when the merged entry has more than one `type`.
+  // An unregistered extension yields exactly one, so it is unselectable: proven
+  // live on 2026-08-24, where the wallet was listed and clicking it did nothing
+  // while Temple (extension + web in the registry, so two types) opened fine.
+  describe('discovery answers', () => {
+    it('sends TWO, so the merged entry clears beacon-ui\'s types.length guard', async () => {
+      await loadAnnounce(env);
+      send(env, { target: TO_EXTENSION, payload: 'ping' });
+      expect(env.posted).toHaveLength(2);
+    });
+
+    it('announces the REAL extension id first', async () => {
+      // beacon-ui merges by name and keeps the FIRST entry's `id`, then stamps
+      // it as `targetId` on the pairing request. Announce the phantom first and
+      // every pairing request goes to an id `classifyPageFrame` will drop.
+      await loadAnnounce(env);
+      send(env, { target: TO_EXTENSION, payload: 'ping' });
+      const ids = env.posted.map((p) => (p.data as { sender: { id: string } }).sender.id);
+      expect(ids[0]).toBe(EXTENSION_ID);
+      expect(ids[1]).not.toBe(EXTENSION_ID);
+      expect(ids[1].startsWith(EXTENSION_ID)).toBe(true);
+    });
+
+    it('gives both the SAME name, which is what makes beacon-ui merge them', async () => {
+      // Different names would show as two separate wallets in the modal.
+      await loadAnnounce(env);
+      send(env, { target: TO_EXTENSION, payload: 'ping' });
+      const names = env.posted.map((p) => (p.data as { sender: { name: string } }).sender.name);
+      expect(names).toEqual([BEACON_WALLET_NAME, BEACON_WALLET_NAME]);
+    });
+
+    it('keeps every answer a well-formed flat pong', async () => {
+      await loadAnnounce(env);
+      send(env, { target: TO_EXTENSION, payload: 'ping' });
+      for (const { data } of env.posted) {
+        const frame = data as Record<string, unknown>;
+        expect(frame.payload).toBe('pong');
+        expect(frame.target).toBe(TO_PAGE);
+        expect('message' in frame).toBe(false);
+      }
+    });
   });
 
   it('uses the same hand-off key the SDK half reads', async () => {

@@ -68,6 +68,24 @@ describe('classifyPageFrame', () => {
       .toEqual({ kind: 'ignore' });
   });
 
+  it('takes a frame addressed to the derived id the announce half also publishes', () => {
+    // The second discovery answer carries `<id>:beacon-ui-types-workaround`, and
+    // the dApp stamps whichever merged-group id came first. Dropping that would
+    // make pairing fail silently.
+    const derived = `${OUR_ID}:beacon-ui-types-workaround`;
+    expect(classifyPageFrame({ target: 'toExtension', payload: 'p', targetId: derived }, OUR_ID))
+      .toEqual({ kind: 'pairing', payload: 'p' });
+    expect(classifyPageFrame({ target: 'toExtension', encryptedPayload: 'aa', targetId: derived }, OUR_ID))
+      .toEqual({ kind: 'message', encryptedPayload: 'aa' });
+  });
+
+  it('still ignores a targetId that merely CONTAINS our id, or is not a string', () => {
+    for (const targetId of [`x${OUR_ID}`, OTHER_ID, 42, {}, true]) {
+      expect(classifyPageFrame({ target: 'toExtension', payload: 'p', targetId }, OUR_ID), String(targetId))
+        .toEqual({ kind: 'ignore' });
+    }
+  });
+
   it('takes an encrypted message addressed to this extension', () => {
     expect(classifyPageFrame({ target: 'toExtension', encryptedPayload: 'deadbeef', targetId: OUR_ID }, OUR_ID))
       .toEqual({ kind: 'message', encryptedPayload: 'deadbeef' });

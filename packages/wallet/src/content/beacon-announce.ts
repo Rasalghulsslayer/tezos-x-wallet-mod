@@ -69,7 +69,43 @@ const MAX_BUFFERED = 32;
 const handoff: BeaconHandoff = window[HANDOFF] ?? { buffered: [] };
 window[HANDOFF] = handoff;
 
-function postPong(): void {
+/**
+ * ── WORKAROUND for a beacon-ui bug: an extension-only wallet is unselectable ──
+ *
+ * beacon-ui opens the wallet detail panel — the one carrying the "Use Extension"
+ * button that actually posts the pairing request — only from this guard:
+ *
+ *   I = e => !e
+ *         || (e.types.length <= 1 && !e.types.includes("ios") && !e.types.includes("desktop"))
+ *         || (isMobile && e.types.length === 1 && e.types.includes("desktop"))
+ *         || setView(INSTALL)
+ *
+ * `a || b || c || open()`. An unregistered browser extension is mapped to
+ * exactly one list entry with `type: "extension"`, so `types === ['extension']`,
+ * so `b` is true, so `open()` never runs: clicking the wallet selects it and
+ * renders nothing. Temple escapes it only because Beacon's built-in registry
+ * lists Temple as BOTH an extension and a web wallet, and beacon-ui merges
+ * registry entries BY NAME — giving it `types.length === 2`.
+ *
+ * Confirmed live 2026-08-24: the wallet was discovered and listed, and clicking
+ * it collapsed the list with nothing triggered and nothing logged. Temple, in
+ * the same list, opened its panel.
+ *
+ * `types` is built by pushing one entry per discovery answer, merged by name. So
+ * a second answer under the SAME name with a derived id gives the merged entry
+ * two types and the guard passes. The pairing request the panel then posts
+ * carries `targetId = x.id`, taken from the FIRST entry of the merged group, so
+ * the real id must be announced first — it is, immediately below.
+ *
+ * The cost is one phantom row in the dApp's own `getAvailableExtensions()` list
+ * (the modal still shows a single tile, because the two are merged by name).
+ *
+ * ⚠️ DELETE THIS when beacon-ui stops gating the panel on `types.length`. It is
+ * one `postMessage` and its test; nothing else depends on it.
+ */
+const COMPAT_ID_SUFFIX = ':beacon-ui-types-workaround';
+
+function announce(id: string): void {
   window.postMessage(
     {
       target:  TO_PAGE,
@@ -84,13 +120,21 @@ function postPong(): void {
       // — and a user looking for the name they were told cannot find a
       // different one.
       sender:  {
-        id:      chrome.runtime.id,
+        id,
         name:    WALLET_NAME,
         iconUrl: WALLET_ICON,
       },
     },
     window.location.origin || '*',
   );
+}
+
+function postPong(): void {
+  // Real id FIRST: it becomes the merged group's `id`, which is what the panel
+  // stamps as `targetId` on the pairing request, and what `classifyPageFrame`
+  // matches against `chrome.runtime.id`.
+  announce(chrome.runtime.id);
+  announce(chrome.runtime.id + COMPAT_ID_SUFFIX);
 }
 
 window.addEventListener('message', (event: MessageEvent) => {

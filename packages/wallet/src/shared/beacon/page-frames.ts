@@ -91,7 +91,18 @@ export function classifyPageFrame(data: unknown, extensionId: string): InboundFr
 
   if (frame.payload === 'ping') return { kind: 'ping' };
 
-  if (frame.targetId != null && frame.targetId !== extensionId) return IGNORE;
+  // `targetId` may be this extension's id, or that id plus a suffix: the
+  // announce half publishes a second discovery answer under a derived id to
+  // clear beacon-ui's `types.length` guard (see `content/beacon-announce.ts`),
+  // and the dApp stamps whichever of the merged group's ids came first. Real ids
+  // are fixed-length, so nothing but this extension can produce a value that
+  // starts with this extension's id.
+  if (
+    frame.targetId != null &&
+    (typeof frame.targetId !== 'string' || !frame.targetId.startsWith(extensionId))
+  ) {
+    return IGNORE;
+  }
 
   if (typeof frame.encryptedPayload === 'string' && frame.encryptedPayload !== '') {
     return { kind: 'message', encryptedPayload: frame.encryptedPayload };
