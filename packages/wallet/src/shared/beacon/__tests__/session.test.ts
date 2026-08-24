@@ -80,7 +80,10 @@ interface Harness {
 }
 
 /** Boot a session, pair a dApp, and hand back everything needed to talk to it. */
-async function setup(reply: (envelope: BeaconRequest) => WalletResponse | undefined): Promise<Harness> {
+async function setup(
+  reply:   (envelope: BeaconRequest) => WalletResponse | undefined,
+  storage: MemoryBeaconStorage = new MemoryBeaconStorage(),
+): Promise<Harness> {
   const frames: ToPageFrame[] = [];
   const sent:   BeaconRequest[] = [];
 
@@ -88,7 +91,7 @@ async function setup(reply: (envelope: BeaconRequest) => WalletResponse | undefi
     name:         WALLET_NAME,
     postToPage:   (frame) => { frames.push(frame); },
     origin:       ORIGIN,
-    storage:      new MemoryBeaconStorage(),
+    storage,
     newRequestId: () => 'minted-by-the-content-script',
     send:         async (envelope) => { sent.push(envelope); return reply(envelope); },
   });
@@ -366,8 +369,9 @@ describe('startBeaconSession — permission_request over the real Beacon wire', 
       operation: {
         destination: GATEWAY_KT1,
         amount:      '0',
-        entrypoint:  'call_evm',
-        parameters:  { prim: 'Pair', args: [{ string: '0xdead' }] },
+        // Paired at the boundary: the wire's `parameters: {entrypoint, value}`
+        // becomes one field, so a half-supplied pair cannot travel inward.
+        parameter:   { entrypoint: 'call_evm', value: { prim: 'Pair', args: [{ string: '0xdead' }] } },
         // Parsed from Beacon's decimal STRINGS, and only as a complete set.
         limits:      { fee: 5000, gasLimit: 20000, storageLimit: 10000 },
       },
@@ -400,6 +404,57 @@ describe('startBeaconSession — permission_request over the real Beacon wire', 
       operationDetails: [{ ...CEREMONY_OP, gas_limit: undefined }],
     });
     expect((h.sent[0].request as { operation: { limits?: unknown } }).operation.limits).toBeUndefined();
+  });
+
+  it('refuses a HALF-SUPPLIED parameter and relays nothing', async () => {
+    // `{entrypoint}` with no value renders as a contract call and forges as a
+    // plain transfer; `{value}` with no entrypoint is silently dropped. Both are
+    // refused at the boundary, before the operator is asked to confirm anything.
+    for (const [i, parameters] of [
+      { entrypoint: 'setAdmin' },
+      { entrypoint: 'setAdmin', value: null },
+      { value: { prim: 'Unit' } },
+      { entrypoint: 42, value: { prim: 'Unit' } },
+    ].entries()) {
+      const h = await setup(() => GRANTED);
+      await sendPermissionRequest(h);
+      h.sent.length = 0; h.frames.length = 0;
+      const id = await sendOperationRequest(h, {
+        operationDetails: [{ ...CEREMONY_OP, parameters }],
+      }, `half-${i}`);
+
+      expect((await walletReplies(h)).find((r) => r.type === BeaconMessageType.Error),
+        JSON.stringify(parameters))
+        .toMatchObject({ id, errorType: BeaconErrorType.PARAMETERS_INVALID_ERROR });
+      expect(h.sent, JSON.stringify(parameters)).toHaveLength(0);
+    }
+  });
+
+  it('relays a plain transfer with no parameter at all', async () => {
+    const h = await setup((env) =>
+      env.request.kind === 'operation' ? { ok: true, data: { opHash: 'oo' } } : GRANTED);
+    await sendPermissionRequest(h);
+    h.sent.length = 0;
+    await sendOperationRequest(h, {
+      operationDetails: [{ kind: 'transaction', amount: '1000', destination: TZ1,
+        fee: '3000', gas_limit: '10000', storage_limit: '0' }],
+    }, 'transfer-1');
+
+    expect((h.sent[0].request as { operation: { parameter?: unknown } }).operation.parameter)
+      .toBeUndefined();
+  });
+
+  it('seeds its OWN app-metadata record at pair time', async () => {
+    // operation_request is the first path that READS beacon:app-metadata-list, and
+    // the SDK throws `AppMetadata not found` from an un-awaited call when it is
+    // missing — which answers nothing at all. Seeding it means the operation path
+    // depends on a record the wallet owns, not on page-supplied data another origin
+    // can push out of an extension-global list.
+    const storage = new MemoryBeaconStorage();
+    await setup(() => GRANTED, storage);   // setup() pairs a dApp
+    const list = await storage.get(StorageKey.APP_METADATA_LIST);
+    expect(list.length).toBeGreaterThan(0);
+    expect(list.some((m) => typeof m.senderId === 'string' && m.senderId.length > 0)).toBe(true);
   });
 
   it('refuses a BATCH with TOO_MANY_OPERATIONS and relays nothing', async () => {

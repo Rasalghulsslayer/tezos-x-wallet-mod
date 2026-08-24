@@ -726,23 +726,22 @@ async function requestApproval(
 /**
  * Route a Beacon request to its handler.
  *
- * The two guards every Beacon request shares live here: an unlocked vault, and a
- * tz1-source account. A Beacon dApp asks for a Tezos address and signs Michelson;
- * an EVM-source account has neither, so this refuses rather than inventing one.
+ * Only ONE guard is shared: an unlocked vault. The active account's KIND is
+ * deliberately NOT checked here.
+ *
+ * It used to be, and that was a bug. `handleBeaconOperation` never reads the
+ * active account — it signs with `session.accountId`, the account the grant was
+ * given for, and already fails closed on that account's own kind. So a shared
+ * check only produced a FALSE refusal: adding an EVM account activates it
+ * (`AddAccount` sends SET_ACTIVE_ACCOUNT unconditionally), which would then
+ * refuse every operation for every live Beacon session — and the refusal's advice
+ * to "connect again" would re-point the session to a different account, the exact
+ * thing binding a session to its account exists to prevent.
  */
 async function handleBeaconRequest(msg: BeaconRequest, deps: SwDeps): Promise<WalletResponse> {
   const unlocked = deps.keyring.getUnlocked();
   if (unlocked == null) {
     return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
-  }
-  if (unlocked.account.kind !== 'tezos') {
-    return {
-      ok:      false,
-      code:    BEACON_NO_ADDRESS,
-      message:
-        'The active account is an EVM (0x) account. A Beacon dApp needs a Tezos ' +
-        'account — switch to a tz1 account in the wallet and connect again.',
-    };
   }
 
   return msg.request.kind === 'permission'
@@ -769,9 +768,23 @@ async function handleBeaconRequest(msg: BeaconRequest, deps: SwDeps): Promise<Wa
 async function handleBeaconPermission(
   msg:     BeaconRequest,
   request: BeaconPermissionRequest,
-  account: Extract<Account, { kind: 'tezos' }>,
+  active:  Account,
   deps:    SwDeps,
 ): Promise<WalletResponse> {
+  // Connecting is the ONE Beacon request that legitimately depends on the active
+  // account: it is the account being offered. A Beacon dApp asks for a Tezos
+  // address and its public key, which an EVM-source account does not have.
+  if (active.kind !== 'tezos') {
+    return {
+      ok:      false,
+      code:    BEACON_NO_ADDRESS,
+      message:
+        'The active account is an EVM (0x) account. A Beacon dApp needs a Tezos ' +
+        'account — switch to a tz1 account in the wallet and connect again.',
+    };
+  }
+  const account = active;
+
   const verdict = checkRequestedNetwork(request.network);
   if (!verdict.ok) {
     return { ok: false, code: BEACON_NETWORK_NOT_SUPPORTED, message: verdict.reason };
@@ -877,10 +890,10 @@ async function handleBeaconOperation(
     createdAt:         Date.now(),
     destination:       op.destination,
     amount:            op.amount,
-    entrypoint:        op.entrypoint,
-    parametersPreview: op.parameters === undefined ? undefined : summariseMicheline(op.parameters),
+    entrypoint:        op.parameter?.entrypoint,
+    parametersPreview: op.parameter == null ? undefined : summariseMicheline(op.parameter.value),
     limits:            op.limits,
-    maxCostMutez:      op.limits == null ? undefined : String(maxOpCostMutez(op.limits)),
+    maxCostMutez:      op.limits == null ? undefined : String(maxOpCostMutez(op.limits, op.amount)),
   }, deps);
   if (outcome.kind === 'refused') return outcome.response;
   if (outcome.decision === 'reject') {
@@ -917,11 +930,10 @@ async function handleBeaconOperation(
 
   try {
     const opHash = await signer.sendOperation({
-      to:           op.destination,
-      mutezAmount:  op.amount,
-      entrypoint:   op.entrypoint,
-      michelineArg: op.parameters,
-      limits:       op.limits,
+      to:          op.destination,
+      mutezAmount: op.amount,
+      parameter:   op.parameter,
+      limits:      op.limits,
     });
     return { ok: true, data: { opHash } };
   } catch (err) {

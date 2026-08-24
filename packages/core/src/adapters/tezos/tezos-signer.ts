@@ -49,6 +49,7 @@ import {
   HARD_STORAGE_LIMIT_PER_OPERATION,
   type OperationToSend,
   type OpLimits,
+  type OpParameter,
 } from '../../domain/tezos-operation';
 import type { TezosAccount } from '../../domain/account';
 import { devLog } from '../../shared/log';
@@ -166,19 +167,18 @@ export class TezosSigner implements TezosSignerPort {
    * transfer, which Taquito expresses by omitting `parameter` entirely.
    */
   private buildParams(op: {
-    to:            string;
-    mutezAmount:   string;
-    entrypoint?:   string;
-    michelineArg?: MichelsonV1Expression;
+    to:          string;
+    mutezAmount: string;
+    parameter?:  OpParameter;
   }): TransferParams {
     const params: TransferParams = {
       to:     op.to,
       amount: Number(op.mutezAmount),
       mutez:  true,
     };
-    if (op.entrypoint != null && op.michelineArg !== undefined) {
-      params.parameter = { entrypoint: op.entrypoint, value: op.michelineArg };
-    }
+    // Paired by construction (`OpParameter`), so there is no half-state to
+    // reconcile here: either a contract call or a plain transfer.
+    if (op.parameter != null) params.parameter = op.parameter;
     return params;
   }
 
@@ -244,7 +244,7 @@ export class TezosSigner implements TezosSignerPort {
     } catch (err) {
       const e = err as { errors?: unknown[]; message?: string; name?: string };
       console.error('[TezosX Wallet] operation failed',
-        { to: op.to, entrypoint: op.entrypoint, pinned: op.limits != null,
+        { to: op.to, entrypoint: op.parameter?.entrypoint, pinned: op.limits != null,
           name: e.name, message: e.message, errors: e.errors });
       throw err;
     }
@@ -265,7 +265,9 @@ export class TezosSigner implements TezosSignerPort {
     michelineArg: MichelsonV1Expression,
     mutezAmount = '0',
   ): Promise<string> {
-    const params = this.buildParams({ to: NAC_CONTRACT, mutezAmount, entrypoint, michelineArg });
+    const params = this.buildParams({
+      to: NAC_CONTRACT, mutezAmount, parameter: { entrypoint, value: michelineArg },
+    });
 
     try {
       const hash = await this.transferWithBufferedFees(params);

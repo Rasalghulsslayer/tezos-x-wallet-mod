@@ -54,7 +54,7 @@ import { dispatch, type SwDeps } from '@tezosx/wallet-core/composition/sw-wiring
 import type { BeaconRequest, PendingRequest } from '@tezosx/wallet-core/shared/messages';
 import type { BeaconPermissionGrant } from '@tezosx/wallet-core/domain/beacon';
 import type { VaultStore, EncryptedVault } from '@tezosx/wallet-core/ports/vault-store';
-import type { SessionStore, StoredSession } from '@tezosx/wallet-core/ports/session-store';
+import { sessionIdentity, type SessionStore, type StoredSession } from '@tezosx/wallet-core/ports/session-store';
 import type { TokenStore } from '@tezosx/wallet-core/ports/token-store';
 import type { ContactStore } from '@tezosx/wallet-core/ports/contact-store';
 import type { AliasStore } from '@tezosx/wallet-core/ports/alias-store';
@@ -79,8 +79,13 @@ class MemoryVault implements VaultStore {
 class MemorySessions implements SessionStore {
   private map = new Map<string, StoredSession>();
   async list() { return Array.from(this.map.values()); }
-  async upsert(s: StoredSession) { this.map.set(s.origin, s); }
-  async remove(origin: string) { this.map.delete(origin); }
+  // Keyed by `sessionIdentity`, matching the real adapters: one origin may hold an
+  // EIP-1193 and a Beacon session at once, and a double that keys on origin alone
+  // makes the correct coexistence test read RED.
+  async upsert(s: StoredSession) { this.map.set(sessionIdentity(s), s); }
+  async remove(origin: string) {
+    for (const [key, s] of this.map) if (s.origin === origin) this.map.delete(key);
+  }
   async clear() { this.map.clear(); }
 }
 class MemoryTokens implements TokenStore {
@@ -184,8 +189,8 @@ async function dispatchAndDecideOp(
       kind: 'operation',
       operation: {
         destination: 'KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw',
-        amount: '0', entrypoint: 'call_evm',
-        parameters: { prim: 'Pair', args: [{ string: '0xdead' }] },
+        amount: '0',
+        parameter: { entrypoint: 'call_evm', value: { prim: 'Pair', args: [{ string: '0xdead' }] } },
         limits: { fee: 5000, gasLimit: 20_000, storageLimit: 10_000 },
       },
     },
@@ -378,6 +383,44 @@ describe('sw-wiring — Beacon permission_request', () => {
 
   // ── Structural refusals shared with the EIP-1193 surface ────────────────────
 
+  it('coexists with an EIP-1193 session for the SAME origin', async () => {
+    // Sessions are identified by origin PLUS protocol. Keyed on origin alone, the
+    // second connect silently revoked the first — and this dApp connects over both
+    // surfaces. This test could not be written until the store double was fixed to
+    // match the real adapters.
+    const accountId = h.keyring.getUnlocked()!.account.id;
+    await h.deps.persistentPorts.sessionStore.upsert({
+      origin: ORIGIN, accountId, tz1Address: '',
+      evmAlias: '0x' + '11'.repeat(20), chainId: '0x1f440', connectedAt: 1,
+    });
+    await dispatchAndDecide(h.deps, 'approve');   // the Beacon grant
+
+    const sessions = await h.deps.persistentPorts.sessionStore.list();
+    expect(sessions).toHaveLength(2);
+    expect(sessions.filter((s) => s.protocol === 'beacon')).toHaveLength(1);
+    expect(sessions.filter((s) => s.protocol == null)).toHaveLength(1);
+
+    // Each still gates only its own surface.
+    const accounts = await dispatch(
+      { type: 'ETHEREUM_REQUEST', origin: ORIGIN, requestId: 'eth-c', args: { method: 'eth_accounts' } },
+      contentSender, h.deps);
+    expect(accounts.ok && accounts.data).toEqual(['0x' + '11'.repeat(20)]);
+  });
+
+  it('Disconnect revokes BOTH protocols for the origin', async () => {
+    const accountId = h.keyring.getUnlocked()!.account.id;
+    await h.deps.persistentPorts.sessionStore.upsert({
+      origin: ORIGIN, accountId, tz1Address: '',
+      evmAlias: '0x' + '11'.repeat(20), chainId: '0x1f440', connectedAt: 1,
+    });
+    await dispatchAndDecide(h.deps, 'approve');
+    expect(await h.deps.persistentPorts.sessionStore.list()).toHaveLength(2);
+
+    await dispatch({ type: 'DISCONNECT', origin: ORIGIN }, trustedUiSender, h.deps);
+    // Disconnect revokes the SITE, not one of the two ways it connected.
+    expect(await h.deps.persistentPorts.sessionStore.list()).toHaveLength(0);
+  });
+
   it('refuses a duplicate request id (-32602)', async () => {
     const msg = permissionRequest();
     const first = dispatch(msg, contentSender, h.deps);
@@ -435,11 +478,11 @@ describe('sw-wiring — Beacon permission_request', () => {
 
   /** The pinned `%call_evm` shape the live ceremony sends. */
   const GATEWAY_KT1 = 'KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw';
+  const PARAM = { prim: 'Pair', args: [{ string: '0xdead' }] };
   const OP = {
     destination: GATEWAY_KT1,
     amount:      '0',
-    entrypoint:  'call_evm',
-    parameters:  { prim: 'Pair', args: [{ string: '0xdead' }] },
+    parameter:   { entrypoint: 'call_evm', value: PARAM },
     limits:      { fee: 5000, gasLimit: 20_000, storageLimit: 10_000 },
   };
 
@@ -489,7 +532,9 @@ describe('sw-wiring — Beacon permission_request', () => {
         { ...OP, destination: 'not-an-address' },
         { ...OP, amount: '1.5' },
         { ...OP, amount: '-1' },
-        { ...OP, entrypoint: 'has spaces' },
+        { ...OP, parameter: { entrypoint: 'has spaces', value: PARAM } },
+        // The half-pair: renders as a contract call, forges as a plain transfer.
+        { ...OP, parameter: { entrypoint: 'setAdmin', value: null as never } },
         { ...OP, limits: { fee: 5000, gasLimit: 660_001, storageLimit: 10 } },
         { ...OP, limits: { fee: 5000, gasLimit: 10, storageLimit: 60_001 } },
         { ...OP, limits: { fee: -1, gasLimit: 10, storageLimit: 10 } },
@@ -570,11 +615,10 @@ describe('sw-wiring — Beacon permission_request', () => {
       // The pin reaches the signer unchanged. Re-estimating one knob of a supplied
       // pin breaks the other two through this chain's fee floor.
       expect(signerCalls[0]).toEqual({
-        to:           GATEWAY_KT1,
-        mutezAmount:  '0',
-        entrypoint:   'call_evm',
-        michelineArg: OP.parameters,
-        limits:       OP.limits,
+        to:          GATEWAY_KT1,
+        mutezAmount: '0',
+        parameter:   OP.parameter,
+        limits:      OP.limits,
       });
     });
 
@@ -621,6 +665,85 @@ describe('sw-wiring — Beacon permission_request', () => {
 
       for (let i = 0; i < MAX_PENDING_PER_ORIGIN; i++) h.deps.approvalQueue.resolve(`op-flood-${i}`, 'reject');
       await Promise.all(inflight);
+    });
+
+    // ── the coverage gaps the reviewer pass named ───────────────────────────
+
+    it('KEEPS WORKING after the user activates an EVM account', async () => {
+      // The shared tz1 guard used to sit on this path. Adding an EVM account
+      // activates it (AddAccount sends SET_ACTIVE_ACCOUNT unconditionally), which
+      // refused every operation for every live Beacon session — and told the user
+      // to reconnect, which would have re-pointed the session to another account.
+      await connect(h.deps);
+      const granted = h.keyring.getUnlocked()!.account.id;
+
+      const added = await dispatch(
+        { type: 'ADD_ACCOUNT', kind: 'evm', source: { source: 'fresh' } }, trustedUiSender, h.deps);
+      expect(added.ok).toBe(true);
+      const evmId = (added.ok ? added.data as { accountId: string } : null)!.accountId;
+      await dispatch({ type: 'SET_ACTIVE_ACCOUNT', accountId: evmId }, trustedUiSender, h.deps);
+      expect(h.keyring.getUnlocked()!.account.kind).toBe('evm');
+
+      const res = await dispatchAndDecideOp(h.deps, 'approve');
+      expect(res.ok).toBe(true);
+      expect(builtForAccountId).toBe(granted);
+    });
+
+    it('still refuses to CONNECT while an EVM account is active', async () => {
+      // The guard is right for the permission path — that account is the one being
+      // offered — and moving it must not have removed it.
+      const added = await dispatch(
+        { type: 'ADD_ACCOUNT', kind: 'evm', source: { source: 'fresh' } }, trustedUiSender, h.deps);
+      const evmId = (added.ok ? added.data as { accountId: string } : null)!.accountId;
+      await dispatch({ type: 'SET_ACTIVE_ACCOUNT', accountId: evmId }, trustedUiSender, h.deps);
+
+      const res = await dispatch(permissionRequest(), contentSender, h.deps);
+      expect(res.ok).toBe(false);
+      if (res.ok) throw new Error('unreachable');
+      expect(res.code).toBe(5002);
+    });
+
+    it('states a ceiling that INCLUDES the transferred amount', async () => {
+      // Every ceremony op is amount 0, which is exactly why omitting the amount
+      // from the one bold money figure was invisible.
+      await connect(h.deps);
+      const msg = operationRequest({
+        requestId: 'valued-1',
+        request: { kind: 'operation', operation: {
+          destination: GATEWAY_KT1, amount: '5000000',
+          limits: { fee: 3000, gasLimit: 10_000, storageLimit: 1_000 },
+        } },
+      });
+      const inflight = dispatch(msg, contentSender, h.deps);
+      await vi.waitFor(() => expect(h.deps.approvalQueue.get(msg.requestId)).toBeDefined());
+
+      const pending = h.deps.approvalQueue.get(msg.requestId) as Extract<PendingRequest, { kind: 'tezos-operation' }>;
+      expect(pending.maxCostMutez).toBe(String(5_000_000 + 3_000 + 1_000));
+
+      h.deps.approvalQueue.resolve(msg.requestId, 'reject');
+      await inflight;
+    });
+
+    it('signs a plain transfer with NO parameter at all', async () => {
+      await connect(h.deps);
+      const msg = operationRequest({
+        requestId: 'transfer-1',
+        request: { kind: 'operation', operation: {
+          destination: 'tz1VSUr8wwNhLAzempoch5d6hLRiTh8Cjcjb', amount: '1000',
+          limits: { fee: 3000, gasLimit: 10_000, storageLimit: 0 },
+        } },
+      });
+      const inflight = dispatch(msg, contentSender, h.deps);
+      await vi.waitFor(() => expect(h.deps.approvalQueue.get(msg.requestId)).toBeDefined());
+      h.deps.approvalQueue.resolve(msg.requestId, 'approve');
+      await inflight;
+
+      expect(signerCalls[0]).toEqual({
+        to: 'tz1VSUr8wwNhLAzempoch5d6hLRiTh8Cjcjb',
+        mutezAmount: '1000',
+        parameter: undefined,
+        limits: { fee: 3000, gasLimit: 10_000, storageLimit: 0 },
+      });
     });
 
     it('clears the guard for an unrecognized sender before anything else', async () => {

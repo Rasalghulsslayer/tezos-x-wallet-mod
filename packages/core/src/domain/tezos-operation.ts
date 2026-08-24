@@ -31,16 +31,31 @@ export interface OpLimits {
   storageLimit: number;
 }
 
+/**
+ * An entrypoint and its argument, together or not at all.
+ *
+ * ONE field, not two, for the same reason `OpLimits` requires all three: the
+ * halves are meaningless apart. An entrypoint without a value renders as a
+ * contract call and forges as a plain transfer — the approval screen would name
+ * an operation other than the one signed — and a value without an entrypoint is
+ * silently dropped. Two independent optional fields make that representable;
+ * one paired field does not.
+ */
+export interface OpParameter {
+  entrypoint: string;
+  value:      MichelsonV1Expression;
+}
+
 /** One Michelson operation to sign and inject. */
 export interface OperationToSend {
   /** Any destination — a KT1 or a tz1. */
-  to:            string;
+  to:          string;
   /** Decimal mutez string. */
-  mutezAmount:   string;
-  entrypoint?:   string;
-  michelineArg?: MichelsonV1Expression;
+  mutezAmount: string;
+  /** Absent for a plain transfer. */
+  parameter?:  OpParameter;
   /** Present only when the caller priced the operation itself. */
-  limits?:       OpLimits;
+  limits?:     OpLimits;
 }
 
 /**
@@ -62,15 +77,25 @@ export const HARD_STORAGE_LIMIT_PER_OPERATION = 60_000;
 export const COST_PER_BYTE_MUTEZ = 1;
 
 /**
- * The worst case an operator consents to for one pinned operation: the fee
- * charged in full, plus the entire storage allowance burned.
+ * The worst case an operator consents to for one pinned operation, in mutez:
+ * the amount transferred, plus the fee charged in full, plus the entire storage
+ * allowance burned.
  *
- * `gasLimit` is deliberately absent — it is billed by consumption, and its
- * effect on what is actually SPENT is already inside `fee`. A consent figure that
- * can be exceeded is not consent, so this is the ceiling and not an estimate.
+ * THE AMOUNT IS PART OF IT. Leaving it out made the single bold money figure on
+ * the approval screen understate a value-bearing call by the whole transfer — a
+ * 5 XTZ send with a 3 000 µtez fee advertised a 0.004 XTZ ceiling. Every ceremony
+ * operation happens to be `amount: 0`, which is exactly why the omission was
+ * invisible.
+ *
+ * `gasLimit` is deliberately absent — it is billed by consumption, and its effect
+ * on what is actually SPENT is already inside `fee`. A consent figure that can be
+ * exceeded is not consent, so this is the ceiling and not an estimate.
+ *
+ * `mutezAmount` is safe as a `number`: `checkOperation` refuses anything that is
+ * not a whole number within `Number.MAX_SAFE_INTEGER`.
  */
-export function maxOpCostMutez(limits: OpLimits): number {
-  return limits.fee + limits.storageLimit * COST_PER_BYTE_MUTEZ;
+export function maxOpCostMutez(limits: OpLimits, mutezAmount: string): number {
+  return Number(mutezAmount) + limits.fee + limits.storageLimit * COST_PER_BYTE_MUTEZ;
 }
 
 export type OperationVerdict =
@@ -102,7 +127,7 @@ function badLimit(value: number): boolean {
 export function checkOperation(op: {
   destination: string;
   amount:      string;
-  entrypoint?: string;
+  parameter?:  OpParameter;
   limits?:     OpLimits;
 }): OperationVerdict {
   if (typeof op.destination !== 'string' || !TEZOS_ADDRESS.test(op.destination)) {
@@ -117,8 +142,22 @@ export function checkOperation(op: {
   if (!Number.isSafeInteger(Number(op.amount))) {
     return { ok: false, reason: `Amount ${op.amount} mutez is too large to represent exactly` };
   }
-  if (op.entrypoint != null && !ENTRYPOINT.test(op.entrypoint)) {
-    return { ok: false, reason: `Not a Michelson entrypoint: ${JSON.stringify(op.entrypoint)}` };
+  if (op.parameter != null) {
+    if (typeof op.parameter.entrypoint !== 'string' || !ENTRYPOINT.test(op.parameter.entrypoint)) {
+      return {
+        ok:     false,
+        reason: `Not a Michelson entrypoint: ${JSON.stringify(op.parameter.entrypoint)}`,
+      };
+    }
+    // `null` is not `undefined`, so an explicit null would clear the
+    // `parameter != null` guard downstream and reach the forger AFTER the operator
+    // has approved. Refused here instead.
+    if (op.parameter.value == null) {
+      return {
+        ok:     false,
+        reason: `Entrypoint %${op.parameter.entrypoint} was sent without a parameter value`,
+      };
+    }
   }
 
   const limits = op.limits;

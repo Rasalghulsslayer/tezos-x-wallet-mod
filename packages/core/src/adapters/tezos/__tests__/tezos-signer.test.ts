@@ -93,7 +93,7 @@ describe('sendOperation — a PINNED operation', () => {
 
   it('submits the pin byte-for-byte', async () => {
     const hash = await signer().sendOperation({
-      to: GATEWAY, mutezAmount: '0', entrypoint: 'call_evm', michelineArg: PARAM, limits: PIN,
+      to: GATEWAY, mutezAmount: '0', parameter: { entrypoint: 'call_evm', value: PARAM }, limits: PIN,
     });
     expect(hash).toBe('ooTestOpHash');
     expect(transferCalls).toHaveLength(1);
@@ -131,7 +131,7 @@ describe('sendOperation — a PINNED operation', () => {
 
   it('accepts the live deploy pin, which sits at the gas cap exactly', async () => {
     await signer().sendOperation({
-      to: GATEWAY, mutezAmount: '0', entrypoint: 'call_evm', michelineArg: PARAM,
+      to: GATEWAY, mutezAmount: '0', parameter: { entrypoint: 'call_evm', value: PARAM },
       limits: { fee: 500_000, gasLimit: 660_000, storageLimit: 10_000 },
     });
     expect(transferCalls[0].gasLimit).toBe(660_000);
@@ -162,7 +162,7 @@ describe('sendOperation — an UNPINNED operation', () => {
   });
 
   it('prices it through the calibrated buffered-fee path', async () => {
-    await signer().sendOperation({ to: GATEWAY, mutezAmount: '0', entrypoint: 'call_evm', michelineArg: PARAM });
+    await signer().sendOperation({ to: GATEWAY, mutezAmount: '0', parameter: { entrypoint: 'call_evm', value: PARAM } });
     expect(estimateCalls).toHaveLength(1);
     expect(transferCalls[0]).toMatchObject({
       // FEE_BUFFER is 1.5 over Taquito's mempool/filter-derived suggestion.
@@ -174,7 +174,7 @@ describe('sendOperation — an UNPINNED operation', () => {
   });
 
   it('estimates the SAME operation it submits', async () => {
-    await signer().sendOperation({ to: GATEWAY, mutezAmount: '7', entrypoint: 'call_evm', michelineArg: PARAM });
+    await signer().sendOperation({ to: GATEWAY, mutezAmount: '7', parameter: { entrypoint: 'call_evm', value: PARAM } });
     const { fee, gasLimit, storageLimit, ...submitted } = transferCalls[0];
     void fee; void gasLimit; void storageLimit;
     expect(estimateCalls[0]).toEqual(submitted);
@@ -211,9 +211,18 @@ describe('sendOperation — operation shape', () => {
     expect(transferCalls[0]).toMatchObject({ amount: 1_000, mutez: true });
   });
 
-  it('omits `parameter` when an entrypoint has no value', async () => {
-    await signer().sendOperation({ to: GATEWAY, mutezAmount: '0', entrypoint: 'default', limits: PIN });
-    expect('parameter' in transferCalls[0]).toBe(false);
+  it('cannot express an entrypoint without a value — the type forbids it', async () => {
+    // This used to be two independent optional fields, and the drop was pinned
+    // with `entrypoint: 'default'` — the one name for which omitting the parameter
+    // is semantically exact, which is why the test read green while
+    // `entrypoint: 'setAdmin'` with no value would have rendered as a contract call
+    // and forged as a plain transfer. `OpParameter` makes the half-state
+    // unrepresentable, so the guard is now the compiler's.
+    await signer().sendOperation({
+      to: GATEWAY, mutezAmount: '0',
+      parameter: { entrypoint: 'setAdmin', value: PARAM }, limits: PIN,
+    });
+    expect(transferCalls[0].parameter).toEqual({ entrypoint: 'setAdmin', value: PARAM });
   });
 
   it('sends mutez, never XTZ', async () => {

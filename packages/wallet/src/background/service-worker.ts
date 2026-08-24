@@ -73,15 +73,35 @@ async function broadcastEvent(push: ContentPush): Promise<void> {
   // everything else fans out to every connected origin.
   const targetOrigin =
     push.type === 'PROVIDER_EVENT' && push.event === 'accountsChanged' ? push.origin : undefined;
-  await Promise.all(
+
+  // A PROVIDER_EVENT is EIP-1193 state, so it must never reach an origin whose
+  // only grant is a Beacon one.
+  //
+  // ⚠️ THIS IS A DISCLOSURE, NOT TIDINESS. `attachProviderListeners` forwards
+  // provider events with NO origin, and an origin-less `accountsChanged` means
+  // "every session". `RelayerProvider` emits `accountsChanged [evmAlias]` on every
+  // container build (its session restore), so before this filter, connecting over
+  // Beacon alone was enough to be handed the account's EVM address — which the
+  // injected provider then emits into any EVM library on the page. Beacon grants a
+  // tz1 and its public key; nothing about it is consent to that.
+  //
+  // De-duplicating by origin at the same time: one origin can now hold both a
+  // Beacon and an EIP-1193 session, and two rows would otherwise send the same
+  // push to the same tab twice.
+  const origins = new Set(
     sessions
+      .filter((s) => !(push.type === 'PROVIDER_EVENT' && s.protocol === 'beacon'))
       .filter(({ origin }) => targetOrigin == null || origin === targetOrigin)
-      .map(async ({ origin }) => {
-        const tabs = await chrome.tabs.query({ url: `${origin}/*` });
-        for (const tab of tabs) {
-          if (tab.id != null) chrome.tabs.sendMessage(tab.id, push).catch(() => {});
-        }
-      }),
+      .map(({ origin }) => origin),
+  );
+
+  await Promise.all(
+    [...origins].map(async (origin) => {
+      const tabs = await chrome.tabs.query({ url: `${origin}/*` });
+      for (const tab of tabs) {
+        if (tab.id != null) chrome.tabs.sendMessage(tab.id, push).catch(() => {});
+      }
+    }),
   );
 }
 

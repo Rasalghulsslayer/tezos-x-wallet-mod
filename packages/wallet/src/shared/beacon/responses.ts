@@ -187,23 +187,46 @@ export function narrowOperationRequest(req: OperationRequestOutput): OperationNa
     parameters?:    { entrypoint?: unknown; value?: unknown };
   };
 
+  // The entrypoint and its value travel TOGETHER or not at all. Read
+  // independently, a half-supplied `parameters` becomes an operation that renders
+  // as a contract call and forges as a plain transfer — the approval screen would
+  // name something other than what gets signed. Beacon's own types require both,
+  // and Taquito emits the whole object or none, but the dApp hand-writes this
+  // literal over a fully-pinned op, so the half-state is reachable on the wire.
+  const p = tx.parameters;
+  let parameter: BeaconOperationRequest['operation']['parameter'];
+  if (p != null) {
+    if (typeof p.entrypoint !== 'string' || p.value == null) {
+      return {
+        ok: false, errorType: BeaconErrorType.PARAMETERS_INVALID_ERROR,
+        reason:
+          'A transaction parameter needs both an entrypoint and a value; got ' +
+          `entrypoint=${JSON.stringify(p.entrypoint)} value=${p.value === undefined ? 'undefined' : 'null'}`,
+      };
+    }
+    parameter = { entrypoint: p.entrypoint, value: p.value as MichelineValue };
+  }
+
   return {
     ok: true,
     request: {
       kind: 'operation',
       operation: {
-        // Left as-is when malformed: `checkOperation` in core is the single place
-        // that decides what a well-formed operation is, and duplicating that
-        // judgement here would give two answers to one question.
+        // Destination and amount are left as-is when malformed: `checkOperation`
+        // in core is the single place that decides what a well-formed operation
+        // is, and duplicating that judgement here would give two answers to one
+        // question. The parameter is the exception because its well-formedness is
+        // a PAIRING question, which core's field-wise check cannot express.
         destination: typeof tx.destination === 'string' ? tx.destination : '',
         amount:      typeof tx.amount      === 'string' ? tx.amount      : String(tx.amount ?? ''),
-        entrypoint:  typeof tx.parameters?.entrypoint === 'string' ? tx.parameters.entrypoint : undefined,
-        parameters:  tx.parameters?.value as BeaconOperationRequest['operation']['parameters'],
+        parameter,
         limits:      readLimits(tx),
       },
     },
   };
 }
+
+type MichelineValue = NonNullable<BeaconOperationRequest['operation']['parameter']>['value'];
 
 /**
  * The dApp's pin, or nothing. Beacon sends the three knobs as decimal STRINGS

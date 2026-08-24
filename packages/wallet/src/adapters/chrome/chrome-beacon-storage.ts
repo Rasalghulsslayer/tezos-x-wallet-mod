@@ -59,11 +59,31 @@ const BOUNDED_LISTS = new Set<string>([
 const MAX_LIST_ENTRIES = 25;
 
 /**
- * Total serialized budget per bounded list. Bounds a single oversized entry —
- * an `appMetadata.icon` can be an arbitrarily large data URI, and unlike a
- * pairing record the wallet cannot clamp its fields before the SDK writes it.
+ * Total serialized budget per bounded list.
  */
 const MAX_LIST_BYTES = 64 * 1024;
+
+/**
+ * Budget for ONE entry, checked before the whole-list budget.
+ *
+ * ⚠️ WITHOUT THIS, ONE OVERSIZED ENTRY EMPTIED THE WHOLE LIST. The trimming loop
+ * drops from the front, so a single `appMetadata.icon` data URI above the list
+ * budget evicted every legitimate record ahead of it and then itself — measured:
+ * two real records plus one 70 kB entry left ZERO. `beacon:app-metadata-list` is
+ * extension-global and any visited page can write to it with no user consent
+ * (`IncomingRequestInterceptor` persists the dApp's self-declared appMetadata
+ * before the service worker ever sees the request).
+ *
+ * That list is not decorative. `operation_request` is the first path that READS
+ * it: the SDK's interceptor calls `getAppMetadata(senderId)` and THROWS
+ * `AppMetadata not found` when it is missing, from an un-awaited call — so the
+ * rejection is orphaned, the request handler never runs, nothing responds, and
+ * the dApp waits forever on a request it has already been acknowledged for. A
+ * 23-op ceremony depends on the single record written at connect.
+ *
+ * So an over-budget entry is dropped ALONE, and its neighbours survive.
+ */
+const MAX_ENTRY_BYTES = 8 * 1024;
 
 /** Drop the oldest entries until the list is within both bounds. */
 function prune<K extends StorageKey>(
@@ -75,13 +95,25 @@ function prune<K extends StorageKey>(
   // Widened to `unknown[]`: the per-key element types are irrelevant here, and
   // keeping the generic through `slice` costs a cast per step instead of one.
   const original: unknown[] = value;
-  let entries: unknown[] =
-    original.length > MAX_LIST_ENTRIES ? original.slice(-MAX_LIST_ENTRIES) : original;
-  while (entries.length > 0 && JSON.stringify(entries).length > MAX_LIST_BYTES) {
+
+  // Oversized entries first, and only themselves — see MAX_ENTRY_BYTES.
+  let entries = original.filter((entry) => sizeOf(entry) <= MAX_ENTRY_BYTES);
+  const oversized = original.length - entries.length;
+
+  if (entries.length > MAX_LIST_ENTRIES) entries = entries.slice(-MAX_LIST_ENTRIES);
+  // Only now trim the total, oldest first. Every remaining entry is within the
+  // per-entry budget, so this can no longer be driven by a single hostile one.
+  while (entries.length > 1 && JSON.stringify(entries).length > MAX_LIST_BYTES) {
     entries = entries.slice(1);
   }
 
   const dropped = original.length - entries.length;
+  if (oversized > 0) {
+    console.warn(
+      `[TezosX Wallet] beacon storage dropped ${oversized} oversized ` +
+      `entr${oversized === 1 ? 'y' : 'ies'} from ${key} (over ${MAX_ENTRY_BYTES} B each)`,
+    );
+  }
   if (dropped > 0) {
     console.warn(
       `[TezosX Wallet] beacon storage pruned ${dropped} ` +
@@ -89,6 +121,15 @@ function prune<K extends StorageKey>(
     );
   }
   return entries as StorageKeyReturnType[K];
+}
+
+/** Serialized size of one entry, in bytes. Unserialisable entries count as over. */
+function sizeOf(entry: unknown): number {
+  try {
+    return JSON.stringify(entry)?.length ?? Number.POSITIVE_INFINITY;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
 }
 
 export class ChromeBeaconStorage implements BeaconStorage {

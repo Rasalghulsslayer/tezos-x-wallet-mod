@@ -7,9 +7,8 @@ import type { RequestArguments } from '@tezosx/relayer/types';
 import type { ActivityFilter, ActivityPage } from '../domain/activity';
 import type { AccountSummary, AccountKind, AccountId, AddAccountSource } from '../domain/account';
 import type { Asset } from '../domain/asset';
-import type { MichelsonV1Expression } from '@taquito/rpc';
 import type { BeaconNetwork } from '../domain/beacon';
-import type { OpLimits } from '../domain/tezos-operation';
+import type { OpLimits, OpParameter } from '../domain/tezos-operation';
 
 export type { ActivityFilter, ActivityPage, AccountSummary, AddAccountSource };
 
@@ -121,10 +120,17 @@ export interface PendingTezosOperation {
   /** The dApp's pin, when it priced the operation itself. */
   limits?:     OpLimits;
   /**
-   * Worst case the operator is consenting to spend, in mutez: the fee charged in
-   * full plus the entire storage allowance at `cost_per_byte`. Present only for a
-   * pinned operation — an unpinned one has no ceiling to state until the wallet
-   * has estimated it, and a consent figure that can be exceeded is not consent.
+   * Worst case the operator is consenting to LEAVE THE ACCOUNT, in mutez: the
+   * transferred amount, plus the fee charged in full, plus the entire storage
+   * allowance at `cost_per_byte`.
+   *
+   * The amount is in it deliberately. Omitting it made the one bold money figure
+   * on the approval screen understate a value-bearing call by the whole transfer
+   * — a 5 XTZ send would have advertised a 0.004 XTZ ceiling.
+   *
+   * Present only for a pinned operation: an unpinned one has no ceiling until the
+   * wallet has estimated it, and a consent figure that can be exceeded is not
+   * consent.
    */
   maxCostMutez?: string;
 }
@@ -245,10 +251,11 @@ export interface BeaconTransaction {
   destination: string;
   /** Decimal mutez string. `'0'` for a pure contract call. */
   amount:      string;
-  /** Absent for a plain transfer. */
-  entrypoint?: string;
-  /** Micheline JSON. Passed through untouched; never re-encoded. */
-  parameters?: MichelsonV1Expression;
+  /**
+   * Absent for a plain transfer. Paired by construction: an entrypoint without a
+   * value would render as a contract call and forge as a transfer.
+   */
+  parameter?:  OpParameter;
   /**
    * Present only when the dApp priced the operation itself, and then complete.
    * Honoured verbatim — see the header of `adapters/tezos/tezos-signer.ts` for

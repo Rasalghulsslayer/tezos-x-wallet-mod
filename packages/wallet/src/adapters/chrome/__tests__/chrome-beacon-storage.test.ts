@@ -139,6 +139,55 @@ describe('ChromeBeaconStorage', () => {
       expect(stored.length).toBeLessThan(5);
     });
 
+    it('drops ONE oversized entry ALONE, keeping its neighbours', async () => {
+      // ⚠️ THE REGRESSION THIS GUARDS. The trimming loop drops from the front, so a
+      // single oversized entry used to evict every legitimate record ahead of it
+      // and then itself — measured: two real records plus one 70 kB entry left
+      // ZERO. `beacon:app-metadata-list` is extension-global and any visited page
+      // can write to it with no user consent, and `operation_request` is the first
+      // path that READS it: the SDK throws `AppMetadata not found` from an
+      // un-awaited call when it is missing, so nothing responds and the dApp waits
+      // forever. A 23-op ceremony depends on the one record written at connect.
+      const mine  = { senderId: 'the-real-dapp', name: 'MAPS' };
+      const other = { senderId: 'another', name: 'other' };
+      const huge  = { senderId: 'hostile', name: 'x', icon: 'data:image/png;base64,' + 'A'.repeat(70_000) };
+
+      await storage.set(StorageKey.APP_METADATA_LIST, [mine, other, huge] as never);
+
+      const stored = fake.store[StorageKey.APP_METADATA_LIST] as { senderId: string }[];
+      expect(stored.map((e) => e.senderId)).toEqual(['the-real-dapp', 'another']);
+    });
+
+    it('never empties a list because of one hostile entry', async () => {
+      const huge = { senderId: 'hostile', name: 'x'.repeat(70_000) };
+      await storage.set(StorageKey.APP_METADATA_LIST, [huge] as never);
+      // Nothing legitimate to keep here, but the invariant is that the drop is
+      // scoped to the offender rather than cascading.
+      expect(fake.store[StorageKey.APP_METADATA_LIST]).toEqual([]);
+
+      await storage.set(StorageKey.APP_METADATA_LIST, [{ senderId: 'a', name: 'A' }, huge] as never);
+      expect((fake.store[StorageKey.APP_METADATA_LIST] as unknown[]).length).toBe(1);
+    });
+
+    it('keeps at least one entry when every entry is in-bounds but the total is not', async () => {
+      // The total-budget loop must not run the list to zero either.
+      const chunky = Array.from({ length: 20 }, (_, i) => ({ senderId: `s-${i}`, name: 'y'.repeat(7_000) }));
+      await storage.set(StorageKey.APP_METADATA_LIST, chunky as never);
+      const stored = fake.store[StorageKey.APP_METADATA_LIST] as unknown[];
+      expect(stored.length).toBeGreaterThan(0);
+      expect(JSON.stringify(stored).length).toBeLessThanOrEqual(64 * 1024);
+    });
+
+    it('drops an unserialisable entry rather than throwing', async () => {
+      const cyclic: Record<string, unknown> = { senderId: 'cyclic', name: 'c' };
+      cyclic.self = cyclic;
+      await expect(
+        storage.set(StorageKey.APP_METADATA_LIST, [{ senderId: 'a', name: 'A' }, cyclic] as never),
+      ).resolves.toBeUndefined();
+      expect((fake.store[StorageKey.APP_METADATA_LIST] as { senderId: string }[]).map((e) => e.senderId))
+        .toEqual(['a']);
+    });
+
     it('writes an in-bounds list through untouched', async () => {
       const peers = [peer(1), peer(2), peer(3)];
       await storage.set(StorageKey.TRANSPORT_POSTMESSAGE_PEERS_WALLET, peers as never);

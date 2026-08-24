@@ -9,7 +9,8 @@ import {
 
 const GATEWAY  = 'KT18oDJJKXMKhfE1bSuAPGp92pYcwVDiqsPw';
 const TZ1      = 'tz1VSUr8wwNhLAzempoch5d6hLRiTh8Cjcjb';
-const OK       = { destination: GATEWAY, amount: '0', entrypoint: 'call_evm' };
+const PARAM    = { prim: 'Pair', args: [{ string: '0xdead' }] };
+const OK       = { destination: GATEWAY, amount: '0', parameter: { entrypoint: 'call_evm', value: PARAM } };
 
 describe('the chain limits this module encodes', () => {
   // Read off /chains/main/blocks/head/context/constants on 2026-08-24. Pinned as
@@ -75,20 +76,45 @@ describe('checkOperation — amount', () => {
   });
 });
 
-describe('checkOperation — entrypoint', () => {
+describe('checkOperation — parameter', () => {
   it('accepts the ceremony\'s entrypoints', () => {
     for (const entrypoint of ['call_evm', 'setAdmin', 'default', 'deploy', 'a', 'a.b_c']) {
-      expect(checkOperation({ ...OK, entrypoint }).ok, entrypoint).toBe(true);
+      expect(checkOperation({ ...OK, parameter: { entrypoint, value: PARAM } }).ok, entrypoint).toBe(true);
     }
   });
 
-  it('treats an absent entrypoint as a plain transfer', () => {
+  it('treats an absent parameter as a plain transfer', () => {
     expect(checkOperation({ destination: TZ1, amount: '1' })).toEqual({ ok: true });
   });
 
   it('refuses a non-entrypoint', () => {
     for (const entrypoint of ['', 'has spaces', '%leading', '1starts_with_digit', 'x'.repeat(40)]) {
-      expect(checkOperation({ ...OK, entrypoint }).ok, JSON.stringify(entrypoint)).toBe(false);
+      expect(checkOperation({ ...OK, parameter: { entrypoint, value: PARAM } }).ok, JSON.stringify(entrypoint))
+        .toBe(false);
+    }
+  });
+
+  it('refuses an entrypoint whose value is null or undefined', () => {
+    // `null !== undefined`, so an explicit null would clear the `parameter != null`
+    // guard downstream and reach the forger AFTER the operator approved. And the
+    // approval screen would have named a contract call while a plain transfer got
+    // signed.
+    for (const value of [null, undefined]) {
+      const v = checkOperation({
+        ...OK,
+        parameter: { entrypoint: 'setAdmin', value: value as never },
+      });
+      expect(v.ok, String(value)).toBe(false);
+      if (v.ok) throw new Error('unreachable');
+      expect(v.reason).toMatch(/without a parameter value/);
+    }
+  });
+
+  it('accepts a falsy-but-valid Micheline value', () => {
+    // `0`, `''` and `false` are legitimate Micheline; only null/undefined are not.
+    for (const value of [{ int: '0' }, { string: '' }, { prim: 'Unit' }]) {
+      expect(checkOperation({ ...OK, parameter: { entrypoint: 'x', value } }).ok, JSON.stringify(value))
+        .toBe(true);
     }
   });
 });
@@ -149,19 +175,36 @@ describe('checkOperation — limits', () => {
 });
 
 describe('maxOpCostMutez', () => {
-  it('is the fee in full plus the whole storage allowance', () => {
+  const PIN = { fee: 5_000, gasLimit: 20_000, storageLimit: 10_000 };
+
+  it('is amount + fee in full + the whole storage allowance', () => {
     // A consent figure that can be exceeded is not consent, so this is the
     // ceiling: fee is charged as declared and every allowed byte could burn.
-    expect(maxOpCostMutez({ fee: 5_000, gasLimit: 20_000, storageLimit: 10_000 })).toBe(15_000);
+    expect(maxOpCostMutez(PIN, '0')).toBe(15_000);
+  });
+
+  it('INCLUDES the transferred amount', () => {
+    // The regression this guards: with the amount omitted, a 5 XTZ send with a
+    // 3 000 µtez fee advertised a 0.004 XTZ ceiling. Every ceremony op is
+    // `amount: 0`, which is exactly why the omission was invisible.
+    expect(maxOpCostMutez({ fee: 3_000, gasLimit: 10_000, storageLimit: 1_000 }, '5000000'))
+      .toBe(5_004_000);
   });
 
   it('excludes gas, whose cost is already inside the fee', () => {
-    const a = maxOpCostMutez({ fee: 5_000, gasLimit: 1,       storageLimit: 100 });
-    const b = maxOpCostMutez({ fee: 5_000, gasLimit: 660_000, storageLimit: 100 });
+    const a = maxOpCostMutez({ fee: 5_000, gasLimit: 1,       storageLimit: 100 }, '0');
+    const b = maxOpCostMutez({ fee: 5_000, gasLimit: 660_000, storageLimit: 100 }, '0');
     expect(a).toBe(b);
   });
 
   it('matches the live deploy pin', () => {
-    expect(maxOpCostMutez({ fee: 500_000, gasLimit: 660_000, storageLimit: 10_000 })).toBe(510_000);
+    expect(maxOpCostMutez({ fee: 500_000, gasLimit: 660_000, storageLimit: 10_000 }, '0')).toBe(510_000);
+  });
+
+  it('is never below the amount alone', () => {
+    // The property that makes it a ceiling on what leaves the account.
+    for (const amount of ['0', '1', '1000000', '9007199254740991']) {
+      expect(maxOpCostMutez({ fee: 0, gasLimit: 0, storageLimit: 0 }, amount)).toBe(Number(amount));
+    }
   });
 });

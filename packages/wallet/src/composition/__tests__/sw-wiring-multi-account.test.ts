@@ -14,7 +14,7 @@ vi.mock('@tezosx/relayer/utils/derive', () => ({
 import { dispatch, type SwDeps } from '@tezosx/wallet-core/composition/sw-wiring';
 import type { ContentPush, PopupRequest, AccountSummary } from '@tezosx/wallet-core/shared/messages';
 import type { VaultStore, EncryptedVault } from '@tezosx/wallet-core/ports/vault-store';
-import type { SessionStore, StoredSession } from '@tezosx/wallet-core/ports/session-store';
+import { sessionIdentity, type SessionStore, type StoredSession } from '@tezosx/wallet-core/ports/session-store';
 import type { TokenStore } from '@tezosx/wallet-core/ports/token-store';
 import type { ContactStore } from '@tezosx/wallet-core/ports/contact-store';
 import type { AliasStore } from '@tezosx/wallet-core/ports/alias-store';
@@ -36,8 +36,13 @@ class MemoryVault implements VaultStore {
 class MemorySessions implements SessionStore {
   private map = new Map<string, StoredSession>();
   async list() { return Array.from(this.map.values()); }
-  async upsert(s: StoredSession) { this.map.set(s.origin, s); }
-  async remove(origin: string) { this.map.delete(origin); }
+  // Keyed by `sessionIdentity`, matching the real adapters: one origin may hold an
+  // EIP-1193 and a Beacon session at once, and a double that keys on origin alone
+  // makes the correct coexistence test read RED.
+  async upsert(s: StoredSession) { this.map.set(sessionIdentity(s), s); }
+  async remove(origin: string) {
+    for (const [key, s] of this.map) if (s.origin === origin) this.map.delete(key);
+  }
   async clear() { this.map.clear(); }
 }
 

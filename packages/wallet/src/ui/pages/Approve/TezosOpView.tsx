@@ -73,7 +73,9 @@ export function TezosOpView({
           {isCall ? `Call %${pending.entrypoint}` : `Send ${amount}`}
         </div>
 
-        <div className="tx-risk" style={{ marginBottom: 14 }}>
+        {/* `med` — bare `.tx-risk` is the SUCCESS colour, and a green banner with
+            two lit bars is the one combination the design system denies. */}
+        <div className="tx-risk med" style={{ marginBottom: 14 }}>
           <Icon name="shield" size={16} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 12, fontWeight: 500 }}>Signs a Tezos operation</div>
@@ -124,7 +126,7 @@ export function TezosOpView({
             />
           </div>
         ) : (
-          <div className="tx-risk" style={{ marginTop: 12 }}>
+          <div className="tx-risk med" style={{ marginTop: 12 }}>
             <Icon name="shield" size={16} />
             <div style={{ flex: 1, fontSize: 11, opacity: 0.9 }}>
               {hostname} left the fee to the wallet, so the final cost is not known

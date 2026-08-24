@@ -37,17 +37,19 @@
 // page would be pure cost.
 import '@tezosx/wallet-core/shared/buffer-shim';
 
-import { Serializer } from '@airgap/beacon-core';
+import { Serializer, getSenderId } from '@airgap/beacon-core';
 import {
   BeaconErrorType,
   BeaconMessageType,
   PostMessagePairingRequest,
+  StorageKey,
   type BeaconRequestOutputMessage,
   type BeaconResponseInputMessage,
   type OperationRequestOutput,
   type PermissionRequestOutput,
 } from '@airgap/beacon-types';
 import type { Storage as BeaconStorage } from '@airgap/beacon-types';
+import { ChromeBeaconStorage } from '../../adapters/chrome/chrome-beacon-storage';
 import type { BeaconRequest, WalletResponse } from '@tezosx/wallet-core/shared/messages';
 import type { BeaconPermissionGrant } from '@tezosx/wallet-core/domain/beacon';
 import { ExtensionBeaconWalletClient } from './wallet-client';
@@ -90,11 +92,14 @@ export interface BeaconSession {
 }
 
 export async function startBeaconSession(options: BeaconSessionOptions): Promise<BeaconSession> {
+  // One storage instance, shared with the client, so `seedAppMetadata` writes to
+  // the same place the SDK reads from.
+  const storage = options.storage ?? new ChromeBeaconStorage();
   const client = new ExtensionBeaconWalletClient({
     name:       options.name,
     iconUrl:    options.iconUrl,
     postToPage: options.postToPage,
-    storage:    options.storage,
+    storage,
   });
 
   await client.init();
@@ -183,7 +188,7 @@ export async function startBeaconSession(options: BeaconSessionOptions): Promise
 
     const op = narrowed.request.operation;
     console.info(
-      `[TezosX Wallet] beacon operation_request: ${op.entrypoint ?? '(transfer)'} → ` +
+      `[TezosX Wallet] beacon operation_request: ${op.parameter?.entrypoint ?? '(transfer)'} → ` +
       `${op.destination} amount=${op.amount} ` +
       (op.limits == null
         ? 'unpinned (wallet will price it)'
@@ -210,6 +215,37 @@ export async function startBeaconSession(options: BeaconSessionOptions): Promise
     }
   }
 
+  /**
+   * Write our own app-metadata record for a peer, at pair time.
+   *
+   * `operation_request` is the first path that READS
+   * `beacon:app-metadata-list`: the SDK's `IncomingRequestInterceptor` calls
+   * `getAppMetadata(message.senderId)` for it and THROWS `AppMetadata not found`
+   * when absent — from an un-awaited call, so the rejection is orphaned, the
+   * handler never runs, and the dApp waits forever on a request it has already
+   * been acknowledged for.
+   *
+   * Until now that record was written only by the interceptor, from the dApp's own
+   * self-declared metadata, into an extension-global list any visited page can
+   * write to. Seeding it here means the operation path depends on a record the
+   * WALLET owns, derived from the peer's public key, rather than on page-supplied
+   * data that another origin can push out of the list.
+   *
+   * `getSenderId(peer.publicKey)` is the same derivation `DAppClient` uses for the
+   * `senderId` it stamps on its messages, so the two agree by construction.
+   * Best-effort: a failure here must not prevent a pairing that otherwise worked.
+   */
+  async function seedAppMetadata(peerPublicKey: string, name: string): Promise<void> {
+    try {
+      const senderId = await getSenderId(peerPublicKey);
+      const list = await storage.get(StorageKey.APP_METADATA_LIST);
+      if (list.some((entry) => entry.senderId === senderId)) return;
+      await storage.set(StorageKey.APP_METADATA_LIST, [...list, { senderId, name }]);
+    } catch (err) {
+      console.warn('[TezosX Wallet] beacon could not seed app metadata:', err);
+    }
+  }
+
   return {
     async pair(serializedPayload) {
       // The payload is page-supplied: bs58check-wrapped JSON whose shape must
@@ -222,6 +258,7 @@ export async function startBeaconSession(options: BeaconSessionOptions): Promise
       await client.addPeer(
         new PostMessagePairingRequest(peer.id, peer.name, peer.publicKey, peer.version),
       );
+      await seedAppMetadata(peer.publicKey, peer.name);
       console.info(`[TezosX Wallet] beacon paired with "${peer.name}"`);
     },
     accept(encryptedPayload) {
