@@ -1,11 +1,15 @@
 # Test diary — Beacon `operation_request`, milestone 2
 
 **Branch:** `feat/beacon-wallet-provider` · **Date:** 2026-08-24 · **Scope:** milestone 2 only
-**Gates:** tsc 0 across relayer + relayer/ext + core + wallet · eslint 0 errors (10 pre-existing warnings, unchanged) · vitest **643 passing across 63 files** (587 / 61 after milestone 1, **+56 / +2**) · `npm run build:wallet` ✓ · eager per-page cost 5.1 kB
-**Live run, 2026-08-24: RUNG 1 SIGNED AND INJECTED, VERIFIED ON CHAIN.** Two plain transfers through
-the dApp's own Beacon probe (`/beacon-probe`, ceremony engine out of the path), both `applied`, both
-with the dApp's pin honoured **to the mutez**. See §2/10-13. The parameter-carrying rungs and the
-23-op ceremony remain untested.
+**Gates:** tsc 0 across relayer + relayer/ext + core + wallet · eslint 0 errors (10 pre-existing warnings, unchanged) · vitest **750 passing across 75 files** (587 / 61 after milestone 1, **+163 / +14**) · `npm run build:wallet` ✓ · eager per-page cost 5.1 kB
+**Live run, 2026-08-24: ALL THREE PROBE RUNGS SIGNED AND INJECTED, VERIFIED ON CHAIN.** Four
+operations through the dApp's own Beacon probe (`/beacon-probe`, ceremony engine out of the path),
+every one `applied`, every one with the dApp's pin honoured **to the mutez**. Rung 3 carried real
+Micheline to a KT1 and minted a real `ctr` child whose storage holds exactly the addresses that were
+signed — so the parameter path is proven from Beacon frame through to contract state, not merely
+from unit tests. See §2/10-20. Rung 2 proved nothing it was built to prove, for a reason worth
+reading (§2/14-15). The 23-op ceremony remains untested, and so does any payload large enough to
+truncate the preview or chunk the transport (§8).
 **Predecessor:** `../beacon-wallet-provider/README.md` (milestone 1, connect — live-confirmed 2026-08-24).
 
 ---
@@ -70,6 +74,13 @@ it is a fee that no longer covers its own gas.
 | 11 | **THE PIN IS HONOURED TO THE MUTEZ, ON CHAIN.** Declared `fee 20000 / gas 10000 / storage 100`; chain recorded `bakerFee: 20000`, `gasLimit: 10000`, `storageLimit: 100`, `gasUsed: 2149`, `storageUsed: 0`, `storageFee: 0`. Had Taquito re-estimated, a plain transfer prices at ~797 µtez — 25× lower — so the estimate gate provably did not run. This is Measured 4b, previously established only by READING `provider.js`, now observed. And `gasUsed: 2149` matches the dApp's own documented measurement of a plain transfer exactly. | Same TzKT read. |
 | 12 | **The balance delta confirms it a second way, without the indexer.** 39 998 694 → 39 958 694 mutez = **exactly −40 000**, i.e. 2 × the declared 20 000 fee, with the 1 mutez self-transfer netting zero and no storage burn. Counter 2 → 4: two operations, and NO reveal was prepended (the account was already revealed), so the reviewer's "is a 660 000-gas op included when a reveal is prepended" question is still open. | `contracts/<tz1>/balance` and `/counter` via `head`. |
 | 13 | **`parameter: None` on chain** — rung 1's claim was that the field is ABSENT from what Beacon serialises, and `buildParams` omits it rather than sending an empty object. Confirmed on the wire, not just in a unit test. | Same TzKT read. Taquito forges an empty `parameter` differently, so this distinction is real. |
+| 14 | **RUNG 2 PROVED THE PIN A SECOND TIME AND THE PARAMETER PATH NOT AT ALL.** `op5cT9D1PGFWxP9845p35FKW5K3g2LD1WoQr9PiJfyAQgzWAprZ` (level 582660), `applied`, `bakerFee: 20000` against the declared `fee 20000 / gas 10000 / storage 100`, 2 148.528 milligas consumed, balance 39 958 694 → 39 938 694 = exactly −20 000, counter 5. **And `parameters` ABSENT from the signed operation** — the rung sent `{entrypoint: 'default', value: {prim: 'Unit'}}`, the wallet logged `default`, and the chain recorded a bare transfer. | The node's own record of the signed bytes, `/chains/main/blocks/582660/operations`, not just TzKT's `parameter: null` — an indexer may normalise, the node's re-serialisation of what was signed may not. |
+| 15 | **THE FORGER STRIPS `(default, Unit)`, AND THAT IS CORRECT.** `parametersEncoder` opens `if (!val \|\| (val.entrypoint === 'default' && 'prim' in val.value && val.value.prim === 'Unit')) return '00'` — `'00'` being the protocol's *no parameters* tag. `(default, Unit)` **is** the canonical encoding of "no parameter"; the two forge to identical bytes and are the same operation. So rung 2 sent the one parameter in existence that is indistinguishable from none, and **its `unit-param` rung can never show a parameter on chain** — a property of the ladder, not of this wallet. | `@taquito/local-forging/dist/lib/codec.js:390-393`. Chain of custody for *which* forger: the wallet sets none, `TezosToolkit.setForgerProvider` falls back to `TaquitoLocalForger` (`taquito.js:175`) and `Context` defaults to it (`context.js:61`). **The fact was already recorded in `tezos-signer.test.ts` before the rung was chosen** — the `cannot express an entrypoint without a value` test names `default` as "the one name for which omitting the parameter is semantically exact" — and was not applied. Now pinned by two tests so the trap sits where someone would next fall into it. |
+| 16 | **RUNG 3: MICHELINE REACHED THE CHAIN.** `oohRH3RtUQ9YDdCLv4yYy2U1K7LGEhmTb3Uem6RMNu8rgeaz9Ce` (level 582767), `applied`, destination `KT1BTZYrgCKfLhpA8j3AtgN75MFKjekZ61wx` (the live `ctr` originator), `amount: 0`, counter 6. The signed operation **carries a `parameters` key**: `entrypoint: "default"`, `value` a `Pair` whose first argument is `bytes` decoding to `beacon-probe-1787584451506-du4myd`. This is the first parameter this wallet has put on chain over Beacon, and the entrypoint that made it observable is the *same* `default` rung 2 used — only the value differs, which is exactly what Measured 15 predicts. | Node record as above. `default` and not `deployInstance` because LIGO collapses a single-`[@entry]` sum type to a bare root comb, so the named entrypoint does not survive compilation — the dApp's own note, confirmed by the chain accepting `default`. |
+| 17 | **AND IT WAS INTERPRETED, NOT MERELY CARRIED.** The call originated a real child, `KT19XzSZrJX1mNh4NNs5Za9JPcQm7VYf6pyc`, as an **internal** origination (`status: applied`) — the `create_contract` runs inside the originator, so the child arrives on the internal result and `originated_contracts` on the outer result is `None`. The child's storage reads `Pair [1] (Pair 0000b5a6… 01d1d30c…)`, which decodes to topics `[1]`, admin `tz1cCWjCcVi4bbAbnrsHwbBiqVJcSVTaaSEb`, owner `KT1TiDcrFkRPEJJLkQ3D4tvuzNLJAByejzQx` — **byte-identical to the admin and owner inside the Micheline that was signed**. A parameter can be carried and ignored; this one became state. | `contracts/KT19XzSZ…/storage` via `head`; addresses decoded with `encodeAddress` from `@taquito/utils`. This is the strongest form of the proof available without running the ceremony. |
+| 18 | **THE PIN HELD ON A CONTRACT CALL TOO, AND THE OPERATOR'S CEILING BOUNDED THE REAL SPEND.** Declared `fee 30000 / gas 6100 / storage 1428`; chain recorded `fee: 30000` exactly (third confirmation). Consumption: 1 698.308 milligas outer + 2 337.936 internal = **4 037 gas units** of the 6 100 declared. Storage: 92 bytes outer + 879 internal + **257 for the contract allocation** = **1 228 bytes** of the 1 428 declared. Balance 39 938 694 → 39 907 466 = **−31 228** = 30 000 + 1 228, against the **31 428** ceiling the approval screen states. Ceiling ≥ actual, with 200 mutez of headroom. | `origination_size: 257`, `cost_per_byte: 1` from `context/constants`. **My own prediction was 257 short** — I forecast −30 971 from the two `paid_storage_size_diff` figures and forgot the fixed allocation burn. `maxOpCostMutez` needs no change: the allocation is charged against the storage *limit*, so `amount + fee + storageLimit × cost_per_byte` already contains it. The formula was right where the hand-prediction was not. |
+| 19 | **RUNG 3'S PAYLOAD IS 5.5× SMALLER THAN ITS OWN LABEL CLAIMS, so "large Micheline" is still untested.** The rung is labelled *"Pair `<issuance_id>` `<ctr birth storage>` (1,336 B)"*. Measured on the wire: the parameter value is **242 characters** of compact JSON (275 including the entrypoint), and the whole operation forges to **230 bytes** unsigned, **294** with a signature. Nothing here approached the preview's 512-character truncation threshold, a multi-chunk Beacon frame, or the ~2.5 kB op the dApp's fee notes discuss. | Value re-serialised from the node's record; forged size measured by running `localForger.forge` over the block's own `branch` + `contents`. Consequence in §8. |
+| 20 | **The fee the ceremony pins is ~19× this chain's floor.** For rung 3: `100 + 4 × 294 + 0.045 × 6100` = **1 551 mutez** required, 30 000 paid. Not a defect and not this wallet's call — the dApp priced it and the operator approved it — but it means the pin's *safety margin*, not its accuracy, is what the three live rungs have demonstrated. A pin that is 19× the floor would survive a good deal of forging drift, so these rungs do **not** show that a tightly-priced pin survives. | Measured 1 + Measured 19, using the signed size. |
 | 5 | No `client.requestOperation` call site exists in the dApp; every operation is Taquito `wallet.transfer`. `BeaconWallet.removeDefaultParams` deletes each knob whose value is falsy **independently per field**, so a supplied knob reaches the wallet intact and an absent one is absent. | dApp `grep` (0 hits for `operationDetails`/`requestOperation` outside comments); `taquito-beacon-wallet.js:211-224`. |
 | 6 | Beacon sends the three knobs as decimal **strings** — Taquito's `createTransferOperation` stringifies them — so they are parsed, and only accepted as a complete finite non-negative set. | `narrowOperationRequest` / `readLimits`, asserted in `session.test.ts`. |
 | 7 | **Two stale comments in the dApp** claim the rotate and `call_evm` paths are "DELEGATED TO THE WALLET, EXPLICITLY". The code above them spreads `...rotatePin` / `...pin`. The code is authoritative; the comments predate the fix. | `executor-taquito.ts:1527-1533` and `:1553-1565` versus `:1522-1540` and `:1066`. Worth a one-line fix in that repo, which is read-only here. |
@@ -172,7 +183,7 @@ The pure rules. No SDK, no I/O, no Taquito.
 | 15-16 | refuses storage above 60 000; refuses negative, fractional, `NaN`, `Infinity` knobs | Complete-set validation. |
 | 17-19 | `maxOpCostMutez` is fee + whole storage allowance; excludes gas; matches the live deploy pin (510 000 µtez) | The consent ceiling, not an estimate. |
 
-### 6.2 `packages/core/src/adapters/tezos/__tests__/tezos-signer.test.ts` — 14 tests
+### 6.2 `packages/core/src/adapters/tezos/__tests__/tezos-signer.test.ts` — 16 tests
 
 **The most important suite in this milestone.** Taquito is mocked, because the alternative is
 injecting operations against previewnet from a unit test.
@@ -191,6 +202,8 @@ injecting operations against previewnet from a unit test.
 | 11-12 | omits `parameter` entirely for a plain transfer, and when an entrypoint has no value | Taquito expresses "no entrypoint" by absence; an empty object forges differently. |
 | 13 | sends mutez, never XTZ | |
 | 14 | **`sendContractCall` still targets the NAC gateway and still prices through the buffered path** | Its callers depend on both. Generalising must not have moved it. |
+| 15 | passes `(default, Unit)` through to Taquito **even though the forger will drop it** | Added after the live rung 2 (Measured 14-15). What this layer owes is to hand Taquito what the dApp sent; the normalisation below it is not ours to prevent — but the header comment records it in full so the next person does not design the same unobservable probe. |
+| 16 | passes a **non-`Unit` `default`** parameter through — rung 3's shape | The case that IS observable, since the strip needs both clauses. Asserts the exact pin `30000 / 6100 / 1428` alongside it. |
 
 ### 6.3 `packages/wallet/src/composition/__tests__/sw-wiring-beacon.test.ts` — 28 tests (+13)
 
@@ -238,24 +251,36 @@ The error map gained `NOT_GRANTED_ERROR` (5003), `BROADCAST_ERROR` (5004) and
 ## 7. Gates
 
 ```
-tsc --noEmit        relayer ✓  relayer/extension ✓  core ✓  wallet ✓        (0 errors)
+tsc --noEmit        relayer ✓  relayer/extension ✓  core ✓  wallet ✓  mobile ✓  (0 errors)
 eslint              0 errors, 10 warnings — all pre-existing, count unchanged
-vitest              wallet 303 / 24 files · core 315 / 34 files · relayer 25 / 5 files
-                    = 643 tests / 63 files passing   (was 587 / 61 — +56 / +2)
+vitest              wallet 324 / 25 files · core 321 / 34 files · relayer 25 / 5 files
+                    mobile 80 / 11 files
+                    = 750 tests / 75 files passing   (was 587 / 61 — +163 / +14)
 npm run build:wallet ✓  incl. the content-script Buffer gate
 eager per-page cost 5.1 kB (unchanged) · lazy chunk 148 kB
 ```
 
 ## 8. NOT DONE — stated, not smoothed over
 
-- **Only the PARAMETERLESS rung is live-proven.** Rung 1 (a plain transfer, no `parameter` field)
-  signed, injected and honoured its pin — §2/10-13. **Nothing carrying Micheline has been signed over
-  Beacon**, so the parameter pairing (§3/M3), the `summariseMicheline` preview, and a KT1 destination
-  are all still argued from unit tests only. The probe's rungs 2 and 3 exercise exactly those and
-  cost ~0.05 ꜩ together; rung 3 mints a real contract.
-- **The approval screen's cost ceiling was not read back.** The predicted figure for rung 1 was
-  20 101 mutez (1 + 20 000 + 100). Nothing failed, but the displayed number is a UI fact no chain
-  read can confirm, so §3/M2's fix remains unobserved.
+- **No LARGE payload has been signed.** All three rungs are now live (§2/10-20) and the parameter
+  path is proven to contract state — but rung 3, the ladder's own "large Micheline" rung, forged to
+  **294 bytes** and carried a **242-character** value (§2/19). So three things its label implies
+  remain untested: `summariseMicheline`'s 512-character truncation, a Beacon frame large enough to
+  chunk, and anything near the ~2.5 kB operation the dApp's fee notes discuss. The ceremony's phase-2
+  deploy is the real large payload and it declares gas at the hard limit exactly; **nothing here
+  says that one fits through the transport.** The content-script hand-off buffer caps at 32 frames,
+  which is the first place to look if a big request never arrives.
+- **A tightly-priced pin has not been tested.** Every rung paid ~19× this chain's fee floor (§2/20).
+  The pin is demonstrably honoured; what is untested is a pin with little headroom, which is the
+  case where an accurate pass-through actually matters.
+- **The approval screen's cost ceiling was never read back, on any rung.** The predicted figures were
+  20 101 mutez for rungs 1-2 and 31 428 for rung 3. The chain confirms actual spend stayed *under*
+  the rung-3 ceiling (31 228 ≤ 31 428, §2/18), which is the property that matters — but the displayed
+  number itself is a UI fact no chain read can reach, so §3/M2's fix is still unobserved. Same for
+  the Micheline preview block and the `%default` entrypoint row: nobody has confirmed they render.
+- **My rung-3 spend prediction was 257 mutez short** — the fixed `origination_size` allocation burn,
+  omitted from the forecast though not from the code (§2/18). Recorded because the forecast was the
+  falsifiable part of the exercise, and it failed while the code did not.
 - **The 23-op ceremony is untested end to end.** Each op kind is covered in isolation; the sequence,
   its inter-op state, and the recovery paths are not.
 - **`AUTO-LOCK IS STILL A CEREMONY HAZARD` and is still not addressed.** `AUTO_LOCK_IDLE_MS` is 5

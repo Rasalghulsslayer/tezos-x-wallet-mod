@@ -254,3 +254,68 @@ describe('sendContractCall — unchanged for its existing callers', () => {
     });
   });
 });
+
+/**
+ * `(default, Unit)` — the one parameter that CANNOT be observed on chain.
+ *
+ * ⚠️ READ THIS BEFORE DESIGNING A LIVE PARAMETER TEST. Taquito's default forger is
+ * `TaquitoLocalForger` (`taquito.js` `setForgerProvider`, `context.js:61`; the wallet
+ * sets none), and its `parametersEncoder` opens with, verbatim
+ * (`@taquito/local-forging/dist/lib/codec.js:390`):
+ *
+ *     if (!val || (val.entrypoint === 'default' && 'prim' in val.value && val.value.prim === 'Unit'))
+ *         return '00';
+ *
+ * `'00'` is the protocol's "no parameters" tag. `(default, Unit)` IS the canonical
+ * encoding of "no parameter", so the forger normalises it to absent — correctly, and
+ * with no loss: the two forge to identical bytes and are the same operation.
+ *
+ * The consequence is a measurement trap, and it cost a live rung. The probe's rung 2
+ * (`unit-param`) pins exactly `{entrypoint: 'default', value: {prim: 'Unit'}}` to prove
+ * the parameter path carries a parameter — and it cannot, because the ONLY parameter it
+ * sends is the one defined to be indistinguishable from none. Injected 2026-08-24 as
+ * `op5cT9D1PGFWxP9845p35FKW5K3g2LD1WoQr9PiJfyAQgzWAprZ`: applied, pin honoured, and the
+ * node's own record of the signed operation carried no `parameters` key at all. The rung
+ * proved the pin a second time and the parameter path not at all. The fact was already
+ * written down in this very file — see the `cannot express an entrypoint without a value`
+ * test above, which names `default` as "the one name for which omitting the parameter is
+ * semantically exact" — and was not applied when the live rung was chosen.
+ *
+ * Only a non-`Unit` value observes the path. Rung 3's is a `Pair`, so it forges as
+ * `ff<entrypoint><len><value>` and must appear on chain.
+ *
+ * What THIS layer owes is unchanged either way: hand Taquito what the dApp sent,
+ * untouched. That is what is asserted here; the normalisation below it is not ours.
+ */
+describe('sendOperation — the parameter reaches Taquito untouched', () => {
+  beforeEach(() => {
+    transferCalls.length = 0;
+    estimateCalls.length = 0;
+    transferError = null;
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  it('passes (default, Unit) through, even though the forger will drop it', async () => {
+    await signer().sendOperation({
+      to: ACCOUNT.tz1, mutezAmount: '1',
+      parameter: { entrypoint: 'default', value: { prim: 'Unit' } }, limits: PIN,
+    });
+    expect(transferCalls[0].parameter).toEqual({ entrypoint: 'default', value: { prim: 'Unit' } });
+  });
+
+  it('passes a non-Unit `default` parameter through — the case that IS observable', async () => {
+    // Rung 3's shape: `default` with a Pair, which misses the strip condition on its
+    // second clause and therefore forges as a real parameter.
+    const value = { prim: 'Pair', args: [{ bytes: 'deadbeef' }, { int: '1' }] };
+    await signer().sendOperation({
+      to: 'KT1BTZYrgCKfLhpA8j3AtgN75MFKjekZ61wx', mutezAmount: '0',
+      parameter: { entrypoint: 'default', value },
+      limits: { fee: 30_000, gasLimit: 6_100, storageLimit: 1_428 },
+    });
+    expect(transferCalls[0]).toMatchObject({
+      to: 'KT1BTZYrgCKfLhpA8j3AtgN75MFKjekZ61wx',
+      parameter: { entrypoint: 'default', value },
+      fee: 30_000, gasLimit: 6_100, storageLimit: 1_428,
+    });
+  });
+});
