@@ -3,11 +3,23 @@
 **Branch:** `feat/beacon-wallet-provider` · **Dates:** 2026-08-21 → 2026-08-24 · **Scope:** milestone 1 only
 **Suites:** 8 files, 139 new tests · **Gates:** tsc 0 across relayer + relayer/ext + core + wallet · eslint 0 errors (10 pre-existing warnings, unchanged) · vitest **579 passing across 61 files** (440 / 53 before, **+139 / +8**) · `npm run build:wallet` ✓ including a new content-script gate
 **Reviewer pass:** REQUEST-CHANGES → all findings closed (1 blocker, 2 major, 1 minor, 1 nit). Details in §4.
-**Live run against the MAPS dApp, 2026-08-24: PAIRING CONFIRMED.** The wallet is discovered, listed,
-selectable, and completes Beacon's cryptobox pairing handshake with the real `@ecadlabs/beacon-dapp`
-4.8.1-ecad.7 dApp. Three defects were found by that run and are recorded in §4.1 — one of them a bug
-in beacon-ui that made an unregistered extension *impossible* to select. What the run has and has not
-established is itemised in §3.1/22-25 and §3.2.
+**Live run against the MAPS dApp, 2026-08-24: MILESTONE 1 CONFIRMED, definition of done met.**
+Both hard-gate lines printed, verbatim from the operator's console:
+
+```
+[MAPS wallet] network gate OK: Tezos X previewnet @ https://michelson.previewnet.tezosx.nomadic-labs.com
+[MAPS wallet] paired wallet: TezosX Wallet
+```
+
+Granted to `tz1cCWjCcVi4bbAbnrsHwbBiqVJcSVTaaSEb`, scopes `[operation_request]`, over
+`@ecadlabs/beacon-dapp` 4.8.1-ecad.7 in Chrome with MetaMask also installed. Four defects were found
+by that run (§4.1) — one of them a bug in beacon-ui that made an unregistered extension *impossible*
+to select. What the run has and has not established is in §3.1/22-27 and §3.2.
+
+`[MAPS wallet] transport: post_message` did **not** print, and its absence is correct rather than a
+gap: `assertSignableTransport` — the only thing that logs it — is called before a ceremony operation,
+not at connect (`connectBeacon` only warns, and only for WalletConnect). It is a milestone-2
+observable.
 
 > **Deviation from the per-suite diary rule, stated rather than quiet.** The convention is one diary
 > per suite file. This is one diary for eight suites, because they are eight layers of a *single*
@@ -127,6 +139,8 @@ reasoned about and is **not** established.
 | 23 | **The hand-written transport's pairing handshake is correct against the real dApp.** Selecting the wallet and confirming produced a completed pairing — i.e. the sealed `postmessage-pairing-response` was opened by the dApp's own `openCryptobox`, the frame nesting and the `sender.id` stamp were accepted, and the channel opened. This is the claim §3.2/1 previously could not make: the unit suites checked our wire format against the SDK's *reader code*; this checked it against the *running dApp*. | Same run. |
 | 24 | **`beacon-ui` renders an unregistered extension's list entry from `shortName ?? name`,** so a `shortName` makes the modal disagree with every other surface. Observed directly: the tile read "TezosX" until the field was dropped. | Same run. → §4.1/L1. |
 | 25 | **`beacon-ui` gates the wallet detail panel on `types.length`,** making an extension-only wallet unselectable. Observed as: tile present, click collapses the list, no pairing frame posted, nothing logged on either side — while Temple, in the same list, opened its panel. | Same run + the guard read off the shipped bundle. → §4.1/L2. |
+| 26 | **The full grant completes and the dApp accepts it.** `permission_request` → approval prompt → `permission_response` → `onNewAccount` → `checkBeaconNetwork` passing. So the response's `network`, `publicKey`, `address`, `scopes` and `walletType` are all accepted by the running `DAppClient`, and the v2 interceptor path (Measured 7) does inject `senderId`/`version`/`appMetadata` as designed — the stack trace shows `handleV2Message → interceptorCallback → respondToMessage → sendMessage → postToPage`. | Live run, 2026-08-24. |
+| 27 | **A locked wallet refuses the request and the dApp cannot tell that from a user rejection.** Observed on the first attempt: `beacon permission_request refused (4100): Wallet is locked` wallet-side, `Uncaught (in promise) AbortedBeaconError` dApp-side, and **nothing at all in the wallet UI** — no prompt, no window, no badge. Unlocking and retrying succeeded. Predicted in the previous revision of this diary as a UX gap; now measured. | Same run. → §4.1/L4. |
 | 21 | The existing EIP-1193 path is untouched behaviourally. The one shared-code change is a mechanical extraction of the enqueue-refusal block into `requestApproval`, so both dApp surfaces clear the same per-origin flood cap; the pre-existing `sw-wiring-approval` and `sw-wiring-multi-account` suites pass unchanged. | Full `npm test`: 579 passing, 0 failing. |
 
 ### 3.2 Assumed / UNVERIFIED — report, do not paper over
@@ -303,6 +317,25 @@ because the two answers merge by name. **Delete the block when beacon-ui stops g
 `types.length`** — it is one `postMessage` plus its tests. The clean fixes are upstream in
 `@ecadlabs/beacon-ui`, or one line in the dApp calling `client.sendPairingRequest(extensionId)`
 directly.
+
+### L4 — a locked wallet fails indistinguishably from a user rejection, and silently
+
+The first connect attempt hit it: the vault was locked, so `handleBeaconRequest` returned
+`4100 Wallet is locked` **before enqueueing anything**, the content script mapped that to
+`ABORTED_ERROR` (the only honest option — Beacon defines no "locked" error), and the dApp surfaced
+`AbortedBeaconError`. That is byte-identical to what a user pressing Reject produces. Meanwhile the
+wallet showed nothing: no prompt, no window, no badge, because nothing was enqueued.
+
+Measured timings from the two attempts: the locked refusal returned in **2.9 s**
+(`makeRequest … 2893 ms`, essentially the transport round trip), the successful grant took **15.2 s**
+(`makeRequest … 15228 ms`, dominated by the human reading the approval screen). Both are far inside
+the dApp's `CONNECT_TIMEOUT_MS = 120_000`.
+
+**NOT FIXED.** The fix is to open the wallet's unlock UI on a locked-vault dApp request, which is what
+MetaMask and Temple both do — but it adds a capability this wallet does not currently have (a dApp
+request causing a wallet window to appear), and that is a security decision for the owner, not a
+detail to slip in. Recorded here so it is a decision rather than an oversight. The EIP-1193 path has
+the identical behaviour and would want the same treatment.
 
 ### L3 — the loaded build was not the built build
 
@@ -533,11 +566,27 @@ lazy chunk          145.81 kB, reached only on a real pairing
 
 ## 8. NOT DONE — stated, not smoothed over
 
-- **Pairing is confirmed live; the ceremony is not.** The 2026-08-24 run establishes discovery,
-  selection and the cryptobox pairing handshake against the real dApp (§3.1/22-25). It does **not**
-  establish anything past connect — see the `operation_request` bullet below. Note also that the run
-  required the beacon-ui workaround in §4.1/L2 to be selectable at all, so "it works" is conditional
-  on carrying that workaround.
+- **Connect is confirmed live; the ceremony is not.** The 2026-08-24 run establishes discovery,
+  selection, pairing and the full permission grant against the real dApp (§3.1/22-27). It establishes
+  **nothing past connect** — see the `operation_request` bullet below. Note also that the run required
+  the beacon-ui workaround in §4.1/L2 to be selectable at all, so "it works" is conditional on
+  carrying that workaround.
+- **A locked wallet fails silently and indistinguishably from a user rejection** (§3.1/27, §4.1/L4).
+  Confirmed live, not fixed. Every auto-lock puts the user back into it with no wallet-side signal.
+- **AUTO-LOCK IS A CEREMONY HAZARD, and this needs deciding before milestone 2.** `AUTO_LOCK_IDLE_MS`
+  is **5 minutes** (`packages/core/src/shared/constants.ts:55`), enforced by a 1-minute alarm, and
+  `recordActivity` is stamped **only for `trusted-ui` traffic** — dApp traffic deliberately does not
+  count (`service-worker.ts:122`). `autoLock` then calls `keyring.lock()`, `queue.rejectAll()`,
+  `state.container = null` and `containerCache.clear()`. Consequences for a 23-op run:
+  - approving each operation is `trusted-ui` traffic, so a user actively confirming ops keeps the
+    wallet alive — the common path is fine;
+  - but any single step that keeps the operator away from the wallet for >5 minutes auto-locks it,
+    **rejecting every pending approval** and killing the run mid-ceremony;
+  - and `chrome.idle` locks *immediately* on screen lock or system idle, regardless of the deadline.
+  Untested against a real ceremony. Named now because a mid-ceremony abort after children have been
+  paid for is the expensive failure, and it is a design decision (exempt an in-flight ceremony? stamp
+  activity on approval resolution? raise the deadline while approvals are pending?) rather than a bug
+  with an obvious fix.
 - **Only one dApp, one browser, one profile.** Confirmed against `@ecadlabs/beacon-dapp`
   4.8.1-ecad.7 in Chrome with MetaMask also installed. Not tested against `@airgap/beacon-dapp`, a
   second Beacon wallet on the same page (§3.2/5), Firefox, or a fresh profile.
