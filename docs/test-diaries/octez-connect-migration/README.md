@@ -256,8 +256,38 @@ beacon-branch rung 3's burn. (The forecast written before the run said −70 351
 internal origination's 879 bytes, the same omission class as the `origination_size` miss recorded in
 the m2 diary. The code was right both times; the arithmetic in the prediction was not.)
 
-**What §8 does NOT cover, and it is the obvious gap.** Rung 3's parameter is ~242 characters. The
-ceremony's phase-2 deploys carry **38 703**, and that payload has only ever gone through the
-UNSTUBBED build (§7). So the large-payload path on the stubbed build is unproven, and it is exactly
-the path where a bundling change could plausibly matter. Re-running the ceremony on this build is the
-remaining check; the rungs make it worth attempting, they do not replace it.
+**The large-payload gap §8 left open is now closed — see §9.**
+
+---
+
+## 9. Live: the full ceremony on the stubbed build. Three runs, one spend.
+
+Levels **593714 → 593740**, **25 operations, 25 applied**, counter 59 → 84 — exactly 25 increments.
+The 38 703-character phase-2 payload went through the 99.6 kB build, which was the one path §8 could
+not reach with a 242-character rung.
+
+**Three ceremonies across two SDKs and two bundle configurations produced the same spend:**
+
+| | beacon-sdk 4.8 | octez.connect 5.0.3 | octez.connect 5.0.3, stubbed |
+|---|---|---|---|
+| chunk carrying the SDK | 148.8 kB | 244.4 kB | **99.6 kB** |
+| operations / applied | 25 / 25 | 25 / 25 | 25 / 25 |
+| total `bakerFee` | 3 247 173 µꜩ | 3 247 173 µꜩ | **3 247 173 µꜩ** |
+| balance delta | −3 272 932 µꜩ | −3 272 932 µꜩ | **−3 272 932 µꜩ** |
+| ops at the 660 000 gas cap | 6 | 6 | 6 |
+| largest Micheline | 38 703 chars | 38 703 chars | 38 703 chars |
+| children minted → `setAdmin`-ed | 6 → the same 6 | 6 → the same 6 | 6 → the same 6 |
+
+Identical to the mutez, three times. The SDK swap and the 59% chunk reduction are both
+behaviour-preserving on the ceremony path, which is as strong a statement as on-chain evidence can
+make about this wallet.
+
+**What is now proven end to end:** connect and the hard network gate; `operation_request` with
+arbitrary destination, entrypoint and Micheline; a pin honoured verbatim including gas declared at
+this chain's hard limit exactly; the inter-operation state coupling; a 38 kB payload; and all of it
+against a dApp that was never modified, over two different wallet SDKs.
+
+**What remains untested, unchanged by this run:** every failure branch (75 operations, zero rejected,
+aborted or resumed), the approval screen (never read back across 82 signed operations), auto-lock's
+screen-lock path, `sign_payload`, batches, the `'2'` flat-legacy negotiation branch, a v5↔v5 pairing,
+and a tightly-priced pin. The relayer is still on EOL `@airgap/beacon-sdk` (§5).
