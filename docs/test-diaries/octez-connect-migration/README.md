@@ -8,9 +8,10 @@ branch** · `npm ci` ✓ · `npm run build:wallet` ✓ incl. the content-script 
 **Predecessors:** `../beacon-wallet-provider/README.md` (m1, connect) ·
 `../beacon-operation-request/README.md` (m2, operations + the 25-op ceremony, live-verified)
 
-**NOT LIVE-TESTED. Nothing on this branch has talked to a dApp.** Every claim below is from reading
-the installed dist, the type checker, and the unit suites. The interop question this migration
-actually turns on (§4) cannot be answered without firing rung 1.
+**LIVE-VERIFIED, 2026-08-25: THE FULL 25-OPERATION CEREMONY RAN OVER OCTEZ.CONNECT 5.0.3 AGAINST AN
+UNCHANGED 4.8 DAPP.** 25/25 applied, and the on-chain result is byte-for-byte identical to the
+beacon-branch run — same fees, same limits, same parameter sizes, same total spend to the mutez. The
+interop question this migration turned on is answered. See §7.
 
 ---
 
@@ -60,14 +61,15 @@ Two entries were deliberately held at baseline after inspection:
 
 ## 4. NOT DONE — the question this branch cannot answer by reading
 
-- **NO LIVE RUN. The wallet has not spoken to a dApp on this branch.** Not one frame. Everything
-  above is the type checker and the installed dist.
-- **THE INTEROP QUESTION IS OPEN, AND IT IS THE WHOLE RISK.** The MAPS dApp is read-only per the
-  brief and ships `@ecadlabs/beacon-*` 4.8.1-ecad.7 — a THIRD fork, at `BEACON_VERSION '3'`. So a
-  5.0.3 wallet at `'4'` must be understood by a 4.8 reader. Measured 5 says the negotiation is built
-  for exactly this and Measured 6 says this wallet inherits it; Measured 7 says the one documented
-  failure is the mirror case. **None of that is a live pairing.** Rung 1 of the probe ladder settles
-  it in about a minute and costs 20 000 µꜩ.
+- ~~NO LIVE RUN~~ — **closed by §7.** The ceremony ran, 25/25 applied.
+- ~~THE INTEROP QUESTION IS OPEN~~ — **closed by §7.** A `BEACON_VERSION '4'` wallet paired with and
+  served a `'3'` reader through 25 operations, including a 38 703-character Micheline payload. Note
+  what is proven and what is merely not-contradicted: the down-negotiation WORKS for this dApp's
+  version, which does not test the `'2'` flat-legacy branch of `negotiateEnvelopeVersion`, nor a
+  peer that omits its version, nor a v5-to-v5 pairing at full `'4'`.
+- **The probe ladder was skipped on this branch.** Rungs 1-3 were the instrument that caught the
+  `(default, Unit)` measurement trap on the beacon branch; going straight to the ceremony worked, but
+  a failure would have had 25 candidate causes instead of one.
 - **The hand-written frame shapes are pinned to a 4.8 READER.** `page-frames.ts` cites the 4.8 dist
   on purpose, and its citations must not be "modernised" while the dApp ships 4.8 — repointing them
   at a 5.x path would cite code that is not what parses these frames.
@@ -127,3 +129,48 @@ on dApp pages, not on every page the user visits. Still, +65 kB gzipped on a con
 one of: importing `WalletClient`'s pieces from `octez.connect-core` directly, a bundler-level alias
 stubbing the matrix transport and blockchain module, or splitting the chunk further. **Not attempted
 here** — it is an optimisation, and this branch should be judged on whether it still pairs (§4).
+
+---
+
+## 7. Live: the ceremony over octez.connect, and it is indistinguishable from Beacon's
+
+Levels **593292 → 593321**, 2026-08-25T08:44:59Z → 08:46:41Z, **25 operations, 25 applied**, counter
+31 → 56 — exactly 25 increments, so no reveal, no retry, nothing stray. Read from TzKT and the node
+rather than from what the wallet or the dApp reported.
+
+**The comparison that matters.** Same account, same dApp, same ceremony, only the wallet's SDK
+differing:
+
+| | beacon-sdk 4.8 run | octez.connect 5.0.3 run |
+|---|---|---|
+| operations / applied | 25 / 25 | 25 / 25 |
+| total `bakerFee` | 3 247 173 µꜩ | **3 247 173 µꜩ** |
+| balance delta | −3 272 932 µꜩ | **−3 272 932 µꜩ** |
+| ops at the 660 000 gas hard limit | 6 | 6 |
+| largest Micheline parameter | 38 703 chars | 38 703 chars |
+| ops carrying a parameter | 25 | 25 |
+| children minted, then `setAdmin`-ed | 6 → the same 6 | 6 → the same 6 |
+| wall clock | 4 min 18 s | 1 min 42 s |
+
+Every per-operation fee, gas limit and parameter size matches across the two runs. **Two differences
+only**, both explained:
+
+- **the child KT1 addresses**, because this run minted new ones;
+- **op 7's `gasUsed`, 62 016 against the beacon run's 66 076.** The other 24 match exactly. This is
+  the first `%call_evm` deploy, and consumption inside the gateway's EVM frame depends on the state
+  it deploys into — not on which SDK serialised the request. Nothing wallet-side reaches `gasUsed`.
+
+**What this establishes.** The migration is behaviour-preserving at the only level that counts: an
+identical operation set, priced identically, spent to the mutez. Version `'4'` → `'3'`
+down-negotiation works against a real 4.8 reader across a 38 kB payload. And the inter-operation
+state coupling survived — phase 3 rotated admin on exactly the six children phase 1 created.
+
+**What it does NOT establish.** The wall-clock difference (4:18 → 1:42) is recorded as an observation
+with **no cause attributed**: the dApp's `paceWalletRequest` gate, operator speed, and network
+conditions are all uncontrolled here, and one run each is not a measurement. Do not read it as
+"octez.connect is faster". Also untested: the `'2'` flat-legacy path, a version-less peer, a v5↔v5
+pairing, and every failure branch — 25/25 applied means nothing was rejected, aborted or resumed.
+
+**Still open from the beacon branch, unchanged by this one:** §6's +64% chunk regression, the
+`beacon-ui` `types.length` workaround, `sign_payload`, batches, `CALL_EVM_GAS_LIMIT`, and the fact
+that no approval screen has been read back across 54 signed operations.
