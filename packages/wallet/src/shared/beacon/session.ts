@@ -37,7 +37,7 @@
 // page would be pure cost.
 import '@tezosx/wallet-core/shared/buffer-shim';
 
-import { Serializer, getSenderId } from '@airgap/beacon-core';
+import { Serializer, getSenderId } from '@tezos-x/octez.connect-core';
 import {
   BeaconErrorType,
   BeaconMessageType,
@@ -47,8 +47,8 @@ import {
   type BeaconResponseInputMessage,
   type OperationRequestOutput,
   type PermissionRequestOutput,
-} from '@airgap/beacon-types';
-import type { Storage as BeaconStorage } from '@airgap/beacon-types';
+} from '@tezos-x/octez.connect-types';
+import type { Storage as BeaconStorage } from '@tezos-x/octez.connect-types';
 import { ChromeBeaconStorage } from '../../adapters/chrome/chrome-beacon-storage';
 import type { BeaconRequest, WalletResponse } from '@tezosx/wallet-core/shared/messages';
 import type { BeaconPermissionGrant } from '@tezosx/wallet-core/domain/beacon';

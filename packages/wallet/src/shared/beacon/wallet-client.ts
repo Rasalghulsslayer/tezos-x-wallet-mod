@@ -4,7 +4,7 @@
  * ── WHY A SUBCLASS ───────────────────────────────────────────────────────────
  *
  * `WalletClient.init()` takes no arguments and hardcodes a Matrix P2P transport
- * (`@airgap/beacon-wallet/dist/esm/client/WalletClient.js:39-43`), while the
+ * (`@tezos-x/octez.connect-wallet/dist/esm/client/WalletClient.js:39-43`), while the
  * transport-accepting `init` one level up in `Client` is the one it calls
  * through to. `setTransport` is `protected`, and `WalletPostMessageTransport` is
  * not even in the package's public exports. There is no supported way to hand
@@ -26,9 +26,9 @@
  * See the header of `adapters/chrome/chrome-beacon-storage.ts`.
  */
 
-import { WalletClient } from '@airgap/beacon-wallet';
-import { Client } from '@airgap/beacon-core';
-import type { Storage, TransportType } from '@airgap/beacon-types';
+import { WalletClient } from '@tezos-x/octez.connect-wallet';
+import { Client } from '@tezos-x/octez.connect-core';
+import type { Storage, TransportType } from '@tezos-x/octez.connect-types';
 import { ChromeBeaconStorage } from '../../adapters/chrome/chrome-beacon-storage';
 import { ExtensionPostMessageTransport, type PostToPage } from './extension-post-message';
 

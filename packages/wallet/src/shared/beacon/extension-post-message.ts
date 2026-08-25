@@ -3,21 +3,35 @@
  *
  * ── WHY THIS EXISTS: the SDK's own wallet transport cannot carry it ───────────
  *
- * `@airgap/beacon-wallet` ships `WalletPostMessageTransport`, but it is unusable
- * for a browser extension in 4.8.x, for two independent reasons — both read off
- * the installed dist, not inferred:
+ * `@tezos-x/octez.connect-wallet` ships `WalletPostMessageTransport`, but it is unusable
+ * for a browser extension, for two independent reasons — both read off the
+ * installed dist, not inferred, and both RE-VERIFIED against 5.0.3 when this
+ * file was migrated off `@airgap/beacon-*` 4.8.x. The migration did not remove
+ * the need for this file; it only moved the code that proves it:
  *
- *  1. WRONG DIRECTION. It inherits `PostMessageClient`
- *     (`@airgap/beacon-transport-postmessage/dist/esm/PostMessageClient.js`),
- *     which is written for the dApp end: `sendMessage` posts
- *     `{ target: 'toExtension', encryptedPayload }` and `subscribeToMessages`
- *     listens for `data.message.target === 'toPage'`. A wallet needs exactly the
- *     mirror of both. Using it, the wallet would talk to other wallets and
- *     listen for its own replies.
+ *  1. WRONG DIRECTION. It extends `PostMessageTransport`, which drives
+ *     `PostMessageClient`
+ *     (`@tezos-x/octez.connect-transport-postmessage/dist/cjs/PostMessageClient.js`),
+ *     written for the dApp end: it posts
+ *     `target: ExtensionMessageTarget.EXTENSION` (lines 56, 95) and listens for
+ *     `target === ExtensionMessageTarget.PAGE` (lines 75, 119). A wallet needs
+ *     exactly the mirror of both. Using it, the wallet would talk to other
+ *     wallets and listen for its own replies.
  *  2. NO `sender`. The dApp reads the extension id off `event.data.sender.id`
  *     (`PostMessageClient.listenForChannelOpening`, `.subscribeToMessages`), and
  *     `PostMessageClient` never sets it — only a content script knows
- *     `chrome.runtime.id`.
+ *     `chrome.runtime.id`. Zero occurrences of `sender` in 5.0.3's
+ *     `octez.connect-wallet/dist/cjs/transports/WalletPostMessageTransport.js`.
+ *
+ * ⚠️ NOTE THE ASYMMETRY THIS WALLET NOW LIVES WITH. It builds against
+ * octez.connect 5.0.3 (`BEACON_VERSION '4'`) while the MAPS dApp still ships
+ * `@ecadlabs/beacon-*` 4.8.1-ecad.7 (`BEACON_VERSION '3'`). The frames below
+ * must therefore satisfy a 4.8 READER, which is why the citations in
+ * `page-frames.ts` still point at the 4.8 dist and must not be "modernised".
+ * v5 negotiates the envelope down per peer — `negotiateEnvelopeVersion` in
+ * `octez.connect-wallet/interceptors/OutgoingResponseInterceptor.js`, serving
+ * `'2'` below v3 and `min(peer, '4')` above — but that covers the SDK's own
+ * envelope, not this transport's frame shape, which stays hand-written.
  *
  * So the wire format below is the dApp's own reader, mirrored. The two frame
  * shapes the dApp accepts, verbatim from its code:
@@ -33,7 +47,7 @@
  *
  * ── WHY IT LIVES IN THE CONTENT SCRIPT ───────────────────────────────────────
  *
- * `@airgap/beacon-core` resolves its `windowRef` to `window` when one exists and
+ * `@tezos-x/octez.connect-core` resolves its `windowRef` to `window` when one exists and
  * to a loopback mock otherwise (`dist/esm/MockWindow.js:22-30`). An MV3 service
  * worker has no `window`, so any Beacon post_message transport running there
  * would post to itself. The ISOLATED content-script world shares the page's
@@ -45,7 +59,7 @@
  * whole transport is exercisable under Vitest's `node` environment.
  */
 
-import { MessageBasedClient, PeerManager, Transport } from '@airgap/beacon-core';
+import { MessageBasedClient, PeerManager, Transport } from '@tezos-x/octez.connect-core';
 import {
   Origin,
   StorageKey,
@@ -54,8 +68,8 @@ import {
   type PeerInfoType,
   type PostMessagePairingRequest,
   type Storage,
-} from '@airgap/beacon-types';
-import type { getKeypairFromSeed } from '@airgap/beacon-utils';
+} from '@tezos-x/octez.connect-types';
+import type { getKeypairFromSeed } from '@tezos-x/octez.connect-utils';
 // The wire format lives in `page-frames`, which the content script also reaches;
 // this module is lazily imported and may hold SDK value imports freely.
 import { TO_PAGE, type PostToPage, type ToPageFrame } from './page-frames';

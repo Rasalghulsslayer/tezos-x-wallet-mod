@@ -19,10 +19,6 @@
     "pretest:e2e": "npm run build"
   },
   "dependencies": {
-    "@airgap/beacon-core": "^4.8.0",
-    "@airgap/beacon-types": "^4.8.0",
-    "@airgap/beacon-utils": "^4.8.0",
-    "@airgap/beacon-wallet": "^4.8.1",
     "@noble/ciphers": "1.2.1",
     "@noble/curves": "2.2.0",
     "@noble/hashes": "2.2.0",
@@ -30,6 +26,10 @@
     "@taquito/rpc": "^24.3.0",
     "@taquito/signer": "^24.3.0",
     "@taquito/taquito": "^24.3.0",
+    "@tezos-x/octez.connect-core": "^5.0.3",
+    "@tezos-x/octez.connect-types": "^5.0.3",
+    "@tezos-x/octez.connect-utils": "^5.0.3",
+    "@tezos-x/octez.connect-wallet": "^5.0.3",
     "@tezosx/relayer": "^0.9.0",
     "@tezosx/wallet-core": "^0.9.0",
     "buffer": "^6.0.3",

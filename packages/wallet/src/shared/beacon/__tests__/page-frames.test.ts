@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Serializer } from '@airgap/beacon-core';
-import { ExtensionMessageTarget, PostMessagePairingRequest } from '@airgap/beacon-types';
+import { Serializer } from '@tezos-x/octez.connect-core';
+import { ExtensionMessageTarget, PostMessagePairingRequest } from '@tezos-x/octez.connect-types';
 import {
   BEACON_HANDOFF_KEY,
   BEACON_WALLET_NAME,
@@ -17,7 +17,7 @@ const OTHER_ID = 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz';
 const PUBKEY   = 'a'.repeat(64);
 
 describe('the SDK enum values this module re-states as literals', () => {
-  // `page-frames.ts` imports @airgap/beacon-types as TYPES ONLY, because a single
+  // `page-frames.ts` imports @tezos-x/octez.connect-types as TYPES ONLY, because a single
   // value import makes @crxjs emit the content script behind an async loader
   // instead of a synchronous IIFE — which decides whether the window listener
   // exists before page script runs. These assertions are what keep the literals

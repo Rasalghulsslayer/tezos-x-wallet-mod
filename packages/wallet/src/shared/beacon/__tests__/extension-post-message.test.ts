@@ -14,7 +14,7 @@
  */
 
 import { describe, expect, it, beforeEach } from 'vitest';
-import { MessageBasedClient } from '@airgap/beacon-core';
+import { MessageBasedClient } from '@tezos-x/octez.connect-core';
 import {
   ExtensionMessageTarget,
   PostMessagePairingRequest,
@@ -25,8 +25,8 @@ import {
   type PeerInfoType,
   type Storage,
   type StorageKeyReturnType,
-} from '@airgap/beacon-types';
-import { getKeypairFromSeed, openCryptobox } from '@airgap/beacon-utils';
+} from '@tezos-x/octez.connect-types';
+import { getKeypairFromSeed, openCryptobox } from '@tezos-x/octez.connect-utils';
 import {
   ExtensionPostMessageTransport,
   type BeaconKeyPair,
