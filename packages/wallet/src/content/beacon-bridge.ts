@@ -16,7 +16,7 @@
  * EIP-1193 bridge's frames carry `type: 'TEZOSX_WALLET_*'` and no `target`, and
  * each listener drops what is not its own.
  *
- * WHY THE TRANSPORT IS HERE AND NOT IN THE SERVICE WORKER. `@airgap/beacon-core`
+ * WHY THE TRANSPORT IS HERE AND NOT IN THE SERVICE WORKER. `@tezos-x/octez.connect-core`
  * resolves its `windowRef` to `window` when one exists and to a loopback mock
  * otherwise (`dist/esm/MockWindow.js:22-30`); an MV3 service worker has none, so a
  * Beacon post_message transport there would talk to itself. The ISOLATED world

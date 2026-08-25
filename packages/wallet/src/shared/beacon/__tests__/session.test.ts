@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { MessageBasedClient, Serializer, getSenderId } from '@airgap/beacon-core';
+import { MessageBasedClient, Serializer, getSenderId } from '@tezos-x/octez.connect-core';
 import {
   BeaconErrorType,
   BeaconMessageType,
@@ -26,8 +26,8 @@ import {
   defaultValues,
   type Storage,
   type StorageKeyReturnType,
-} from '@airgap/beacon-types';
-import { getKeypairFromSeed, openCryptobox } from '@airgap/beacon-utils';
+} from '@tezos-x/octez.connect-types';
+import { getKeypairFromSeed, openCryptobox } from '@tezos-x/octez.connect-utils';
 import { WALLET_BEACON_NETWORK } from '@tezosx/wallet-core/domain/beacon';
 import type { BeaconRequest, WalletResponse } from '@tezosx/wallet-core/shared/messages';
 import { startBeaconSession, type BeaconSession } from '../session';

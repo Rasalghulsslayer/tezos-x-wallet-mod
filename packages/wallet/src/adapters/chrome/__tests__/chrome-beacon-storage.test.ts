@@ -16,7 +16,7 @@
  */
 
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { StorageKey, defaultValues } from '@airgap/beacon-types';
+import { StorageKey, defaultValues } from '@tezos-x/octez.connect-types';
 import { ChromeBeaconStorage } from '../chrome-beacon-storage';
 
 interface FakeChrome {

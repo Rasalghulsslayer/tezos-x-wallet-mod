@@ -7,6 +7,12 @@
  * guessed at (paths relative to `@airgap/beacon-transport-postmessage/dist/esm`,
  * and byte-identical in the `@ecadlabs/beacon-*` fork the MAPS dApp ships):
  *
+ * ⚠️ THESE CITATIONS DESCRIBE THE DAPP'S READER AND ARE DELIBERATELY NOT
+ * MIGRATED. This wallet now builds against `@tezos-x/octez.connect-*` 5.0.3, but
+ * the MAPS dApp still ships the 4.8 `@ecadlabs` fork, and it is the dApp's
+ * reader these frames must satisfy. Repointing them at a 5.x path would cite
+ * code that is not what parses these frames.
+ *
  *   `PostMessageTransport.listenForExtensions`  reads `event.data.payload === 'pong'`
  *                                              and `event.data.sender` — FLAT.
  *   `PostMessageClient.listenForChannelOpening` reads `event.data.message.target === 'toPage'`,
@@ -26,7 +32,7 @@
 // script behind an async loader instead of a synchronous IIFE — which decides
 // whether the window listener exists before page script runs. See the note on
 // the discovery race in `content/beacon-bridge.ts`.
-import type { Extension, ExtensionMessageTarget } from '@airgap/beacon-types';
+import type { Extension, ExtensionMessageTarget } from '@tezos-x/octez.connect-types';
 
 /** How the wallet identifies itself in Beacon's extension discovery. */
 export const BEACON_WALLET_NAME = 'TezosX Wallet';

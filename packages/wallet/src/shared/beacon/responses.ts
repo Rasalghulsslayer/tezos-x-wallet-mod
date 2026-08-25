@@ -17,7 +17,7 @@ import {
   type NetworkType,
   type OperationRequestOutput,
   type PermissionRequestOutput,
-} from '@airgap/beacon-types';
+} from '@tezos-x/octez.connect-types';
 import {
   BEACON_NETWORK_NOT_SUPPORTED,
   BEACON_NOT_CONNECTED,

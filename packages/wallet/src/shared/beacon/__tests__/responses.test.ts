@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BeaconErrorType, BeaconMessageType, NetworkType, PermissionScope } from '@airgap/beacon-types';
-import { getAddressFromPublicKey, isValidAddress, prefixPublicKey } from '@airgap/beacon-utils';
+import { BeaconErrorType, BeaconMessageType, NetworkType, PermissionScope } from '@tezos-x/octez.connect-types';
+import { getAddressFromPublicKey, isValidAddress, prefixPublicKey } from '@tezos-x/octez.connect-utils';
 import { WALLET_BEACON_NETWORK, type BeaconPermissionGrant } from '@tezosx/wallet-core/domain/beacon';
 import {
   beaconErrorFor,

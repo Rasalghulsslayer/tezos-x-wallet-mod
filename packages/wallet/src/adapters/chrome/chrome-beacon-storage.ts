@@ -4,7 +4,7 @@
  *
  * ── WHY NOT THE SDK'S OWN `ChromeStorage` ────────────────────────────────────
  *
- * `@airgap/beacon-core`'s `ChromeStorage.get` calls
+ * `@tezos-x/octez.connect-core`'s `ChromeStorage.get` calls
  * `chrome.storage.local.get(null, …)` — it reads the ENTIRE extension namespace
  * and then picks one key out of the result (`dist/esm/storage/ChromeStorage.js:15-31`).
  * This wallet keeps the encrypted vault at `chrome.storage.local['vault']`, plus
@@ -29,7 +29,7 @@ import {
   type Storage as BeaconStorage,
   type StorageKey,
   type StorageKeyReturnType,
-} from '@airgap/beacon-types';
+} from '@tezos-x/octez.connect-types';
 
 /**
  * The SDK hands the caller its own default for a missing key and then mutates it
