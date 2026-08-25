@@ -217,14 +217,47 @@ conditions are all uncontrolled here, and one run each is not a measurement. Do 
 "octez.connect is faster". Also untested: the `'2'` flat-legacy path, a version-less peer, a v5↔v5
 pairing, and every failure branch — 25/25 applied means nothing was rejected, aborted or resumed.
 
-**⚠️ THE LIVE RUN PREDATES §6's STUBS.** The ceremony above was signed by the build as octez.connect
-ships it — 244 kB chunk, Matrix and the wallet registry both bundled. The stubs came after, and
-nothing has yet paired with them in place. They are resolution-time substitutions, so neither the
-type checker nor the 760 unit tests can see them, and the postbuild gate proves only that the code is
-absent, not that removing it was harmless. **The ceremony needs re-running on the current build**,
-and rung 1 alone would catch the plausible failure (a broken barrel import taking the transport with
-it).
+**THE STUBBED BUILD IS LIVE-VERIFIED TOO — see §8.** The ceremony above was signed by the build as
+octez.connect ships it (244 kB, Matrix and the registry both bundled). All three probe rungs were
+then re-run on the 99.6 kB stubbed build and all three applied, which is what closes §6: the stubs
+are resolution-time substitutions that neither `tsc` nor the 760 unit tests can see, and the postbuild
+gate proves only that the code is ABSENT, never that removing it was harmless.
 
 **Still open from the beacon branch, unchanged by this one:** the `beacon-ui` `types.length`
 workaround, `sign_payload`, batches, `CALL_EVM_GAS_LIMIT`, and the fact that no approval screen has
 been read back across 54 signed operations.
+
+---
+
+## 8. Live: the probe ladder on the STUBBED build
+
+The question §6 could not answer by reading: with the Matrix transport and the 116 kB wallet registry
+resolved away at build time, does the wallet still pair and sign? The plausible failure was a broken
+barrel import taking the transport down with it — `octez.connect-wallet`'s barrel star-re-exports the
+module that was stubbed.
+
+Three rungs, 2026-08-25, all `applied`, counter 56 → 59:
+
+| rung | level | pin (fee / gas / storage) | honoured | parameter on chain |
+|---|---|---|---|---|
+| 1 — plain transfer | 593680 | 20 000 / 10 000 / 100 | exact | absent, as designed |
+| 2 — `(default, Unit)` | 593682 | 20 000 / 10 000 / 100 | exact | **absent** — the forger normalisation of §Measured 15, confirmed a third time |
+| 3 — real Micheline to a KT1 | 593683 | 30 000 / 6 100 / 1 428 | exact | **present**, and INTERPRETED |
+
+**Rung 3 is the one that settles it.** Its parameter reached the chain and became state: the `ctr`
+originator minted `KT1HiuBaA7C4djD7djNbSuBwHygx7wv5U5Kf` as an internal origination, `applied`. So the
+barrel import, `WalletClient`, the hand-written transport, the pin pass-through and the parameter path
+all survive with Matrix and the registry removed. The intervention is behaviour-preserving on this
+path, not merely smaller.
+
+Spend reconciles to the byte: balance 33 361 602 → 33 290 374, **−71 228** = 70 000 of fees plus
+**1 228** bytes of storage — 92 outer + 879 internal + 257 `origination_size`, byte-identical to the
+beacon-branch rung 3's burn. (The forecast written before the run said −70 351: it omitted the
+internal origination's 879 bytes, the same omission class as the `origination_size` miss recorded in
+the m2 diary. The code was right both times; the arithmetic in the prediction was not.)
+
+**What §8 does NOT cover, and it is the obvious gap.** Rung 3's parameter is ~242 characters. The
+ceremony's phase-2 deploys carry **38 703**, and that payload has only ever gone through the
+UNSTUBBED build (§7). So the large-payload path on the stubbed build is unproven, and it is exactly
+the path where a bundling change could plausibly matter. Re-running the ceremony on this build is the
+remaining check; the rungs make it worth attempting, they do not replace it.
