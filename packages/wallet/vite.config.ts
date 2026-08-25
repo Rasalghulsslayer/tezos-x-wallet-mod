@@ -10,6 +10,35 @@ import corePkg from '../core/package.json' with { type: 'json' };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Drop octez.connect's 116 kB bundled wallet REGISTRY from the build.
+ *
+ * A `resolve.alias` cannot express this: the SDK imports the file relatively
+ * (`./data/bundled-wallet-registry` from `blockchain.js`), so there is no package
+ * specifier to alias, and matching the bare relative path would risk catching
+ * an unrelated module. Matching on the importer is precise.
+ *
+ * See src/shared/beacon/wallet-registry-stub.ts for why this data file is
+ * droppable while the blockchain module around it is not.
+ */
+function stubBeaconWalletRegistry() {
+  const stub = path.resolve(__dirname, './src/shared/beacon/wallet-registry-stub.ts');
+  return {
+    name: 'tezosx:stub-beacon-wallet-registry',
+    enforce: 'pre' as const,
+    resolveId(source: string, importer: string | undefined) {
+      if (
+        importer != null &&
+        importer.includes('octez.connect-blockchain-tezos') &&
+        source.includes('data/bundled-wallet-registry')
+      ) {
+        return stub;
+      }
+      return null;
+    },
+  };
+}
+
 export default defineConfig({
   base: '',   // relative asset paths — required for Chrome extensions
   define: {
@@ -23,11 +52,20 @@ export default defineConfig({
     react(),
     tailwindcss(),
     crx({ manifest }),
+    stubBeaconWalletRegistry(),
   ],
   resolve: {
     alias: {
       '@':    path.resolve(__dirname, './src'),
       buffer: 'buffer/',
+      // The Matrix P2P transport is unreachable in this wallet but unshakeable,
+      // because octez.connect-wallet's barrel star-re-exports it and no
+      // octez.connect package declares `sideEffects: false`. See
+      // src/shared/beacon/matrix-transport-stub.ts for why the stub throws
+      // rather than being empty.
+      '@tezos-x/octez.connect-transport-matrix': path.resolve(
+        __dirname, './src/shared/beacon/matrix-transport-stub.ts',
+      ),
     },
   },
   server: {

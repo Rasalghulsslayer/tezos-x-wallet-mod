@@ -95,3 +95,77 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(`[postbuild] content-script Buffer check passed (${(m.content_scripts ?? []).flatMap((cs) => cs.js ?? []).length} entries)`);
+
+// ── Dead weight in content scripts ───────────────────────────────────────────
+//
+// Content scripts run on the user's pages, so anything reachable from one is
+// weight the user pays for. Two dependencies of octez.connect are pure dApp-side
+// baggage for a WALLET, and neither can be tree-shaken: no octez.connect package
+// declares `sideEffects: false`, and the wallet package's barrel does
+// `export * from '@tezos-x/octez.connect-transport-matrix'`.
+//
+// Together they were 145 kB of a 244 kB chunk. They are excluded by
+// `src/shared/beacon/matrix-transport-stub.ts` and
+// `src/shared/beacon/wallet-registry-stub.ts`, wired in `vite.config.ts` — and
+// BOTH interventions are invisible to the type checker and to every unit suite,
+// because they are resolution-time substitutions. A dependency bump that renames
+// a path would silently restore the weight with nothing failing. So the artifact
+// is checked, for the same reason the Buffer gate above checks it.
+const DEAD_WEIGHT = [
+  {
+    // A key on every entry of the generated wallet directory. Structural rather
+    // than a wallet's name, so a renamed wallet does not silently disable the
+    // check. Verified absent from this repo's own sources.
+    marker: /supportedInteractionStandards/,
+    what:   "octez.connect's 116 kB bundled wallet registry (a directory of OTHER wallets)",
+    fix:    'check that vite.config.ts\'s `stubBeaconWalletRegistry` plugin still matches the\n' +
+            '    SDK\'s import path for `data/bundled-wallet-registry`',
+  },
+  {
+    marker: /beacon-node-\d\.octez\.io/,
+    what:   "the Matrix P2P transport's default node list",
+    fix:    'check that the `@tezos-x/octez.connect-transport-matrix` alias in vite.config.ts\n' +
+            '    still resolves to src/shared/beacon/matrix-transport-stub.ts',
+  },
+];
+
+// Generous on purpose: the largest content-script graph today is ~142 kB, and
+// either regression above would add 116 kB or 31 kB. This catches the cliff
+// without failing on ordinary growth — and when it does fail, raising it should
+// be a deliberate edit with a reason, not a reflex.
+const CONTENT_SCRIPT_BUDGET_BYTES = 200 * 1024;
+
+const weightFailures = [];
+for (const entry of (m.content_scripts ?? []).flatMap((cs) => cs.js ?? [])) {
+  const graph = [...reachableChunks(entry)];
+  const sources = graph.map((name) => ({ name, source: readFileSync(`dist/${name}`, 'utf8') }));
+
+  for (const { marker, what, fix } of DEAD_WEIGHT) {
+    const hit = sources.filter((c) => marker.test(c.source));
+    if (hit.length === 0) continue;
+    weightFailures.push(
+      `  ${entry}\n` +
+      `    pulls in ${what}\n` +
+      `    found in: ${hit.map((c) => c.name).join(', ')}\n` +
+      `    Fix: ${fix}`,
+    );
+  }
+
+  const bytes = sources.reduce((total, c) => total + Buffer.byteLength(c.source), 0);
+  if (bytes > CONTENT_SCRIPT_BUDGET_BYTES) {
+    weightFailures.push(
+      `  ${entry}\n` +
+      `    reachable graph is ${(bytes / 1024).toFixed(1)} kB across ${graph.length} chunks, over the ` +
+      `${(CONTENT_SCRIPT_BUDGET_BYTES / 1024).toFixed(0)} kB budget.\n` +
+      `    Fix: find what grew before raising the budget — this runs on the user's pages.`,
+    );
+  }
+}
+
+if (weightFailures.length > 0) {
+  console.error(
+    '[postbuild] FAIL — content script(s) carry dead weight:\n' + weightFailures.join('\n'),
+  );
+  process.exit(1);
+}
+console.log('[postbuild] content-script weight check passed (no dApp-side baggage, all graphs under budget)');

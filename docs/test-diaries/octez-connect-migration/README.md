@@ -4,7 +4,8 @@
 **Date:** 2026-08-25
 **Gates:** tsc 0 across relayer + relayer/ext + core + wallet + mobile · eslint 0 errors (10
 pre-existing warnings, unchanged) · vitest **760 passing across 75 files, unchanged from the beacon
-branch** · `npm ci` ✓ · `npm run build:wallet` ✓ incl. the content-script Buffer gate
+branch** · `npm ci` ✓ · `npm run build:wallet` ✓ incl. the content-script Buffer gate **and the new
+weight gate** · content-script session chunk **99.6 kB, 33% below the beacon branch's 148.8 kB** (§6)
 **Predecessors:** `../beacon-wallet-provider/README.md` (m1, connect) ·
 `../beacon-operation-request/README.md` (m2, operations + the 25-op ceremony, live-verified)
 
@@ -92,43 +93,88 @@ alongside 7 `@tezos-x` ones. Not a correctness problem — different packages, d
 trees — but it is duplication, and if beacon-sdk is EOL then the relayer inherits an unmaintained
 dependency. Worth a decision, separately.
 
-## 6. The one regression: the lazy content-script chunk grew 64%
+## 6. The regression, and the fix: the content-script chunk is now SMALLER than Beacon's
 
 Measured side by side, same wallet source, only the SDK differing — the beacon branch was built in a
-throwaway git worktree with its own `npm ci` so the comparison is a real build and not a recalled
-figure:
+throwaway git worktree with its own `npm ci`, so this is a real build and not a recalled figure.
 
-| | `@airgap/beacon-*` 4.8 | `@tezos-x/octez.connect-*` 5.0.3 | delta |
-|---|---|---|---|
-| `session-*.js` raw | 148 811 B | 244378 B | **+64%** |
-| gzipped | 48.78 kB | 114.13 kB | **+134%** |
-
-**Attributed, not guessed.** Markers in the two built chunks:
-
-| marker | 4.8 chunk | 5.0.3 chunk |
+| session chunk | raw | gzip |
 |---|---|---|
-| `MatrixClient` | present | present |
-| `TezosBlockchain` | **absent** | **present** |
+| `@airgap/beacon-*` 4.8 (the baseline) | 148 811 B | 48.78 kB |
+| `@tezos-x/octez.connect-*` 5.0.3, as shipped | 244 373 B (+64%) | 114.13 kB (+134%) |
+| **after this branch's two stubs** | **99 647 B (−33% vs BEACON)** | **31.03 kB (−36%)** |
 
-The matrix transport was already bundled on both branches, so it is not the cause. The new weight is
-`@tezos-x/octez.connect-blockchain-tezos`, which `octez.connect-wallet` 5.0.3 lists as a dependency
-and `@airgap/beacon-wallet` 4.8 did not:
+### What it actually was, attributed rather than guessed
 
-    @tezos-x/octez.connect-wallet 5.0.3  ->  blockchain-tezos, core, transport-matrix,
-                                             transport-postmessage, types, utils
-    @airgap/beacon-wallet 4.8.1          ->  core, transport-matrix, transport-postmessage
+**The root cause is upstream: not one octez.connect package declares `sideEffects: false`.** So the
+bundler must assume every module in them can have an import side effect, and nothing unreferenced can
+be shaken — including `octez.connect-wallet`'s barrel, which is literally
+`export * from '@tezos-x/octez.connect-transport-matrix'`.
 
-**This wallet uses neither of them.** It registers no blockchain module and no matrix transport; it
-hand-writes its own postMessage transport (Measured 8) and drives the chain through Taquito. Both are
-being bundled because `WalletClient` is imported from the wallet package, which pulls its whole
-dependency set past the bundler.
+Two distinct passengers, found by stubbing each and rebuilding:
 
-Scope of the cost, stated accurately: this is the **lazy** chunk, loaded only once a Beacon dApp is
-detected on a page, not the eager per-page content-script cost (unchanged at 5.1 kB). So it is paid
-on dApp pages, not on every page the user visits. Still, +65 kB gzipped on a content script is worth
-one of: importing `WalletClient`'s pieces from `octez.connect-core` directly, a bundler-level alias
-stubbing the matrix transport and blockchain module, or splitting the chunk further. **Not attempted
-here** — it is an optimisation, and this branch should be judged on whether it still pairs (§4).
+| passenger | cost | why it is dApp-side baggage for a wallet |
+|---|---|---|
+| `data/bundled-wallet-registry.js` | **116 498 B** | A generated directory of OTHER Tezos wallets — its own header calls it the *"Offline fallback for the CDN fetch in `getWalletLists()`"*, and `getWalletLists()` is how a dApp populates a wallet chooser. |
+| the Matrix P2P transport | ~31 500 B | Reached only via the barrel's star re-export. This wallet pairs over `post_message` with its own hand-written transport (Measured 8) and never constructs `WalletP2PTransport`, which the barrel does not even export. |
+
+### The distinction that decided the intervention
+
+`TezosBlockchain` **is** on this wallet's path: `WalletClient`'s constructor runs
+`this.addBlockchain(new TezosBlockchain())`, and both interceptors receive the blockchain registry —
+`OutgoingResponseInterceptor.requireBlockchain(blockchains, …)` is how a wrapped v4 response is
+built. **So the blockchain module must not be stubbed**, and an earlier probe that stubbed the whole
+module (94.32 kB, tempting) was rejected: it would have worked today only because this dApp is at v3,
+and become a landmine the day it migrates to v5 and the wrapped path activates.
+
+The intervention is therefore on the **data file**, not the module. `blockchain.js` itself is 9 kB and
+is kept in full.
+
+### Why one stub throws and the other does not
+
+- `matrix-transport-stub.ts` **throws from its constructor.** `WalletP2PTransport` is
+  `class … extends P2PTransport`, evaluated at module-evaluation time, so an empty stub would be
+  `extends undefined` and throw a TypeError on import — a size optimisation that kills the wallet.
+  The stub must be a real class; making the CONSTRUCTOR throw keeps it fail-loud if anything ever
+  does try to open a P2P transport.
+- `wallet-registry-stub.ts` **must not throw.** It is consumed as
+  `fetchWalletListsFromGitHub('tezos').then((r) => loadWalletLists(r ?? bundled))`, i.e. as the
+  offline fallback. If some future path does call `getWalletLists()`, it fetches live first and only
+  reaches this value when that fails — where an empty list degrades gracefully and an exception would
+  crash. So: a valid, empty registry with the real top-level shape.
+
+A `resolve.alias` could express the matrix swap (a package specifier) but not the registry one: the
+SDK imports it relatively, as `./data/bundled-wallet-registry` from `blockchain.js`, so there is no
+specifier to alias. A four-line Vite plugin matching on the IMPORTER is precise where a bare
+relative-path match would be a guess.
+
+### What was tried and rejected
+
+`build.rollupOptions.treeshake.moduleSideEffects` — declaring the `@tezos-x` packages side-effect-free
+so the bundler could shake them itself — **bought 0.7 kB** and was removed. This is Vite 8 on rolldown,
+and crxjs drives the content-script build through `rolldownOptions`, so the setting appears never to
+reach that chunk. Config that implies a fix it does not deliver is worse than no config.
+
+### The gate, mutation-tested
+
+Both stubs are **resolution-time substitutions, invisible to the type checker and to all 760 unit
+tests.** An SDK bump that renames a path would silently restore 116 kB with nothing failing. So
+`postbuild-manifest.mjs` now checks the artifact, alongside the Buffer gate and reusing its
+`reachableChunks` walk: it fails if any content-script graph contains a structural registry key
+(`supportedInteractionStandards`) or the Matrix default node list (`beacon-node-N.octez.io`), or if
+any graph exceeds a 200 kB budget.
+
+Mutation-tested, because a gate that has never failed is not a gate:
+
+| mutation | result |
+|---|---|
+| matrix alias removed | **FAIL** — names the Matrix node list and the alias to check |
+| registry matcher renamed (as an SDK bump would) | **FAIL** — names the registry, plus the budget breach at 252.0 kB |
+| restored | passes |
+
+Markers were chosen for durability: `Temple` and `Kukai` both appear in this repo's own sources and
+would have been false positives, so the check keys on a structural field of every registry entry
+instead of on any wallet's name.
 
 ---
 
@@ -171,6 +217,14 @@ conditions are all uncontrolled here, and one run each is not a measurement. Do 
 "octez.connect is faster". Also untested: the `'2'` flat-legacy path, a version-less peer, a v5↔v5
 pairing, and every failure branch — 25/25 applied means nothing was rejected, aborted or resumed.
 
-**Still open from the beacon branch, unchanged by this one:** §6's +64% chunk regression, the
-`beacon-ui` `types.length` workaround, `sign_payload`, batches, `CALL_EVM_GAS_LIMIT`, and the fact
-that no approval screen has been read back across 54 signed operations.
+**⚠️ THE LIVE RUN PREDATES §6's STUBS.** The ceremony above was signed by the build as octez.connect
+ships it — 244 kB chunk, Matrix and the wallet registry both bundled. The stubs came after, and
+nothing has yet paired with them in place. They are resolution-time substitutions, so neither the
+type checker nor the 760 unit tests can see them, and the postbuild gate proves only that the code is
+absent, not that removing it was harmless. **The ceremony needs re-running on the current build**,
+and rung 1 alone would catch the plausible failure (a broken barrel import taking the transport with
+it).
+
+**Still open from the beacon branch, unchanged by this one:** the `beacon-ui` `types.length`
+workaround, `sign_payload`, batches, `CALL_EVM_GAS_LIMIT`, and the fact that no approval screen has
+been read back across 54 signed operations.
