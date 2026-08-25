@@ -14,7 +14,7 @@ vi.mock('@tezosx/relayer/utils/derive', () => ({
 import { dispatch, type SwDeps } from '@tezosx/wallet-core/composition/sw-wiring';
 import type { ContentPush } from '@tezosx/wallet-core/shared/messages';
 import type { VaultStore, EncryptedVault } from '@tezosx/wallet-core/ports/vault-store';
-import type { SessionStore, StoredSession } from '@tezosx/wallet-core/ports/session-store';
+import { sessionIdentity, type SessionStore, type StoredSession } from '@tezosx/wallet-core/ports/session-store';
 import type { TokenStore } from '@tezosx/wallet-core/ports/token-store';
 import type { ContactStore } from '@tezosx/wallet-core/ports/contact-store';
 import type { AliasStore } from '@tezosx/wallet-core/ports/alias-store';
@@ -35,8 +35,13 @@ class MemoryVault implements VaultStore {
 class MemorySessions implements SessionStore {
   private map = new Map<string, StoredSession>();
   async list() { return Array.from(this.map.values()); }
-  async upsert(s: StoredSession) { this.map.set(s.origin, s); }
-  async remove(origin: string) { this.map.delete(origin); }
+  // Keyed by `sessionIdentity`, matching the real adapters: one origin may hold an
+  // EIP-1193 and a Beacon session at once, and a double that keys on origin alone
+  // makes the correct coexistence test read RED.
+  async upsert(s: StoredSession) { this.map.set(sessionIdentity(s), s); }
+  async remove(origin: string) {
+    for (const [key, s] of this.map) if (s.origin === origin) this.map.delete(key);
+  }
   async clear() { this.map.clear(); }
 }
 class MemoryTokens implements TokenStore {
@@ -164,5 +169,31 @@ describe('sw-wiring — approval gating', () => {
     expect(res.ok).toBe(false);
     if (res.ok) throw new Error('unreachable');
     expect(res.code).toBe(4001);
+  });
+
+  it('surfaces 4100, NOT 4001, when the wallet auto-locks an eth_requestAccounts prompt', async () => {
+    // The EIP-1193 half of the abort/rejection split, and the half a dApp can
+    // actually act on: 4001 and 4100 are different codes, where Beacon collapses
+    // both to ABORTED_ERROR because its enum has no locked-wallet member.
+    //
+    // The brief's standing constraint is that this path must not regress, so the
+    // rejection above and this abort are asserted as a PAIR — one code moving
+    // without the other is the regression to catch.
+    const requestId = 'connect-req-locked';
+    const pending = dispatch(
+      { type: 'ETHEREUM_REQUEST', origin: 'https://dapp.example', requestId, args: { method: 'eth_requestAccounts' } },
+      contentSender,
+      h.deps,
+    );
+
+    await vi.waitFor(() => expect(h.deps.approvalQueue.get(requestId)).toBeDefined());
+    h.deps.approvalQueue.rejectAll('idle:idle');
+
+    const res = await pending;
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('unreachable');
+    expect(res.code).toBe(4100);
+    expect(res.message).toContain('idle:idle');
+    expect(res.message).not.toMatch(/user rejected/i);
   });
 });

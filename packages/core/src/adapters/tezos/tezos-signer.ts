@@ -9,6 +9,33 @@
  * apply a volatility buffer on top (the gas price is congestion-based and can
  * rise between estimate and inclusion). A residual insufficient_fees rejection
  * is retried once with the kernel-reported `required` value.
+ *
+ * ── TWO PRICING MODES, AND WHY BOTH ARE NECESSARY ────────────────────────────
+ *
+ * `sendOperation` accepts an already-priced operation and submits it VERBATIM.
+ * That is not a shortcut around the logic above — it is the only correct
+ * behaviour for an operation a dApp priced itself, for a reason that has already
+ * cost this chain a working integration:
+ *
+ *   - A dApp that pins fee/gas/storage derives the fee FROM the gas it declares,
+ *     against this chain's published floor. previewnet's `mempool/filter` serves
+ *     `minimal_fees: 100`, `minimal_nanotez_per_gas_unit: 45/1`,
+ *     `minimal_nanotez_per_byte: 4000/1` (measured 2026-08-24), i.e.
+ *     `required_µtez = 100 + 4 × opBytes + 0.045 × declaredGas`. The byte term is
+ *     4000× mainnet's and the gas term 450×, so the three knobs are not
+ *     independent: raising the declared gas without raising the fee puts the
+ *     operation UNDER the floor and it is refused at the prevalidator.
+ *   - So re-estimating one knob of a supplied pin breaks the other two. Honour
+ *     all three or none.
+ *   - And an operation with NO pricing is not safe to guess at either: a wallet
+ *     that prices previewnet from L1 intuitions lands ~20% under the floor, the
+ *     node answers `evm_node.dev.insufficient_fees` at preapply, and the dApp
+ *     sees a generic abort with no diagnosis. That is precisely the failure that
+ *     made Temple unusable here.
+ *
+ * Hence: a complete pin is submitted as given, and an absent pin falls through to
+ * `transferWithBufferedFees` — the calibrated `mempool/filter` + buffer + retry
+ * path, which is what a delegating dApp is asking for.
  */
 
 import { TezosToolkit, type TransferParams } from '@taquito/taquito';
@@ -17,6 +44,13 @@ import type { MichelsonV1Expression } from '@taquito/rpc';
 import type { WalletPermissions } from '@tezosx/relayer/wallet-client';
 import { TEZOS_L1_RPC, NAC_CONTRACT } from '@tezosx/relayer/constants';
 import type { TezosSignerPort } from '../../ports/signer-port';
+import {
+  HARD_GAS_LIMIT_PER_OPERATION,
+  HARD_STORAGE_LIMIT_PER_OPERATION,
+  type OperationToSend,
+  type OpLimits,
+  type OpParameter,
+} from '../../domain/tezos-operation';
 import type { TezosAccount } from '../../domain/account';
 import { devLog } from '../../shared/log';
 
@@ -42,6 +76,13 @@ const MAX_RETRY_FEE_MULTIPLE = 4;
  * rejects simulation with `tezlink_error` when default gas budgets are too low
  * for the EVM sub-call. Submitting directly with these ceilings (matching the
  * Beacon path) lets the kernel allocate what it needs.
+ */
+/**
+ * ⚠️ `CALL_EVM_GAS_LIMIT` below is 1_040_000, i.e. 1.58× this chain's measured
+ * `hard_gas_limit_per_operation` of 660_000 (see `domain/tezos-operation.ts`).
+ * That fallback therefore cannot produce an includable operation on previewnet.
+ * Left untouched because it only runs after the primary path has already failed
+ * and its callers are out of scope here — reported rather than changed.
  */
 const CALL_EVM_GAS_LIMIT     = 1_040_000;
 const CALL_EVM_STORAGE_LIMIT = 60_000;
@@ -119,6 +160,96 @@ export class TezosSigner implements TezosSignerPort {
     }
   }
 
+  /**
+   * The one place a Michelson operation's `TransferParams` is shaped, so the
+   * NAC path and the generalised path cannot drift. `entrypoint` and
+   * `michelineArg` travel together: an operation with neither is a plain
+   * transfer, which Taquito expresses by omitting `parameter` entirely.
+   */
+  private buildParams(op: {
+    to:          string;
+    mutezAmount: string;
+    parameter?:  OpParameter;
+  }): TransferParams {
+    const params: TransferParams = {
+      to:     op.to,
+      amount: Number(op.mutezAmount),
+      mutez:  true,
+    };
+    // Paired by construction (`OpParameter`), so there is no half-state to
+    // reconcile here: either a contract call or a plain transfer.
+    if (op.parameter != null) params.parameter = op.parameter;
+    return params;
+  }
+
+  /**
+   * Submit an operation exactly as priced by its caller — no estimate, no
+   * buffer, no retry. See the header: the three knobs are interdependent through
+   * this chain's fee floor, so adjusting one silently invalidates the others.
+   */
+  private async submitWithLimits(params: TransferParams, limits: OpLimits): Promise<string> {
+    if (limits.gasLimit > HARD_GAS_LIMIT_PER_OPERATION) {
+      throw new Error(
+        `Declared gas ${limits.gasLimit} exceeds previewnet's ` +
+        `hard_gas_limit_per_operation (${HARD_GAS_LIMIT_PER_OPERATION}); the operation ` +
+        'cannot be included at any fee.',
+      );
+    }
+    if (limits.storageLimit > HARD_STORAGE_LIMIT_PER_OPERATION) {
+      throw new Error(
+        `Declared storage ${limits.storageLimit} exceeds previewnet's ` +
+        `hard_storage_limit_per_operation (${HARD_STORAGE_LIMIT_PER_OPERATION}); the ` +
+        'operation cannot be included at any fee.',
+      );
+    }
+    const op = await this.toolkit.contract.transfer({
+      ...params,
+      fee:          limits.fee,
+      gasLimit:     limits.gasLimit,
+      storageLimit: limits.storageLimit,
+    });
+    return op.hash;
+  }
+
+  /**
+   * Sign and inject ONE Michelson operation against an arbitrary destination.
+   *
+   * The generalised send. `sendContractCall` remains the NAC-gateway-specific
+   * entry point its callers depend on; this one takes `to` because the native
+   * ceremony targets three different kinds of destination — the per-role
+   * originator KT1s, the child KT1s (`setAdmin`), and the gateway (`call_evm`) —
+   * and none of them is knowable from an entrypoint name.
+   *
+   * `limits` present  → submitted verbatim (the dApp priced it; see the header).
+   * `limits` absent   → priced here by the calibrated buffered-fee path.
+   *
+   * Deliberately does NOT reuse the `call_evm` fixed-ceiling fallback, even when
+   * the entrypoint is `call_evm`. Three reasons, in order of weight: the caller
+   * on this path has already priced the operation against the live chain, so
+   * overriding its pin after a simulation failure would substitute a guess for a
+   * measurement; the fallback's 1_040_000 gas exceeds this chain's measured
+   * 660_000 hard limit and so cannot be included at any fee; and the fallback was
+   * calibrated for the NAC gateway specifically, whose kernel provisions an inner
+   * EVM frame from the declared L1 limit — a property no per-role originator or
+   * child KT1 shares.
+   */
+  async sendOperation(op: OperationToSend): Promise<string> {
+    const params = this.buildParams(op);
+    try {
+      const hash = op.limits != null
+        ? await this.submitWithLimits(params, op.limits)
+        : await this.transferWithBufferedFees(params);
+      devLog.info('[TezosX Wallet] L1 opHash:', hash);
+      return hash;
+    } catch (err) {
+      const e = err as { errors?: unknown[]; message?: string; name?: string };
+      console.error('[TezosX Wallet] operation failed',
+        { to: op.to, entrypoint: op.parameter?.entrypoint, pinned: op.limits != null,
+          name: e.name, message: e.message, errors: e.errors });
+      throw err;
+    }
+  }
+
   private async submitWithFixedCeilings(params: TransferParams): Promise<string> {
     const op = await this.toolkit.contract.transfer({
       ...params,
@@ -134,12 +265,9 @@ export class TezosSigner implements TezosSignerPort {
     michelineArg: MichelsonV1Expression,
     mutezAmount = '0',
   ): Promise<string> {
-    const params: TransferParams = {
-      to:        NAC_CONTRACT,
-      amount:    Number(mutezAmount),
-      mutez:     true,
-      parameter: { entrypoint, value: michelineArg },
-    };
+    const params = this.buildParams({
+      to: NAC_CONTRACT, mutezAmount, parameter: { entrypoint, value: michelineArg },
+    });
 
     try {
       const hash = await this.transferWithBufferedFees(params);

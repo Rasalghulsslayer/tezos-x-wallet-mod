@@ -2,7 +2,7 @@
   "name": "tezosx-monorepo",
   "version": "0.0.0",
   "private": true,
-  "description": "TezosX monorepo — EIP-1193 relayer + wallet extension. Packages versioned independently (see CHANGELOG.md).",
+  "description": "TezosX monorepo \u2014 EIP-1193 relayer + wallet extension. Packages versioned independently (see CHANGELOG.md).",
   "author": "antonybyrt",
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -19,10 +19,11 @@
     "typecheck": "npm run typecheck -w @tezosx/relayer && npm run typecheck:ext -w @tezosx/relayer",
     "typecheck:wallet": "npm run typecheck -w @tezosx/wallet",
     "typecheck:core": "npm run typecheck -w @tezosx/wallet-core",
-    "test": "npm run test -w @tezosx/wallet && npm run test -w @tezosx/wallet-core && npm run test -w @tezosx/relayer",
+    "test": "npm run test -w @tezosx/wallet && npm run test -w @tezosx/wallet-core && npm run test -w @tezosx/relayer && npm run test -w @tezosx/wallet-mobile",
     "lint": "eslint packages/relayer/src packages/relayer/extension/src packages/core/src packages/wallet/src website/src",
     "serve": "cd packages/relayer && npx serve --cors -l 8080 .",
-    "dev:ext": "npm run dev:ext -w @tezosx/relayer"
+    "dev:ext": "npm run dev:ext -w @tezosx/relayer",
+    "typecheck:mobile": "npm run typecheck -w @tezosx/wallet-mobile"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.40",

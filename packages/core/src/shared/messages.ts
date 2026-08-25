@@ -7,6 +7,8 @@ import type { RequestArguments } from '@tezosx/relayer/types';
 import type { ActivityFilter, ActivityPage } from '../domain/activity';
 import type { AccountSummary, AccountKind, AccountId, AddAccountSource } from '../domain/account';
 import type { Asset } from '../domain/asset';
+import type { BeaconNetwork } from '../domain/beacon';
+import type { OpLimits, OpParameter } from '../domain/tezos-operation';
 
 export type { ActivityFilter, ActivityPage, AccountSummary, AddAccountSource };
 
@@ -48,6 +50,14 @@ export interface PendingConnection {
   origin:    string;
   accountId: AccountId;        // pinned at enqueue time; resolves through this account's container
   createdAt: number;
+  /**
+   * Which dApp surface asked. Absent — every pre-Beacon caller — means the
+   * EIP-1193 (`window.ethereum`) path, where the site receives the account's
+   * EVM alias. `'beacon'` means a Beacon dApp, which receives the tz1 and its
+   * public key instead. The Approve screen has to say which, because "the site
+   * will see your 0x address" is simply false for a Beacon connection.
+   */
+  protocol?: 'beacon';
 }
 
 export interface PendingTransaction {
@@ -85,7 +95,51 @@ export interface PendingSignature {
   createdAt:  number;
 }
 
-export type PendingRequest = PendingConnection | PendingTransaction | PendingSignature;
+/**
+ * A native Michelson operation awaiting approval, from a Beacon dApp.
+ *
+ * A separate kind rather than a reuse of `PendingTransaction`, whose
+ * `to`/`value`/`data` are EVM-shaped: a Beacon operation has a Michelson
+ * destination, a mutez amount and a Micheline parameter, and filling EVM fields
+ * with them would make the approval screen describe an operation that is not the
+ * one being signed.
+ */
+export interface PendingTezosOperation {
+  kind:        'tezos-operation';
+  requestId:   string;
+  origin:      string;
+  accountId:   AccountId;
+  createdAt:   number;
+  /** KT1 or tz1. */
+  destination: string;
+  /** Decimal mutez string. */
+  amount:      string;
+  entrypoint?: string;
+  /** Compact Micheline for display only; never re-parsed into an operation. */
+  parametersPreview?: string;
+  /** The dApp's pin, when it priced the operation itself. */
+  limits?:     OpLimits;
+  /**
+   * Worst case the operator is consenting to LEAVE THE ACCOUNT, in mutez: the
+   * transferred amount, plus the fee charged in full, plus the entire storage
+   * allowance at `cost_per_byte`.
+   *
+   * The amount is in it deliberately. Omitting it made the one bold money figure
+   * on the approval screen understate a value-bearing call by the whole transfer
+   * — a 5 XTZ send would have advertised a 0.004 XTZ ceiling.
+   *
+   * Present only for a pinned operation: an unpinned one has no ceiling until the
+   * wallet has estimated it, and a consent figure that can be exceeded is not
+   * consent.
+   */
+  maxCostMutez?: string;
+}
+
+export type PendingRequest =
+  | PendingConnection
+  | PendingTransaction
+  | PendingSignature
+  | PendingTezosOperation;
 
 // ── Popup UI → Service Worker ─────────────────────────────────────────────────
 
@@ -153,6 +207,61 @@ export interface EthereumRequest {
   origin:     string;
   requestId:  string;
   args:       RequestArguments;
+}
+
+// ── Content script → Service Worker (Beacon bridge) ───────────────────────────
+
+/**
+ * A Beacon request, already narrowed by the content script to the fields core
+ * needs. `requestId` is minted in the content script (never the dApp's Beacon
+ * message id), so a page can neither choose nor collide the key the approval
+ * queue tracks it under — same rule as the EIP-1193 bridge.
+ */
+export interface BeaconRequest {
+  type:      'BEACON_REQUEST';
+  origin:    string;
+  requestId: string;
+  request:   BeaconPermissionRequest | BeaconOperationRequest;
+}
+
+/** The narrowed `permission_request`. */
+export interface BeaconPermissionRequest {
+  kind:     'permission';
+  /** The network the dApp pinned, if any. Checked, never echoed. */
+  network?: BeaconNetwork;
+  /** The Beacon `PermissionScope` values the dApp asked for. */
+  scopes?:  readonly string[];
+}
+
+/**
+ * The narrowed `operation_request` — exactly ONE Michelson transaction.
+ *
+ * Beacon's `operationDetails` is an array and may carry kinds other than
+ * `transaction`; the content script refuses anything else before this envelope
+ * exists, so core never has to reason about a batch or an origination.
+ */
+export interface BeaconOperationRequest {
+  kind:      'operation';
+  operation: BeaconTransaction;
+}
+
+/** One `transaction`, as the dApp specified it. */
+export interface BeaconTransaction {
+  /** Any destination the ceremony targets: a per-role originator, a child KT1, the gateway. */
+  destination: string;
+  /** Decimal mutez string. `'0'` for a pure contract call. */
+  amount:      string;
+  /**
+   * Absent for a plain transfer. Paired by construction: an entrypoint without a
+   * value would render as a contract call and forge as a transfer.
+   */
+  parameter?:  OpParameter;
+  /**
+   * Present only when the dApp priced the operation itself, and then complete.
+   * Honoured verbatim — see the header of `adapters/tezos/tezos-signer.ts` for
+   * why re-estimating one knob of a supplied pin breaks the other two.
+   */
+  limits?:     OpLimits;
 }
 
 // ── Service Worker → Content script (push events) ─────────────────────────────

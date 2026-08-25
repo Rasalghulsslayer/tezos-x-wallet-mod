@@ -9,12 +9,15 @@
  */
 
 import type { Keyring } from '../background/keyring';
-import { DuplicateRequestIdError, TooManyPendingRequestsError, type ApprovalQueue } from '../background/approval-queue';
+import { DuplicateRequestIdError, TooManyPendingRequestsError, type ApprovalQueue, type Decision } from '../background/approval-queue';
 import type { Container, PersistentPorts } from '../ports/container';
 import type { ContainerCache } from './container-cache';
 import { ensureContainerFor } from './container-builder';
 import type {
   ApproveRequest,
+  BeaconOperationRequest,
+  BeaconPermissionRequest,
+  BeaconRequest,
   ContentPush,
   EthereumRequest,
   PendingTransaction,
@@ -22,9 +25,20 @@ import type {
   WalletResponse,
 } from '../shared/messages';
 import type { StoredSession } from '../ports/session-store';
-import type { AccountId } from '../domain/account';
+import type { Account, AccountId } from '../domain/account';
 import type { ClassifiedSource } from '../ports/message-source';
 import { AccountNotFoundError } from '../domain/vault';
+import {
+  BEACON_NETWORK_NOT_SUPPORTED,
+  BEACON_NOT_CONNECTED,
+  BEACON_NO_ADDRESS,
+  BEACON_OPERATION_FAILED,
+  WALLET_BEACON_NETWORK,
+  checkRequestedNetwork,
+  grantScopes,
+  type BeaconPermissionGrant,
+} from '../domain/beacon';
+import { checkOperation, maxOpCostMutez } from '../domain/tezos-operation';
 
 import { getState }                from '../use-cases/get-state';
 import { createAccount }           from '../use-cases/create-account';
@@ -59,7 +73,7 @@ import { resetWallet }             from '../use-cases/reset-wallet';
 import { TEZLINK_EVM_RPC }         from '@tezosx/relayer/constants';
 import { deriveEvmAlias }          from '@tezosx/relayer/utils/derive';
 import type { EvmAliasCache }      from '../shared/evm-alias-cache';
-import { tryDecodeUtf8 }           from '../shared/approval-display';
+import { summariseMicheline, tryDecodeUtf8 } from '../shared/approval-display';
 import { buildTezosToEvmCall, UnknownSelectorError, SubMutezPrecisionError, InvalidDestinationError } from '@tezosx/relayer/use-cases/build-tezos-to-evm-call';
 
 export interface SwState {
@@ -103,16 +117,17 @@ const JSON_RPC_INTERNAL         = -32603;
 const JSON_RPC_LIMIT_EXCEEDED   = -32005;
 
 export async function dispatch(
-  msg:    PopupRequest | ApproveRequest | EthereumRequest,
+  msg:    PopupRequest | ApproveRequest | EthereumRequest | BeaconRequest,
   source: ClassifiedSource,
   deps:   SwDeps,
 ): Promise<WalletResponse> {
-  if ('type' in msg && msg.type === 'ETHEREUM_REQUEST') {
+  if ('type' in msg && (msg.type === 'ETHEREUM_REQUEST' || msg.type === 'BEACON_REQUEST')) {
     // dApp traffic must arrive over the untrusted dApp channel, and when the
     // host attests an origin it must match the origin stamped into the
     // envelope. Reject trusted-ui / unrecognized sources so they can't
     // impersonate a dApp, and reject a stamped origin that disagrees with the
-    // host-verified one.
+    // host-verified one. Both dApp surfaces (EIP-1193 and Beacon) clear the
+    // same gate — a second surface must not come with a second, weaker guard.
     if (
       source == null ||
       source.channel !== 'dapp' ||
@@ -120,7 +135,9 @@ export async function dispatch(
     ) {
       return { ok: false, code: EIP_UNAUTHORIZED, message: 'Forbidden sender' };
     }
-    return handleEthereumRequest(msg, deps);
+    return msg.type === 'ETHEREUM_REQUEST'
+      ? handleEthereumRequest(msg, deps)
+      : handleBeaconRequest(msg, deps);
   }
 
   // Everything else is privileged (unlock, seed export, approval decisions):
@@ -484,8 +501,12 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
       return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
     }
     const sessions = await deps.persistentPorts.sessionStore.list();
-    const session  = sessions.find((s) => s.origin === msg.origin);
-    return { ok: true, data: session == null ? [] : [session.evmAlias] };
+    // A Beacon session must NOT satisfy this. It discloses a tz1 and its public
+    // key; nothing about granting that is consent to hand the same origin an EVM
+    // address. The `evmAlias` guard is belt-and-braces: a Beacon session stores an
+    // empty one, so even a mistake in the protocol filter discloses nothing.
+    const session = sessions.find((s) => s.origin === msg.origin && s.protocol !== 'beacon');
+    return { ok: true, data: session == null || session.evmAlias === '' ? [] : [session.evmAlias] };
   }
 
   // eth_signTypedData (any version) is not implemented by either signer:
@@ -520,7 +541,10 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
 
     if (requiresSession) {
       const sessions = await deps.persistentPorts.sessionStore.list();
-      const session  = sessions.find((s) => s.origin === msg.origin);
+      // A Beacon grant is NOT an EIP-1193 grant. Without this filter, connecting
+      // over Beacon would silently authorise eth_sendTransaction and
+      // personal_sign for the same origin.
+      const session  = sessions.find((s) => s.origin === msg.origin && s.protocol !== 'beacon');
       if (session == null) {
         return {
           ok:      false,
@@ -605,24 +629,9 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
       };
     }
 
-    let decision: Awaited<ReturnType<typeof deps.approvalQueue.enqueue>>;
-    try {
-      decision = await deps.approvalQueue.enqueue(pending);
-    } catch (err) {
-      if (err instanceof DuplicateRequestIdError) {
-        return { ok: false, code: JSON_RPC_INVALID_PARAMS, message: 'Duplicate request id' };
-      }
-      if (err instanceof TooManyPendingRequestsError) {
-        // -32005: limit exceeded (EIP-1474). Rejects the flood without opening
-        // yet another popup.
-        return { ok: false, code: JSON_RPC_LIMIT_EXCEEDED, message: 'Too many pending requests from this origin' };
-      }
-      throw err;
-    }
-
-    if (decision === 'reject') {
-      return { ok: false, code: EIP_USER_REJECTED, message: 'User rejected the request' };
-    }
+    const outcome = await requestApproval(pending, deps);
+    if (outcome.kind === 'refused') return outcome.response;
+    if (outcome.decision !== 'approve') return refusalFor(outcome.decision);
     pinnedAccountId = pending.accountId;
   }
 
@@ -669,6 +678,300 @@ async function handleEthereumRequest(msg: EthereumRequest, deps: SwDeps): Promis
     console.error('[TezosX Wallet] handleEthereumRequest error', method, err);
     const e = err as { code?: number; message?: string };
     return { ok: false, code: e.code ?? JSON_RPC_INTERNAL, message: e.message ?? 'Internal error' };
+  }
+}
+
+type ApprovalOutcome =
+  | { kind: 'decision'; decision: Decision }
+  | { kind: 'refused';  response: WalletResponse };
+
+/**
+ * The envelope for any pending request that did not end in `'approve'`.
+ *
+ * ⚠️ A WALLET-SIDE ABORT IS NOT A USER REJECTION, AND MUST NOT SAY IT IS. All
+ * three dApp surfaces used to answer `4001 / "User rejected the request"` for
+ * both, because `rejectAll` resolved the same `'reject'` the Reject button does.
+ * So an auto-lock mid-ceremony — `AUTO_LOCK_IDLE_MS` is 5 minutes, and
+ * `chrome.idle` fires the moment the screen locks — accused the operator of
+ * declining something they never saw, and pointed whoever was debugging it at
+ * the dApp instead of at the lock.
+ *
+ * `4100` is not a new convention: it is already what every locked-vault guard in
+ * this file returns, and `4001` versus `4100` is the whole distinction a dApp
+ * needs. The reason is appended verbatim so the wallet's own console names the
+ * trigger.
+ *
+ * On the Beacon wire this collapses back to `ABORTED_ERROR` and there is no
+ * avoiding it — the SDK documents that member as "aborted by the user OR THE
+ * WALLET" and offers no locked-wallet member (`NO_PRIVATE_KEY_FOUND_ERROR` is
+ * documented for Sign only). The envelope and the log are distinguishable; the
+ * Beacon `errorType` is not. See `beaconErrorFor`.
+ */
+function refusalFor(decision: Exclude<Decision, 'approve'>): WalletResponse {
+  return decision === 'reject'
+    ? { ok: false, code: EIP_USER_REJECTED, message: 'User rejected the request' }
+    : {
+        ok:      false,
+        code:    EIP_UNAUTHORIZED,
+        message: `Wallet is locked — the wallet withdrew this request (${decision.aborted})`,
+      };
+}
+
+/**
+ * Enqueue a dApp approval and turn the queue's two structural refusals into
+ * envelopes. Shared by every dApp surface on purpose: the per-origin flood cap
+ * is the wallet's only defence against approval fatigue, and a second surface
+ * that hand-rolled its own enqueue could silently skip it.
+ */
+async function requestApproval(
+  pending: Parameters<ApprovalQueue['enqueue']>[0],
+  deps:    SwDeps,
+): Promise<ApprovalOutcome> {
+  try {
+    return { kind: 'decision', decision: await deps.approvalQueue.enqueue(pending) };
+  } catch (err) {
+    if (err instanceof DuplicateRequestIdError) {
+      return {
+        kind: 'refused',
+        response: { ok: false, code: JSON_RPC_INVALID_PARAMS, message: 'Duplicate request id' },
+      };
+    }
+    if (err instanceof TooManyPendingRequestsError) {
+      // -32005: limit exceeded (EIP-1474). Rejects the flood without opening
+      // yet another popup.
+      return {
+        kind: 'refused',
+        response: {
+          ok: false, code: JSON_RPC_LIMIT_EXCEEDED,
+          message: 'Too many pending requests from this origin',
+        },
+      };
+    }
+    throw err;
+  }
+}
+
+// ── Beacon dispatch (content script ↔ SW) ─────────────────────────────────────
+
+/**
+ * Route a Beacon request to its handler.
+ *
+ * Only ONE guard is shared: an unlocked vault. The active account's KIND is
+ * deliberately NOT checked here.
+ *
+ * It used to be, and that was a bug. `handleBeaconOperation` never reads the
+ * active account — it signs with `session.accountId`, the account the grant was
+ * given for, and already fails closed on that account's own kind. So a shared
+ * check only produced a FALSE refusal: adding an EVM account activates it
+ * (`AddAccount` sends SET_ACTIVE_ACCOUNT unconditionally), which would then
+ * refuse every operation for every live Beacon session — and the refusal's advice
+ * to "connect again" would re-point the session to a different account, the exact
+ * thing binding a session to its account exists to prevent.
+ */
+async function handleBeaconRequest(msg: BeaconRequest, deps: SwDeps): Promise<WalletResponse> {
+  const unlocked = deps.keyring.getUnlocked();
+  if (unlocked == null) {
+    return { ok: false, code: EIP_UNAUTHORIZED, message: 'Wallet is locked' };
+  }
+
+  return msg.request.kind === 'permission'
+    ? handleBeaconPermission(msg, msg.request, unlocked.account, deps)
+    : handleBeaconOperation(msg, msg.request, deps);
+}
+
+/**
+ * Answer a Beacon `permission_request`.
+ *
+ * Mirrors `eth_requestAccounts`: user approval through the same queue and the
+ * same Approve surface, account pinned at enqueue time. Two things differ, both
+ * deliberate:
+ *
+ *  - The requested network is CHECKED, and the response states the wallet's own
+ *    network rather than echoing the request. Echoing would make the dApp's
+ *    network gate a check against its own question — vacuous by construction.
+ *  - The `StoredSession` written on approval carries `protocol: 'beacon'`, and
+ *    `eth_accounts` skips those. So a Beacon grant is a first-class session — it
+ *    appears in Connected sites, `DISCONNECT` revokes it, and it gates
+ *    `operation_request` — WITHOUT ever satisfying an EIP-1193 request the user
+ *    never approved.
+ */
+async function handleBeaconPermission(
+  msg:     BeaconRequest,
+  request: BeaconPermissionRequest,
+  active:  Account,
+  deps:    SwDeps,
+): Promise<WalletResponse> {
+  // Connecting is the ONE Beacon request that legitimately depends on the active
+  // account: it is the account being offered. A Beacon dApp asks for a Tezos
+  // address and its public key, which an EVM-source account does not have.
+  if (active.kind !== 'tezos') {
+    return {
+      ok:      false,
+      code:    BEACON_NO_ADDRESS,
+      message:
+        'The active account is an EVM (0x) account. A Beacon dApp needs a Tezos ' +
+        'account — switch to a tz1 account in the wallet and connect again.',
+    };
+  }
+  const account = active;
+
+  const verdict = checkRequestedNetwork(request.network);
+  if (!verdict.ok) {
+    return { ok: false, code: BEACON_NETWORK_NOT_SUPPORTED, message: verdict.reason };
+  }
+
+  const outcome = await requestApproval({
+    kind:      'connect',
+    protocol:  'beacon',
+    requestId: msg.requestId,
+    origin:    msg.origin,
+    accountId: account.id,
+    createdAt: Date.now(),
+  }, deps);
+  if (outcome.kind === 'refused') return outcome.response;
+  if (outcome.decision !== 'approve') return refusalFor(outcome.decision);
+
+  // Re-read the pinned account: REMOVE_ACCOUNT, a lock, or an account switch can
+  // land between enqueue and approval, and the grant must describe the account
+  // the user actually confirmed — never whichever one happens to be active now.
+  const pinned = deps.keyring.listAccounts().find((a) => a.id === account.id);
+  if (pinned == null || pinned.kind !== 'tezos') {
+    return {
+      ok:      false,
+      code:    EIP_USER_REJECTED,
+      message: 'The connecting account was removed before approval',
+    };
+  }
+
+  // `evmAlias` and `chainId` are deliberately empty: a Beacon session grants no
+  // EIP-1193 access, and leaving them blank means a mistake in the `eth_accounts`
+  // filter surfaces as an empty array rather than as a disclosed address.
+  const session: StoredSession = {
+    origin:      msg.origin,
+    accountId:   pinned.id,
+    protocol:    'beacon',
+    tz1Address:  pinned.tz1,
+    evmAlias:    '',
+    chainId:     '',
+    connectedAt: Date.now(),
+  };
+  await deps.persistentPorts.sessionStore.upsert(session);
+
+  const grant: BeaconPermissionGrant = {
+    address:   pinned.tz1,
+    publicKey: pinned.publicKey,
+    network:   WALLET_BEACON_NETWORK,
+    scopes:    grantScopes(request.scopes),
+  };
+  return { ok: true, data: grant };
+}
+
+/**
+ * Sign and inject ONE Michelson operation for a connected Beacon dApp.
+ *
+ * Mirrors `eth_sendTransaction`: a session is required, the operation is shown
+ * before it is signed, and the signing account is the one the session was granted
+ * with — NOT whichever account happens to be active now. That last point is the
+ * reason `pinnedAccountId` exists on the EIP-1193 path: a user who switches
+ * accounts mid-session must not have a dApp's operation silently re-pointed at
+ * the new one.
+ *
+ * The operation is validated BEFORE the prompt. Every field is page-supplied
+ * JSON that the Beacon SDK does not check, and an operator should never be asked
+ * to confirm something that cannot be submitted.
+ */
+async function handleBeaconOperation(
+  msg:     BeaconRequest,
+  request: BeaconOperationRequest,
+  deps:    SwDeps,
+): Promise<WalletResponse> {
+  const sessions = await deps.persistentPorts.sessionStore.list();
+  const session  = sessions.find((s) => s.origin === msg.origin && s.protocol === 'beacon');
+  if (session == null) {
+    return {
+      ok:      false,
+      code:    BEACON_NOT_CONNECTED,
+      message: 'Origin is not connected. Request permissions first.',
+    };
+  }
+
+  const op      = request.operation;
+  const verdict = checkOperation(op);
+  if (!verdict.ok) {
+    return { ok: false, code: JSON_RPC_INVALID_PARAMS, message: verdict.reason };
+  }
+
+  const accountId = session.accountId;
+  if (accountId == null || accountId === '') {
+    return {
+      ok:      false,
+      code:    BEACON_NOT_CONNECTED,
+      message: 'This connection predates per-account sessions. Reconnect to continue.',
+    };
+  }
+
+  const outcome = await requestApproval({
+    kind:              'tezos-operation',
+    requestId:         msg.requestId,
+    origin:            msg.origin,
+    accountId,
+    createdAt:         Date.now(),
+    destination:       op.destination,
+    amount:            op.amount,
+    entrypoint:        op.parameter?.entrypoint,
+    parametersPreview: op.parameter == null ? undefined : summariseMicheline(op.parameter.value),
+    limits:            op.limits,
+    maxCostMutez:      op.limits == null ? undefined : String(maxOpCostMutez(op.limits, op.amount)),
+  }, deps);
+  if (outcome.kind === 'refused') return outcome.response;
+  if (outcome.decision !== 'approve') return refusalFor(outcome.decision);
+
+  let container: Container;
+  try {
+    container = await ensureContainerFor(accountId, {
+      keyring:         deps.keyring,
+      containerCache:  deps.containerCache,
+      persistentPorts: deps.persistentPorts,
+      onProviderEvent: deps.broadcastEvent,
+    });
+  } catch (err) {
+    if (err instanceof AccountNotFoundError) {
+      return {
+        ok:      false,
+        code:    EIP_USER_REJECTED,
+        message: 'The signing account was removed before approval',
+      };
+    }
+    throw err;
+  }
+
+  const signer = container.signer;
+  if (signer.kind !== 'tezos') {
+    return {
+      ok:      false,
+      code:    BEACON_NO_ADDRESS,
+      message: 'The account this session was granted with cannot sign Michelson operations',
+    };
+  }
+
+  try {
+    const opHash = await signer.sendOperation({
+      to:          op.destination,
+      mutezAmount: op.amount,
+      parameter:   op.parameter,
+      limits:      op.limits,
+    });
+    return { ok: true, data: { opHash } };
+  } catch (err) {
+    // The operation was approved and then failed — a simulation refusal, a fee
+    // below the floor, an injection error. Surfaced as its own code so the dApp
+    // is not told the user aborted something they in fact confirmed.
+    const e = err as { message?: string };
+    return {
+      ok:      false,
+      code:    BEACON_OPERATION_FAILED,
+      message: e.message ?? 'The operation could not be injected',
+    };
   }
 }
 

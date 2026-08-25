@@ -54,6 +54,32 @@ export const CLIPBOARD_CLEAR_MS = 30_000;
 /** Wallet inactivity budget before the keyring auto-locks, on both shells. */
 export const AUTO_LOCK_IDLE_MS = 5 * 60_000;
 
+/**
+ * Extra inactivity allowed PAST `AUTO_LOCK_IDLE_MS` while a dApp approval is
+ * still on screen.
+ *
+ * Why it exists: a 25-operation ceremony asks the operator to read and confirm
+ * each operation in turn, and one of them carries ~38 kB of undecoded Micheline.
+ * Reading that carefully means minutes of no input, and `chrome.idle` measures
+ * input across the whole machine, not attention. Without this, auto-locking
+ * called `rejectAll()` on the prompt the operator was in the middle of reading
+ * and ended the run — a ceremony killed by the operator being careful.
+ *
+ * Why it is a GRACE and not a hold: the budget is derived from the same
+ * `lastActivity` stamp, so this is an absolute ceiling of
+ * `AUTO_LOCK_IDLE_MS + AUTO_LOCK_PENDING_GRACE_MS` since the last wallet
+ * interaction — 15 minutes — and NOT a window a page can renew by keeping a
+ * prompt open. That distinction is the whole security argument: a pending
+ * approval extends the deadline once, by a bounded amount, and can never
+ * suspend it.
+ *
+ * ⚠️ THIS IS A DELIBERATE WEAKENING, STATED PLAINLY: any origin that can get one
+ * approval prompt on screen extends the unlocked-idle window from 5 to 15
+ * minutes. An explicit screen lock is deliberately NOT covered by it — see the
+ * `chrome.idle` wiring, which locks on `'locked'` regardless.
+ */
+export const AUTO_LOCK_PENDING_GRACE_MS = 10 * 60_000;
+
 /** Blockscout REST API base (account/txlist endpoint), distinct from the
  *  human-facing EVM_EXPLORER URL used for click-through links. */
 export const BLOCKSCOUT_API_BASE = 'https://blockscout.previewnet.tezosx.nomadic-labs.com/api';

@@ -54,3 +54,35 @@ export function originDisplay(origin: string): { title: string; secure: boolean;
     return { title: origin, secure: false, favLetter: (origin[0] ?? '?').toUpperCase() };
   }
 }
+
+/**
+ * Longest Micheline preview shown on an approval screen.
+ *
+ * A `%call_evm` argument carries EVM calldata as a hex string and can run to tens
+ * of kilobytes — the live ceremony's deploy payloads are ~19 500 bytes. Rendering
+ * that in a 420px popup helps nobody and blocks the buttons, so it is truncated
+ * with the elision made visible.
+ */
+export const MICHELINE_PREVIEW_MAX = 512;
+
+/**
+ * Compact one-line Micheline for display ONLY.
+ *
+ * Never parsed back into an operation: the value the wallet signs is the object
+ * the dApp sent, passed through untouched. This exists so the approval screen can
+ * show what is in it without pretending to interpret it — the wallet has no ABI
+ * for an arbitrary destination and inventing a friendly summary would be a
+ * decoded claim it cannot stand behind.
+ */
+export function summariseMicheline(value: unknown): string {
+  let text: string;
+  try {
+    text = JSON.stringify(value) ?? String(value);
+  } catch {
+    // Cyclic or otherwise unserialisable — page-supplied, so possible.
+    return '(unrenderable Micheline)';
+  }
+  return text.length <= MICHELINE_PREVIEW_MAX
+    ? text
+    : `${text.slice(0, MICHELINE_PREVIEW_MAX)}… (${text.length} chars total)`;
+}

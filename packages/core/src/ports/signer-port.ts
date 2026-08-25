@@ -6,11 +6,21 @@
 
 import type { ITezosWalletClient } from '@tezosx/relayer/wallet-client';
 import type { TezosAccount, EvmAccount } from '../domain/account';
+import type { OperationToSend } from '../domain/tezos-operation';
 
 export interface TezosSignerPort extends ITezosWalletClient {
   readonly kind:    'tezos';
   readonly account: TezosAccount;
   sendNativeTransfer(to: string, mutezAmount: string): Promise<string>;
+  /**
+   * Sign and inject one Michelson operation against an ARBITRARY destination,
+   * optionally with limits the caller has already priced.
+   *
+   * Lives here and not on the relayer's `ITezosWalletClient` because that port is
+   * also implemented by the dApp-side `BeaconClient`, which relays to a foreign
+   * wallet and has no business being asked to price an operation.
+   */
+  sendOperation(op: OperationToSend): Promise<string>;
 }
 
 export interface EvmUnsignedTx {

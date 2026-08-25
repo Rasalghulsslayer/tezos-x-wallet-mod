@@ -73,15 +73,35 @@ async function broadcastEvent(push: ContentPush): Promise<void> {
   // everything else fans out to every connected origin.
   const targetOrigin =
     push.type === 'PROVIDER_EVENT' && push.event === 'accountsChanged' ? push.origin : undefined;
-  await Promise.all(
+
+  // A PROVIDER_EVENT is EIP-1193 state, so it must never reach an origin whose
+  // only grant is a Beacon one.
+  //
+  // ⚠️ THIS IS A DISCLOSURE, NOT TIDINESS. `attachProviderListeners` forwards
+  // provider events with NO origin, and an origin-less `accountsChanged` means
+  // "every session". `RelayerProvider` emits `accountsChanged [evmAlias]` on every
+  // container build (its session restore), so before this filter, connecting over
+  // Beacon alone was enough to be handed the account's EVM address — which the
+  // injected provider then emits into any EVM library on the page. Beacon grants a
+  // tz1 and its public key; nothing about it is consent to that.
+  //
+  // De-duplicating by origin at the same time: one origin can now hold both a
+  // Beacon and an EIP-1193 session, and two rows would otherwise send the same
+  // push to the same tab twice.
+  const origins = new Set(
     sessions
+      .filter((s) => !(push.type === 'PROVIDER_EVENT' && s.protocol === 'beacon'))
       .filter(({ origin }) => targetOrigin == null || origin === targetOrigin)
-      .map(async ({ origin }) => {
-        const tabs = await chrome.tabs.query({ url: `${origin}/*` });
-        for (const tab of tabs) {
-          if (tab.id != null) chrome.tabs.sendMessage(tab.id, push).catch(() => {});
-        }
-      }),
+      .map(({ origin }) => origin),
+  );
+
+  await Promise.all(
+    [...origins].map(async (origin) => {
+      const tabs = await chrome.tabs.query({ url: `${origin}/*` });
+      for (const tab of tabs) {
+        if (tab.id != null) chrome.tabs.sendMessage(tab.id, push).catch(() => {});
+      }
+    }),
   );
 }
 
@@ -147,6 +167,8 @@ const autoLockPorts: AutoLockPorts = {
   isUnlocked: () => keyring.isUnlocked(),
   lock:       autoLock,
   now:        () => Date.now(),
+  // An approval on screen is the operator mid-decision, not the operator gone.
+  hasPendingApproval: () => queue.list().length > 0,
   async loadLastActivity() {
     const data = await chrome.storage.session.get(ACTIVITY_KEY);
     return data[ACTIVITY_KEY] as number | undefined;
@@ -165,7 +187,30 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 // of no input; anything other than 'active' means the user has stepped away.
 chrome.idle.setDetectionInterval(AUTO_LOCK_IDLE_MS / 1000);
 chrome.idle.onStateChanged.addListener((idleState) => {
-  if (idleState !== 'active') autoLock(`idle:${idleState}`);
+  if (idleState === 'active') return;
+
+  // ── 'locked' IS NOT NEGOTIABLE ────────────────────────────────────────────
+  // The operator locked the screen. That is an explicit instruction to secure
+  // the machine, and no pending prompt outranks it. Lock now, grace or not.
+  if (idleState === 'locked') {
+    autoLock('idle:locked');
+    return;
+  }
+
+  // ── 'idle' MEANS NO INPUT, WHICH IS NOT THE SAME AS NO OPERATOR ───────────
+  // chrome.idle measures keyboard and mouse across the whole machine, so an
+  // operator reading a 38 kB Micheline parameter registers as idle while doing
+  // exactly what the approval screen asks of them. Locking here called
+  // rejectAll() on the prompt they were reading and ended a 25-operation
+  // ceremony. With a prompt open, hand the decision to the deadline check,
+  // which grants AUTO_LOCK_PENDING_GRACE_MS once and then locks anyway — so
+  // this defers the lock, it never cancels it.
+  if (queue.list().length > 0) {
+    console.info('[TezosX Wallet] system idle with an approval on screen — deferring the lock');
+    void checkIdleDeadline(autoLockPorts);
+    return;
+  }
+  autoLock(`idle:${idleState}`);
 });
 chrome.runtime.onSuspend.addListener(() => autoLock('suspend'));
 

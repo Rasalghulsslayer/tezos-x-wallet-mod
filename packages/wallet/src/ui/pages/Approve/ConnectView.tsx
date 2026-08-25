@@ -17,6 +17,11 @@ export function ConnectView({
 }) {
   const hostname = useMemo(() => originDisplay(pending.origin).title, [pending.origin]);
 
+  // A Beacon dApp receives the tz1 and its public key; an EIP-1193 one receives
+  // the account's EVM alias. Saying "your 0x address" for a Beacon connection
+  // would name an address the site never sees.
+  const beacon = pending.protocol === 'beacon';
+
   return (
     <div className="tx-approval">
       <ApprovalHeader origin={pending.origin} subtitle="Connection request" accent="cyan" />
@@ -32,7 +37,11 @@ export function ConnectView({
           <Icon name="shield" size={16} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 12, fontWeight: 500 }}>Low risk</div>
-            <div style={{ fontSize: 11, opacity: 0.9 }}>The site will see your EVM-visible address. You'll approve each transaction individually.</div>
+            <div style={{ fontSize: 11, opacity: 0.9 }}>
+              {beacon
+                ? "The site will see your Tezos address and its public key. You'll approve each operation individually."
+                : "The site will see your EVM-visible address. You'll approve each transaction individually."}
+            </div>
           </div>
           <span className="bars">
             <span className="on" /><span /><span />
@@ -42,9 +51,9 @@ export function ConnectView({
         <div className="tx-card" style={{ padding: 0 }}>
           <Line label="Origin" value={pending.origin} />
           <div className="tx-divider" />
-          <Line label="Will receive" value="Your 0x address" />
+          <Line label="Will receive" value={beacon ? 'Your tz1 address + public key' : 'Your 0x address'} />
           <div className="tx-divider" />
-          <Line label="Can request" value="Transactions (each needs approval)" />
+          <Line label="Can request" value={beacon ? 'Tezos operations (each needs approval)' : 'Transactions (each needs approval)'} />
         </div>
       </div>
 

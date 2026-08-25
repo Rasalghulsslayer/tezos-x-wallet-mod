@@ -11,6 +11,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   AUTO_LOCK_IDLE_MS,
+  AUTO_LOCK_PENDING_GRACE_MS,
+  autoLockBudgetMs,
   checkIdleDeadline,
   recordActivity,
   shouldAutoLock,
@@ -28,6 +30,7 @@ function fakePorts(overrides: Partial<AutoLockPorts> = {}) {
     now: () => T0,
     loadLastActivity: async () => stamp,
     saveLastActivity: async (ms) => { stamp = ms; },
+    hasPendingApproval: () => false,
     ...overrides,
   };
   return {
@@ -99,5 +102,66 @@ describe('checkIdleDeadline', () => {
     await checkIdleDeadline(f.ports);
     expect(f.locks).toEqual([]);
     expect(load).not.toHaveBeenCalled();
+  });
+});
+
+describe('the pending-approval grace', () => {
+  // ⚠️ WHAT THIS BUYS AND WHAT IT COSTS. Locking calls `rejectAll()`, so an
+  // auto-lock does not pause an approval, it destroys it. `chrome.idle` measures
+  // keyboard and mouse across the whole machine, which means an operator reading
+  // a 38 kB undecoded Micheline parameter — precisely what the approval screen
+  // asks of them — registers as idle. A 25-operation ceremony was therefore one
+  // careful read away from being ended by the wallet. The grace is the fix; the
+  // ceiling below is the price, stated as a test rather than as a comment.
+
+  it('extends the budget once when a prompt is on screen', () => {
+    expect(autoLockBudgetMs(false)).toBe(AUTO_LOCK_IDLE_MS);
+    expect(autoLockBudgetMs(true)).toBe(AUTO_LOCK_IDLE_MS + AUTO_LOCK_PENDING_GRACE_MS);
+  });
+
+  it('keeps an unlocked wallet through the read that used to kill the ceremony', async () => {
+    const f = fakePorts({ hasPendingApproval: () => true });
+    // Eight minutes on one operation: past the 5-minute deadline, inside the grace.
+    f.stamp = T0 - 8 * 60_000;
+    await checkIdleDeadline(f.ports);
+    expect(f.locks).toEqual([]);
+  });
+
+  it('still locks the same wallet at the same instant with NO prompt open', async () => {
+    // The control: the grace must come from the prompt, not from the clock moving.
+    const f = fakePorts({ hasPendingApproval: () => false });
+    f.stamp = T0 - 8 * 60_000;
+    await checkIdleDeadline(f.ports);
+    expect(f.locks).toEqual(['idle-deadline']);
+  });
+
+  it('LOCKS ANYWAY once the grace is exhausted, and says which budget expired', async () => {
+    // The bound is the security argument. A prompt that is never answered must
+    // not hold the keyring open indefinitely.
+    const f = fakePorts({ hasPendingApproval: () => true });
+    f.stamp = T0 - (AUTO_LOCK_IDLE_MS + AUTO_LOCK_PENDING_GRACE_MS);
+    await checkIdleDeadline(f.ports);
+    expect(f.locks).toEqual(['idle-deadline (approval grace exhausted)']);
+  });
+
+  it('is a CEILING from the last interaction, not a window a page can renew', () => {
+    // The grace is derived from the same `lastActivity` stamp rather than from
+    // when the prompt opened, so a page cannot suspend the deadline by holding a
+    // prompt open — it can only push it out once, to 15 minutes total. This is
+    // also why a restarted service worker recomputes the identical deadline
+    // without persisting anything new.
+    const ceiling = AUTO_LOCK_IDLE_MS + AUTO_LOCK_PENDING_GRACE_MS;
+    expect(shouldAutoLock(T0 - ceiling, T0, autoLockBudgetMs(true))).toBe(true);
+    expect(shouldAutoLock(T0 - ceiling + 1, T0, autoLockBudgetMs(true))).toBe(false);
+    // And the ceiling is finite — the property a `return` in the listener would break.
+    expect(Number.isFinite(ceiling)).toBe(true);
+    expect(ceiling).toBe(15 * 60_000);
+  });
+
+  it('still fails closed with a prompt open and no stamp at all', async () => {
+    // An unknown-provenance session is not rescued by having a prompt on screen.
+    const f = fakePorts({ hasPendingApproval: () => true });
+    await checkIdleDeadline(f.ports);
+    expect(f.locks).toEqual(['idle-deadline (approval grace exhausted)']);
   });
 });

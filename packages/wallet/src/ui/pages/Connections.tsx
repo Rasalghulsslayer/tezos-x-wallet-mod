@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { VaultState } from '@tezosx/wallet-core/shared/messages';
-import type { StoredSession } from '@tezosx/wallet-core/ports/session-store';
+import { sessionIdentity, type StoredSession } from '@tezosx/wallet-core/ports/session-store';
 import { sendPopupRequest } from '@/shared/messaging';
 import { timeAgo } from '@tezosx/wallet-core/shared/format';
 import { originDisplay } from '@tezosx/wallet-core/shared/approval-display';
@@ -91,7 +91,7 @@ export function Connections({ state, onChanged }: { state: VaultState; onChanged
               const { title: host, favLetter } = originDisplay(s.origin);
               const acct = describeSessionAccount(s, accounts);
               return (
-                <div key={s.origin} className="tx-connections-row">
+                <div key={sessionIdentity(s)} className="tx-connections-row">
                   <div className="tx-origin-fav">{favLetter}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="t" title={s.origin}>{host}</div>
